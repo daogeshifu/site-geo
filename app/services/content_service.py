@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 
@@ -46,6 +47,21 @@ class ContentService(AuditBaseService):
             text_excerpt=parsed["text_excerpt"],
         )
 
+    def _analysis_from_profile(self, page_type: str, profile) -> ContentPageAnalysis:
+        return ContentPageAnalysis(
+            url=profile.final_url,
+            page_type=page_type,
+            title=profile.title,
+            word_count=profile.word_count,
+            has_faq=profile.has_faq,
+            has_author=profile.has_author,
+            has_publish_date=profile.has_publish_date,
+            has_quantified_data=profile.has_quantified_data,
+            answer_first=profile.answer_first,
+            heading_quality_score=profile.heading_quality_score,
+            text_excerpt=profile.text_excerpt,
+        )
+
     async def audit(
         self,
         url: str,
@@ -53,6 +69,7 @@ class ContentService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> ContentAuditResult:
+        started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         targets = {
             "service": resolved.key_pages.service,
@@ -62,17 +79,26 @@ class ContentService(AuditBaseService):
         }
         page_analyses: dict[str, ContentPageAnalysis] = {}
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.request_timeout_seconds),
-            follow_redirects=True,
-            headers={"User-Agent": settings.default_user_agent},
-        ) as client:
-            coroutines = {
-                key: self._analyze_page(client, key, page_url)
-                for key, page_url in targets.items()
-                if page_url
-            }
-            if coroutines:
+        for page_type in ["service", "article", "about", "case_study"]:
+            profile = resolved.page_profiles.get(page_type)
+            if profile:
+                page_analyses[page_type] = self._analysis_from_profile(page_type, profile)
+
+        missing_targets = {
+            key: page_url
+            for key, page_url in targets.items()
+            if page_url and key not in page_analyses
+        }
+        if missing_targets:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(settings.request_timeout_seconds),
+                follow_redirects=True,
+                headers={"User-Agent": settings.default_user_agent},
+            ) as client:
+                coroutines = {
+                    key: self._analyze_page(client, key, page_url)
+                    for key, page_url in missing_targets.items()
+                }
                 results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
                 for page_type, result in zip(coroutines.keys(), results):
                     if isinstance(result, Exception):
@@ -208,4 +234,11 @@ class ContentService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         if mode == "premium":
             result = await self.llm_enrichment.enrich_content(resolved, result, llm_config)
+        result = self.finalize_audit_result(
+            result,
+            module_key="content",
+            input_pages=self.collect_input_pages(resolved, "service", "article", "about", "case_study"),
+            started_at=started_at,
+            confidence=min(0.98, 0.45 + (len(page_analyses) / 4) * 0.45),
+        )
         return result

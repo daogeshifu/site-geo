@@ -45,23 +45,25 @@ class SummarizerService:
         ai_actions: list[str] = []
         if crawler_score < 100:
             ai_issues.append("AI crawlers are not fully allowed by robots.txt.")
-            ai_actions.append("Review robots.txt and allow GPTBot, OAI-SearchBot, PerplexityBot, and Google-Extended.")
+            ai_actions.append(
+                "Review robots.txt and allow GPTBot, OAI-SearchBot, PerplexityBot, and Google-Extended."
+            )
         if llms_quality < 60:
             ai_issues.append("llms.txt is missing or too thin to guide AI systems effectively.")
             ai_actions.append("Publish or expand llms.txt with brand context, services, and citation guidance.")
         if citability < 70:
-            ai_issues.append("Homepage citability structure is not yet strong enough for consistent reuse.")
-            ai_actions.append("Improve homepage headings, answer-first copy, and metadata coverage.")
+            ai_issues.append("Citation-ready page structure is not yet strong enough for consistent reuse.")
+            ai_actions.append("Improve answer-first copy, chunk structure, and metadata coverage on key pages.")
         if basic_presence < 60:
             ai_issues.append("Basic entity presence across homepage, about, and contact experiences is thin.")
-            ai_actions.append("Strengthen homepage/about/contact brand and contact signals.")
+            ai_actions.append("Strengthen homepage, about, and contact-page brand and contact signals.")
 
         brand_issues: list[str] = []
         brand_actions: list[str] = []
         if visibility.brand_authority_score < 60:
             brand_issues.append("Brand authority is weak relative to GEO citation needs.")
         if backlink_component.get("available") and (backlink_component.get("score") or 0) < 60:
-            brand_issues.append("External backlink authority is still light for a strong brand entity profile.")
+            brand_issues.append("External backlink authority is still light for a strong entity profile.")
             brand_actions.append("Grow high-quality referring domains and editorial backlinks.")
         if entity_component.get("same_domain_sitemap") is False:
             brand_issues.append("Entity consistency is weakened by sitemap or domain mismatch.")
@@ -69,19 +71,20 @@ class SummarizerService:
         if not brand_actions:
             brand_actions.append("Add company details, sameAs references, and stronger entity consistency signals.")
 
-        ai_dimension = {
-            "module": "visibility",
-            "score": visibility.ai_visibility_score,
-            "issues": ai_issues or visibility.issues[:2],
-            "recommendations": ai_actions or visibility.recommendations[:2],
-        }
-        brand_dimension = {
-            "module": "visibility",
-            "score": visibility.brand_authority_score,
-            "issues": brand_issues or ["Brand entity signals need stronger external and structured support."],
-            "recommendations": brand_actions,
-        }
-        return ai_dimension, brand_dimension
+        return (
+            {
+                "module": "visibility",
+                "score": visibility.ai_visibility_score,
+                "issues": ai_issues or visibility.issues[:2],
+                "recommendations": ai_actions or visibility.recommendations[:2],
+            },
+            {
+                "module": "brand_authority",
+                "score": visibility.brand_authority_score,
+                "issues": brand_issues or ["Brand entity signals need stronger external and structured support."],
+                "recommendations": brand_actions,
+            },
+        )
 
     async def summarize(
         self,
@@ -96,16 +99,15 @@ class SummarizerService:
         llm_config: LLMConfig | None = None,
     ) -> SummaryResult:
         content_eeat_score = self._content_eeat_score(content)
-        composite_score, weighted_scores = self.scoring.weighted_composite(
-            {
-                "AI Citability & Visibility": {"raw_score": visibility.ai_visibility_score, "weight": 0.25},
-                "Brand Authority Signals": {"raw_score": visibility.brand_authority_score, "weight": 0.20},
-                "Content Quality & E-E-A-T": {"raw_score": content_eeat_score, "weight": 0.20},
-                "Technical Foundations": {"raw_score": technical.technical_score, "weight": 0.15},
-                "Structured Data": {"raw_score": schema.structured_data_score, "weight": 0.10},
-                "Platform Optimization": {"raw_score": platform.platform_optimization_score, "weight": 0.10},
-            }
-        )
+        weighted_inputs = {
+            "AI Citability & Visibility": {"raw_score": visibility.ai_visibility_score, "weight": 0.25},
+            "Brand Authority Signals": {"raw_score": visibility.brand_authority_score, "weight": 0.20},
+            "Content Quality & E-E-A-T": {"raw_score": content_eeat_score, "weight": 0.20},
+            "Technical Foundations": {"raw_score": technical.technical_score, "weight": 0.15},
+            "Structured Data": {"raw_score": schema.structured_data_score, "weight": 0.10},
+            "Platform Optimization": {"raw_score": platform.platform_optimization_score, "weight": 0.10},
+        }
+        composite_score, weighted_scores = self.scoring.weighted_composite(weighted_inputs)
         status = self.scoring.status_from_score(composite_score)
 
         ai_dimension, brand_dimension = self._visibility_dimension_views(visibility)
@@ -185,6 +187,7 @@ class SummarizerService:
             composite_geo_score=composite_score,
             status=status,
             audit_mode=mode,
+            dimensions={label: payload for label, payload in dimensions},
             weighted_scores=weighted_scores,
             summary=summary_text,
             top_issues=top_issues,

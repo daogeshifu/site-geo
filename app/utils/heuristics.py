@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.models.discovery import BacklinkOverviewResult, KeyPages, LlmsResult, SiteSignals
+from app.models.discovery import BacklinkOverviewResult, KeyPages, LlmsResult, PageProfile, SiteSignals
 
 
 BUSINESS_TYPE_RULES = {
@@ -343,28 +343,109 @@ def calculate_brand_authority(
     return {"score": min(score, 100), "reasons": reasons[:8], "components": components}
 
 
-def assess_citability(homepage: dict[str, Any]) -> dict[str, Any]:
-    score = 0
+def _normalize_page_profile(page: PageProfile | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(page, PageProfile):
+        return page.model_dump()
+    return page
+
+
+def _citation_probability(score: int, page: dict[str, Any]) -> str:
+    support_signals = sum(
+        1
+        for present in [
+            page.get("answer_first"),
+            page.get("has_quantified_data"),
+            page.get("has_faq"),
+            page.get("has_author"),
+            page.get("has_publish_date"),
+        ]
+        if present
+    )
+    if score >= 75 and support_signals >= 2:
+        return "HIGH"
+    if score >= 55:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _score_page_citability(page: dict[str, Any]) -> dict[str, Any]:
     signals: dict[str, bool] = {
-        "has_title": bool(homepage.get("title")),
-        "has_meta_description": bool(homepage.get("meta_description")),
-        "has_h1": bool(homepage.get("h1")),
-        "has_canonical": bool(homepage.get("canonical")),
-        "has_multiple_headings": len(homepage.get("headings", [])) >= 3,
-        "has_substantial_copy": homepage.get("word_count", 0) >= 250,
+        "has_title": bool(page.get("title")),
+        "has_meta_description": bool(page.get("meta_description")),
+        "has_h1_or_headings": bool(page.get("h1")) or len(page.get("headings", [])) >= 1,
+        "has_canonical": bool(page.get("canonical")),
+        "has_multiple_headings": len(page.get("headings", [])) >= 3,
+        "has_substantial_copy": page.get("word_count", 0) >= 250,
+        "answer_first": bool(page.get("answer_first")),
+        "has_data_points": bool(page.get("has_quantified_data")),
+        "has_faq": bool(page.get("has_faq")),
+        "has_author": bool(page.get("has_author")),
+        "has_publish_date": bool(page.get("has_publish_date")),
     }
+    information_density_score = int(page.get("information_density_score", 0))
+    chunk_structure_score = int(page.get("chunk_structure_score", 0))
+    score = 0.0
     weights = {
-        "has_title": 15,
-        "has_meta_description": 15,
-        "has_h1": 15,
-        "has_canonical": 15,
-        "has_multiple_headings": 20,
-        "has_substantial_copy": 20,
+        "has_title": 8,
+        "has_meta_description": 8,
+        "has_h1_or_headings": 8,
+        "has_canonical": 8,
+        "has_multiple_headings": 10,
+        "has_substantial_copy": 10,
+        "answer_first": 15,
+        "has_data_points": 8,
+        "has_faq": 5,
+        "has_author": 5,
+        "has_publish_date": 5,
     }
     for name, present in signals.items():
         if present:
             score += weights[name]
-    return {"score": min(score, 100), "signals": signals}
+    score += information_density_score * 0.1
+    score += chunk_structure_score * 0.1
+    normalized_score = min(int(round(score)), 100)
+    return {
+        "score": normalized_score,
+        "signals": signals,
+        "information_density_score": information_density_score,
+        "chunk_structure_score": chunk_structure_score,
+        "citation_probability": _citation_probability(normalized_score, page),
+    }
+
+
+def assess_citability(
+    homepage: dict[str, Any],
+    page_profiles: dict[str, PageProfile | dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    homepage_payload = dict(homepage)
+    homepage_payload.setdefault("information_density_score", 40 if homepage.get("word_count", 0) >= 250 else 20)
+    homepage_payload.setdefault("chunk_structure_score", 50 if len(homepage.get("headings", [])) >= 3 else 25)
+    homepage_payload.setdefault("answer_first", False)
+    homepage_payload.setdefault("has_quantified_data", False)
+    homepage_payload.setdefault("has_faq", False)
+    homepage_payload.setdefault("has_author", False)
+    homepage_payload.setdefault("has_publish_date", False)
+
+    homepage_citability = _score_page_citability(homepage_payload)
+    scored_pages: dict[str, Any] = {"homepage": homepage_citability}
+
+    for key, profile in (page_profiles or {}).items():
+        normalized = _normalize_page_profile(profile)
+        scored_pages[key] = _score_page_citability(normalized)
+
+    best_page_key, best_page = max(scored_pages.items(), key=lambda item: item[1]["score"])
+    overall_score = homepage_citability["score"]
+    if best_page_key != "homepage":
+        overall_score = int(round(homepage_citability["score"] * 0.55 + best_page["score"] * 0.45))
+
+    return {
+        "score": min(overall_score, 100),
+        "signals": homepage_citability["signals"],
+        "homepage_citability": homepage_citability,
+        "best_page_citability": {"page_key": best_page_key, **best_page},
+        "citation_probability": best_page["citation_probability"],
+        "page_scores": scored_pages,
+    }
 
 
 def assess_ssr_signal(html_length: int, word_count: int) -> dict[str, Any]:

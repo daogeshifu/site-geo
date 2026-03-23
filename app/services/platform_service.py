@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
+
 from app.models.audit import PlatformAuditDetail, PlatformAuditResult
 from app.models.requests import LLMConfig
 from app.services.audit_service import AuditBaseService
+from app.services.brand_authority_service import BrandAuthorityService
 from app.services.llm_enrichment_service import LLMEnrichmentService
 from app.services.scoring_service import ScoringService
-from app.utils.heuristics import assess_citability, assess_llms_effectiveness, calculate_brand_authority
+from app.utils.heuristics import assess_citability, assess_llms_effectiveness
 
 
 class PlatformService(AuditBaseService):
@@ -20,6 +23,7 @@ class PlatformService(AuditBaseService):
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
+        self.brand_authority = BrandAuthorityService()
         self.llm_enrichment = LLMEnrichmentService()
 
     def _platform_detail(self, score: float, primary_gap: str, recommendations: list[str]) -> PlatformAuditDetail:
@@ -53,24 +57,16 @@ class PlatformService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> PlatformAuditResult:
+        started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         homepage_dict = resolved.homepage.model_dump()
-        citability = assess_citability(homepage_dict)
+        citability = assess_citability(homepage_dict, resolved.page_profiles)
         llms_quality = assess_llms_effectiveness(
             resolved.llms,
             company_name=resolved.site_signals.detected_company_name,
             business_type=resolved.business_type,
         )
-        brand = calculate_brand_authority(
-            signals=resolved.site_signals,
-            homepage=homepage_dict,
-            llms=resolved.llms,
-            key_pages=resolved.key_pages,
-            schema_summary=resolved.schema_summary,
-            primary_domain=resolved.domain,
-            sitemap_urls=resolved.robots.sitemaps,
-            backlinks=resolved.backlinks,
-        )
+        brand = self.brand_authority.assess(resolved)
         ai_crawler_allowed_ratio = sum(1 for rule in resolved.robots.user_agents.values() if rule.allowed) / max(
             len(resolved.robots.user_agents), 1
         )
@@ -186,4 +182,11 @@ class PlatformService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         if mode == "premium":
             result = await self.llm_enrichment.enrich_platform(resolved, result, llm_config)
+        result = self.finalize_audit_result(
+            result,
+            module_key="platform",
+            input_pages=self.collect_input_pages(resolved, "homepage", "service", "article", "about", "case_study"),
+            started_at=started_at,
+            confidence=min(0.94, 0.62 + (len(resolved.page_profiles) / 5) * 0.2),
+        )
         return result

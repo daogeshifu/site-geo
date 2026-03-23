@@ -174,8 +174,19 @@ class LLMEnrichmentService:
                 continue
             detail = result.platform_scores[platform_name]
             detail.platform_score = self.scoring.clamp_score(detail.platform_score + self._bounded_delta(delta))
+        platform_weights = {
+            "chatgpt_web_search": 0.30,
+            "google_ai_overviews": 0.20,
+            "perplexity": 0.20,
+            "google_gemini": 0.15,
+            "bing_copilot": 0.15,
+        }
         result.platform_optimization_score = self.scoring.clamp_score(
-            sum(item.platform_score for item in result.platform_scores.values()) / len(result.platform_scores)
+            sum(
+                result.platform_scores[name].platform_score * weight
+                for name, weight in platform_weights.items()
+                if name in result.platform_scores
+            )
         )
         result.score = result.platform_optimization_score
         result.status = self.scoring.status_from_score(result.platform_optimization_score)

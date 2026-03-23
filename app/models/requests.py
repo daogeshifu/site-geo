@@ -37,7 +37,7 @@ class AuditModuleRequest(UrlRequest):
 
 
 class FullAuditRequest(UrlRequest):
-    pass
+    discovery: DiscoveryResult | None = None
 
 
 class SummarizeRequest(UrlRequest):

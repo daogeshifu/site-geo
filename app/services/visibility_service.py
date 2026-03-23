@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import time
+
 from app.models.audit import VisibilityAuditResult
 from app.models.requests import LLMConfig
 from app.services.audit_service import AuditBaseService
+from app.services.brand_authority_service import BrandAuthorityService
 from app.services.llm_enrichment_service import LLMEnrichmentService
 from app.services.scoring_service import ScoringService
 from app.utils.heuristics import (
     assess_basic_brand_presence,
     assess_citability,
     assess_llms_effectiveness,
-    calculate_brand_authority,
 )
 
 
@@ -17,6 +19,7 @@ class VisibilityService(AuditBaseService):
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
+        self.brand_authority = BrandAuthorityService()
         self.llm_enrichment = LLMEnrichmentService()
 
     async def audit(
@@ -26,29 +29,21 @@ class VisibilityService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> VisibilityAuditResult:
+        started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         crawler_rules = resolved.robots.user_agents
         allowed_crawlers = sum(1 for rule in crawler_rules.values() if rule.allowed)
         crawler_score = int((allowed_crawlers / max(len(crawler_rules), 1)) * 100)
 
         homepage_dict = resolved.homepage.model_dump()
-        citability = assess_citability(homepage_dict)
+        citability = assess_citability(homepage_dict, resolved.page_profiles)
         llms_quality = assess_llms_effectiveness(
             resolved.llms,
             company_name=resolved.site_signals.detected_company_name,
             business_type=resolved.business_type,
         )
         basic_brand_presence = assess_basic_brand_presence(resolved.site_signals, resolved.key_pages)
-        brand = calculate_brand_authority(
-            signals=resolved.site_signals,
-            homepage=homepage_dict,
-            llms=resolved.llms,
-            key_pages=resolved.key_pages,
-            schema_summary=resolved.schema_summary,
-            primary_domain=resolved.domain,
-            sitemap_urls=resolved.robots.sitemaps,
-            backlinks=resolved.backlinks,
-        )
+        brand = self.brand_authority.assess(resolved)
         ai_visibility_score = self.scoring.clamp_score(
             crawler_score * 0.32
             + citability["score"] * 0.40
@@ -129,4 +124,11 @@ class VisibilityService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         if mode == "premium":
             result = await self.llm_enrichment.enrich_visibility(resolved, result, llm_config)
+        result = self.finalize_audit_result(
+            result,
+            module_key="visibility",
+            input_pages=self.collect_input_pages(resolved, "homepage", "about", "service", "article", "case_study"),
+            started_at=started_at,
+            confidence=min(0.97, 0.6 + (len(resolved.page_profiles) / 5) * 0.25 + (0.05 if resolved.llms.exists else 0)),
+        )
         return result

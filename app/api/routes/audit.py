@@ -85,6 +85,7 @@ async def audit_full(request: FullAuditRequest) -> dict:
         request.url,
         mode=request.mode,
         llm_config=request.llm,
+        discovery=request.discovery,
     )
     return success_response(result)
 

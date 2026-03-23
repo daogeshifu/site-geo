@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import asyncio
+import time
 
-import httpx
-
-from app.core.config import settings
 from app.models.audit import SchemaAuditResult
 from app.models.requests import LLMConfig
 from app.services.audit_service import AuditBaseService
 from app.services.scoring_service import ScoringService
-from app.utils.fetcher import fetch_url
-from app.utils.html_parser import parse_html
 from app.utils.schema_extractor import extract_schema_summary
 
 
@@ -26,33 +21,13 @@ class SchemaService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> SchemaAuditResult:
+        started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         blocks = list(resolved.homepage.json_ld_blocks)
-        targets = [
-            page
-            for page in [
-                resolved.key_pages.service,
-                resolved.key_pages.article,
-                resolved.key_pages.about,
-            ]
-            if page
-        ]
-
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.request_timeout_seconds),
-            follow_redirects=True,
-            headers={"User-Agent": settings.default_user_agent},
-        ) as client:
-            responses = await asyncio.gather(
-                *(fetch_url(page_url, client=client) for page_url in targets),
-                return_exceptions=True,
-            )
-
-        for result in responses:
-            if isinstance(result, Exception):
-                continue
-            parsed = parse_html(result.final_url, result.text)
-            blocks.extend(parsed["json_ld_blocks"])
+        for page_type in ["service", "article", "about", "case_study"]:
+            profile = resolved.page_profiles.get(page_type)
+            if profile:
+                blocks.extend(profile.json_ld_blocks)
 
         summary = extract_schema_summary(blocks)
         checks = {
@@ -131,4 +106,11 @@ class SchemaService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         if mode == "premium":
             result.processing_notes.append("Premium mode currently keeps schema audit rule-based for deterministic validation.")
+        result = self.finalize_audit_result(
+            result,
+            module_key="schema",
+            input_pages=self.collect_input_pages(resolved, "homepage", "service", "article", "about", "case_study"),
+            started_at=started_at,
+            confidence=min(0.96, 0.68 + (len(resolved.page_profiles) / 5) * 0.2),
+        )
         return result

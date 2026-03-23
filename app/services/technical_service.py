@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from app.models.audit import TechnicalAuditResult
 from app.models.requests import LLMConfig
 from app.services.audit_service import AuditBaseService
@@ -44,6 +46,7 @@ class TechnicalService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> TechnicalAuditResult:
+        started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         homepage = resolved.homepage
         security_headers = evaluate_security_headers(resolved.fetch.headers)
@@ -174,4 +177,11 @@ class TechnicalService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         if mode == "premium":
             result.processing_notes.append("Premium mode currently keeps technical audit rule-based for determinism.")
+        result = self.finalize_audit_result(
+            result,
+            module_key="technical",
+            input_pages=self.collect_input_pages(resolved, "homepage"),
+            started_at=started_at,
+            confidence=0.95,
+        )
         return result

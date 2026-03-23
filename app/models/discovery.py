@@ -127,6 +127,29 @@ class SiteSignals(BaseModel):
     homepage_brand_mentions: int = 0
 
 
+class PageProfile(BaseModel):
+    page_type: str
+    final_url: str
+    title: str | None = None
+    meta_description: str | None = None
+    canonical: str | None = None
+    lang: str | None = None
+    headings: list[HeadingItem] = Field(default_factory=list)
+    word_count: int = 0
+    has_faq: bool = False
+    has_author: bool = False
+    has_publish_date: bool = False
+    has_quantified_data: bool = False
+    answer_first: bool = False
+    heading_quality_score: int = 0
+    information_density_score: int = 0
+    chunk_structure_score: int = 0
+    json_ld_summary: dict[str, Any] = Field(default_factory=dict)
+    json_ld_blocks: list[str] = Field(default_factory=list)
+    entity_signals: SiteSignals = Field(default_factory=SiteSignals)
+    text_excerpt: str = ""
+
+
 class KeyPages(BaseModel):
     about: str | None = None
     service: str | None = None
@@ -150,3 +173,5 @@ class DiscoveryResult(BaseModel):
     schema_summary: dict[str, Any] = Field(default_factory=dict)
     site_signals: SiteSignals = Field(default_factory=SiteSignals)
     backlinks: BacklinkOverviewResult = Field(default_factory=BacklinkOverviewResult)
+    page_profiles: dict[str, PageProfile] = Field(default_factory=dict)
+    site_snapshot_version: str = "snapshot-v2"

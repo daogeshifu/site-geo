@@ -79,3 +79,71 @@ def evaluate_heading_quality(headings: list[dict[str, str]] | list[Any]) -> dict
         issues.append("Repeated headings reduce scan-ability.")
 
     return {"score": max(score, 0), "issues": issues}
+
+
+def estimate_information_density(text: str, headings: list[dict[str, str]] | list[Any]) -> dict[str, Any]:
+    words = re.findall(r"\b\w+\b", text or "")
+    headings_count = len([item for item in headings if isinstance(item, dict) and item.get("text")])
+    unique_words = {word.lower() for word in words if len(word) > 2}
+    lexical_ratio = len(unique_words) / max(len(words), 1)
+
+    score = 0
+    if len(words) >= 180:
+        score += 30
+    elif len(words) >= 90:
+        score += 20
+    elif len(words) >= 40:
+        score += 10
+
+    if lexical_ratio >= 0.45:
+        score += 25
+    elif lexical_ratio >= 0.30:
+        score += 18
+    elif lexical_ratio >= 0.20:
+        score += 10
+
+    if has_quantified_data(text):
+        score += 25
+
+    if headings_count >= 4:
+        score += 20
+    elif headings_count >= 2:
+        score += 10
+
+    return {
+        "score": min(score, 100),
+        "word_count": len(words),
+        "lexical_ratio": round(lexical_ratio, 2),
+        "heading_count": headings_count,
+    }
+
+
+def evaluate_chunk_structure(text: str, headings: list[dict[str, str]] | list[Any]) -> dict[str, Any]:
+    normalized = [item for item in headings if isinstance(item, dict) and item.get("text")]
+    heading_count = len(normalized)
+    word_count = estimate_word_count(text)
+    if heading_count == 0:
+        return {"score": 20, "chunk_count": 0, "avg_words_per_chunk": word_count}
+
+    avg_words_per_chunk = word_count / max(heading_count + 1, 1)
+    score = 30
+    if heading_count >= 4:
+        score += 30
+    elif heading_count >= 2:
+        score += 20
+
+    if 60 <= avg_words_per_chunk <= 220:
+        score += 30
+    elif 35 <= avg_words_per_chunk <= 280:
+        score += 20
+    else:
+        score += 10
+
+    if normalized and normalized[0].get("level") == "h1":
+        score += 10
+
+    return {
+        "score": min(score, 100),
+        "chunk_count": heading_count + 1,
+        "avg_words_per_chunk": int(avg_words_per_chunk),
+    }
