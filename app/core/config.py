@@ -35,7 +35,7 @@ class Settings:
     environment: str = os.getenv("APP_ENV", "development")
     debug: bool = os.getenv("APP_DEBUG", "false").lower() == "true"
     host: str = os.getenv("HOST", "0.0.0.0")
-    port: int = _get_int("PORT", 8000)
+    port: int = _get_int("PORT", 8023)
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
     request_timeout_seconds: float = _get_float("REQUEST_TIMEOUT_SECONDS", 15.0)
     request_retries: int = _get_int("REQUEST_RETRIES", 3)
@@ -52,7 +52,7 @@ class Settings:
     default_openrouter_model: str = os.getenv("DEFAULT_OPENROUTER_MODEL", "openai/gpt-4.1")
     openrouter_api_key: str | None = os.getenv("OPENROUTER_API_KEY")
     openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    openrouter_site_url: str = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:8000")
+    openrouter_site_url: str = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:8023")
     openrouter_app_name: str = os.getenv("OPENROUTER_APP_NAME", "geo-audit-service")
 
 
