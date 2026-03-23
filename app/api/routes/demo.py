@@ -835,7 +835,7 @@ HTML = """<!doctype html>
   <div class="tabs-body">
 
     <div id="tab-summary" class="tab-panel active">
-      <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划与原始发现摘要。</div>
+      <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划、snapshot 发现与引用证据。</div>
     </div>
 
     <div id="tab-llm" class="tab-panel">
@@ -900,196 +900,112 @@ HTML = """<!doctype html>
   </div><!-- /tabs-body -->
 
   <!-- ═══ 打分维度说明 ═══ -->
-  <hr class="section-divider" style="margin-top:36px" />
-  <div style="margin-top:28px">
-    <div class="section-hdr">
-      <h2>打分维度与规则</h2>
-      <span>按 6 个汇总层展示关键指标、内部公式与综合分权重，单维度原始分满分均为 100 分</span>
-    </div>
 
-    <div class="dim-grid">
-      <!-- AI Visibility -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">👁 AI 可见性</span>
-          <span class="dim-score">25%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.32</span></div>
-          <div class="dim-row"><span class="dim-row-label">citability 得分</span><span class="dim-row-val">×0.40</span></div>
-          <div class="dim-row"><span class="dim-row-label">llms.txt 有效性</span><span class="dim-row-val">×0.12</span></div>
-          <div class="dim-row"><span class="dim-row-label">基础实体存在</span><span class="dim-row-val">×0.16</span></div>
-          <div class="dim-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
-            <span class="dim-row-label" style="color:var(--subtle);font-size:11px">citability 看 title / meta / H1 / canonical / headings / 字数；llms.txt 不只看存在，还看长度、品牌、服务与 guidance</span>
-          </div>
-        </div>
-      </div>
-      <!-- Brand Authority -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">🏛️ 品牌权威</span>
-          <span class="dim-score">20%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">外链质量</span><span class="dim-row-val">25%</span></div>
-          <div class="dim-row"><span class="dim-row-label">品牌提及覆盖</span><span class="dim-row-val">25%</span></div>
-          <div class="dim-row"><span class="dim-row-label">sameAs / Entity 一致性</span><span class="dim-row-val">25%</span></div>
-          <div class="dim-row"><span class="dim-row-label">企业信息完整度</span><span class="dim-row-val">25%</span></div>
-          <div class="dim-row"><span class="dim-row-label">外链数据源</span><span class="dim-row-val">Semrush Overview</span></div>
-          <div class="dim-row"><span class="dim-row-label">无 Key 处理</span><span class="dim-row-val">跳过外链项并重算权重</span></div>
-        </div>
-      </div>
-      <!-- Content -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">📝 内容与 E-E-A-T</span>
-          <span class="dim-score">20%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 子分均值</span></div>
-          <div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">字数 / FAQ / 作者 / 日期 / 数据 / 标题 / answer-first</span></div>
-          <div class="dim-row"><span class="dim-row-label">experience</span><span class="dim-row-val">案例 / 量化结果 / 服务页深度 / About</span></div>
-          <div class="dim-row"><span class="dim-row-label">expertise</span><span class="dim-row-val">服务页深度 / 文章深度 / answer-first / heading quality</span></div>
-          <div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">作者 / 资质 / sameAs / contact / 日期</span></div>
-          <div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">service / article / about / case_study</span></div>
-        </div>
-      </div>
-      <!-- Technical -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">⚙️ 技术基础</span>
-          <span class="dim-score">15%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">16 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">8 / 10</span></div>
-          <div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">5 / 5</span></div>
-          <div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8/4</span></div>
-          <div class="dim-row"><span class="dim-row-label">性能 / 渲染阻塞</span><span class="dim-row-val">8 / 8</span></div>
-          <div class="dim-row"><span class="dim-row-label">图片 / OG / Twitter / hreflang</span><span class="dim-row-val">8 / 5 / 3 / 4</span></div>
-        </div>
-      </div>
-      <!-- Schema -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">🏷️ 结构化数据</span>
-          <span class="dim-score">10%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">JSON-LD</span><span class="dim-row-val">20 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">Organization</span><span class="dim-row-val">20 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">Article</span><span class="dim-row-val">15 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">LocalBusiness / FAQPage</span><span class="dim-row-val">10/10</span></div>
-          <div class="dim-row"><span class="dim-row-label">Service / WebSite</span><span class="dim-row-val">10/10</span></div>
-          <div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">5 pts</span></div>
-        </div>
-      </div>
-      <!-- Platform -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">🌐 平台适配</span>
-          <span class="dim-score">10%</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">战略权重平均</span></div>
-          <div class="dim-row"><span class="dim-row-label">ChatGPT Web Search</span><span class="dim-row-val" style="font-size:10.5px">30% · crawler + llms + citability + brand</span></div>
-          <div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val" style="font-size:10.5px">20% · citability + schema + FAQ + metadata</span></div>
-          <div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val" style="font-size:10.5px">20% · citability + brand + schema + metadata</span></div>
-          <div class="dim-row"><span class="dim-row-label">Gemini</span><span class="dim-row-val" style="font-size:10.5px">15% · schema + metadata + citability + brand</span></div>
-          <div class="dim-row"><span class="dim-row-label">Bing Copilot</span><span class="dim-row-val" style="font-size:10.5px">15% · metadata + schema + citability + brand</span></div>
-        </div>
+<hr class="section-divider" style="margin-top:36px" />
+<div style="margin-top:28px">
+  <div class="section-hdr">
+    <h2>打分维度与规则</h2>
+    <span>按 6 个汇总层展示关键指标、内部公式与综合分权重，单维度原始分满分均为 100 分</span>
+  </div>
+
+  <div class="dim-grid">
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">AI 可见性</span><span class="dim-score">25%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.32</span></div>
+        <div class="dim-row"><span class="dim-row-label">snapshot citability</span><span class="dim-row-val">×0.40</span></div>
+        <div class="dim-row"><span class="dim-row-label">llms.txt 有效性</span><span class="dim-row-val">×0.12</span></div>
+        <div class="dim-row"><span class="dim-row-label">基础实体存在</span><span class="dim-row-val">×0.16</span></div>
+        <div class="dim-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)"><span class="dim-row-label" style="color:var(--subtle);font-size:11px">citability 基于 snapshot 中 homepage 与最佳页面的 answer-first、信息密度、数据点、分块结构和 FAQ / 作者 / 日期信号综合评估</span></div>
       </div>
     </div>
-
-    <!-- Score range legend -->
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--muted);font-weight:500">分级标准：</span>
-      <div class="score-table">
-        <div class="score-cell"><span class="sc-range sc-critical">0–24</span><span class="sc-lbl">critical</span></div>
-        <div class="score-cell"><span class="sc-range sc-poor">25–44</span><span class="sc-lbl">poor</span></div>
-        <div class="score-cell"><span class="sc-range sc-fair">45–64</span><span class="sc-lbl">fair</span></div>
-        <div class="score-cell"><span class="sc-range sc-good">65–84</span><span class="sc-lbl">good</span></div>
-        <div class="score-cell"><span class="sc-range sc-strong">85–100</span><span class="sc-lbl">strong</span></div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">品牌权威</span><span class="dim-score">20%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">外链质量</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">品牌提及覆盖</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">sameAs / Entity 一致性</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">企业信息完整度</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">站外数据源</span><span class="dim-row-val">Semrush Backlinks Overview</span></div>
+        <div class="dim-row"><span class="dim-row-label">结构预留</span><span class="dim-row-val">已抽离 BrandAuthorityService 边界</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">内容与 E-E-A-T</span><span class="dim-score">20%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 个子分均值</span></div>
+        <div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">字数 / FAQ / 作者 / 日期 / 数据 / 标题 / answer-first</span></div>
+        <div class="dim-row"><span class="dim-row-label">experience</span><span class="dim-row-val">案例 / 量化结果 / 服务页深度 / About</span></div>
+        <div class="dim-row"><span class="dim-row-label">expertise</span><span class="dim-row-val">服务页深度 / 文章深度 / answer-first / heading quality</span></div>
+        <div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">作者 / 资质 / sameAs / contact / 日期</span></div>
+        <div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">page_profiles 中的 service / article / about / case_study</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">技术基础</span><span class="dim-score">15%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">16 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">8 / 10</span></div>
+        <div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">5 / 5</span></div>
+        <div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8 / 4</span></div>
+        <div class="dim-row"><span class="dim-row-label">性能 / 渲染阻塞</span><span class="dim-row-val">8 / 8</span></div>
+        <div class="dim-row"><span class="dim-row-label">图片 / OG / Twitter / hreflang</span><span class="dim-row-val">8 / 5 / 3 / 4</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">结构化数据</span><span class="dim-score">10%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">JSON-LD</span><span class="dim-row-val">20 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">Organization</span><span class="dim-row-val">20 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">Article</span><span class="dim-row-val">15 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">LocalBusiness / FAQPage</span><span class="dim-row-val">10 / 10</span></div>
+        <div class="dim-row"><span class="dim-row-label">Service / WebSite</span><span class="dim-row-val">10 / 10</span></div>
+        <div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">5 pts</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">平台适配</span><span class="dim-score">10%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">汇总方式</span><span class="dim-row-val">战略权重加权</span></div>
+        <div class="dim-row"><span class="dim-row-label">ChatGPT Web Search</span><span class="dim-row-val" style="font-size:10.5px">30% · crawler + llms + citability + brand</span></div>
+        <div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val" style="font-size:10.5px">20% · citability + schema + FAQ + metadata</span></div>
+        <div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val" style="font-size:10.5px">20% · citability + brand + schema + metadata</span></div>
+        <div class="dim-row"><span class="dim-row-label">Gemini</span><span class="dim-row-val" style="font-size:10.5px">15% · schema + metadata + citability + brand</span></div>
+        <div class="dim-row"><span class="dim-row-label">Bing Copilot</span><span class="dim-row-val" style="font-size:10.5px">15% · metadata + schema + citability + brand</span></div>
       </div>
     </div>
   </div>
 
-  <!-- ═══ 业务落成说明 ═══ -->
-  <hr class="section-divider" style="margin-top:32px" />
-  <div style="margin-top:28px">
-    <div class="section-hdr">
-      <h2>汇总层维度业务落成</h2>
-      <span>按 6 个汇总维度展示数据来源、权重比例、计算公式与接入要点</span>
-    </div>
-    <div class="biz-grid">
-      <div class="biz-card">
-        <h4>👁 AI 可见性 · 25%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li>
-          <li><strong>计算公式</strong>：<code>0.32 × AI crawler 放行率 + 0.40 × citability + 0.12 × llms.txt 有效性 + 0.16 × 基础实体存在</code></li>
-          <li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、解析首页 HTML、复用 about/contact/company 信号</li>
-          <li><strong>细项规则</strong>：citability 看 <code>title / meta / H1 / canonical / headings&gt;=3 / 字数&gt;=250</code>；llms.txt 看存在、长度、品牌词、服务说明、机器可读 guidance</li>
-        </ul>
-      </div>
-      <div class="biz-card">
-        <h4>🏛️ 品牌权威 · 20%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li>
-          <li><strong>计算公式</strong>：<code>0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs / Entity 一致性 + 0.25 × 企业信息完整度</code></li>
-          <li><strong>数据来源</strong>：站内品牌信号 + Schema sameAs + sitemap / canonical 一致性 + Semrush Backlinks Overview</li>
-          <li><strong>接入要点</strong>：若未配置 Semrush Key，会跳过外链项并对剩余项重算权重，不会因为缺 Key 被额外扣分</li>
-        </ul>
-      </div>
-      <div class="biz-card">
-        <h4>📝 内容与 E-E-A-T · 20%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li>
-          <li><strong>内容总分</strong>：service 页深度、article 页深度、FAQ、作者、日期、量化数据、标题质量、先答后述共同构成</li>
-          <li><strong>E-E-A-T 细项</strong>：Experience 看案例/量化数据/About；Expertise 看服务页和文章深度；Authority 看作者/奖项/认证/sameAs；Trust 看 contact/电话/邮箱/地址/日期</li>
-          <li><strong>数据来源</strong>：Discovery 自动发现 <code>service / article / about / case_study</code> 页面并逐页抓取解析</li>
-        </ul>
-      </div>
-      <div class="biz-card">
-        <h4>⚙️ 技术基础 · 15%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li>
-          <li><strong>计算公式</strong>：<code>HTTPS8 + SSR10 + Meta5 + Canonical5 + lang4 + viewport4 + Sitemap8 + robots 指令4 + 性能8 + 渲染阻塞8 + 安全头16 + 图片8 + OG5 + Twitter3 + hreflang4</code></li>
-          <li><strong>数据来源</strong>：最终跳转 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li>
-          <li><strong>细项说明</strong>：新增 <code>response_time_ms</code> 性能项；安全头为 5 项等比分；图片优化由 <code>lazyload 比例 50%</code> + <code>显式尺寸比例 50%</code> 组成；SSR 由 HTML 长度与词数联合判断</li>
-        </ul>
-      </div>
-      <div class="biz-card">
-        <h4>🏷️ 结构化数据 · 10%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li>
-          <li><strong>计算公式</strong>：<code>JSON-LD20 + Organization20 + LocalBusiness10 + Article15 + FAQPage10 + Service10 + WebSite10 + sameAs5</code></li>
-          <li><strong>数据来源</strong>：首页与关键页中的全部 <code>&lt;script type="application/ld+json"&gt;</code>，统一做 <code>@type</code> 与 <code>sameAs</code> 抽取</li>
-          <li><strong>接入要点</strong>：Schema 结果既参与综合分，也会被平台适配模块复用，尤其影响 Google AI Overviews 与 Gemini</li>
-        </ul>
-      </div>
-      <div class="biz-card">
-        <h4>🌐 平台适配 · 10%</h4>
-        <ul>
-          <li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，按平台战略权重汇总后再按 <code>×0.10</code> 计入综合分</li>
-          <li><strong>平台公式</strong>：ChatGPT 占 30%；Google AI Overviews 占 20%；Perplexity 占 20%；Gemini 与 Bing Copilot 各占 15%</li>
-          <li><strong>数据来源</strong>：不额外抓取，直接复用 discovery、visibility、schema 的上游结果</li>
-          <li><strong>输出结果</strong>：分别产出 <code>google_ai_overviews / chatgpt_web_search / perplexity / google_gemini / bing_copilot</code> 的分数、主缺口与建议</li>
-        </ul>
-      </div>
-    </div>
-    <div class="biz-card" style="margin-top:10px">
-      <h4>🤖 会员 AI 增强 · 机制说明</h4>
-      <ul>
-        <li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li>
-        <li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li>
-        <li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li>
-        <li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li>
-      </ul>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted);font-weight:500">分级标准：</span>
+    <div class="score-table">
+      <div class="score-cell"><span class="sc-range sc-critical">0-24</span><span class="sc-lbl">critical</span></div>
+      <div class="score-cell"><span class="sc-range sc-poor">25-44</span><span class="sc-lbl">poor</span></div>
+      <div class="score-cell"><span class="sc-range sc-fair">45-64</span><span class="sc-lbl">fair</span></div>
+      <div class="score-cell"><span class="sc-range sc-good">65-84</span><span class="sc-lbl">good</span></div>
+      <div class="score-cell"><span class="sc-range sc-strong">85-100</span><span class="sc-lbl">strong</span></div>
     </div>
   </div>
+</div>
 
-  <!-- ═══ API 调用说明 ═══ -->
-  <hr class="section-divider" style="margin-top:32px" />
+<hr class="section-divider" style="margin-top:32px" />
+<div style="margin-top:28px">
+  <div class="section-hdr">
+    <h2>汇总层维度业务落成</h2>
+    <span>按 6 个汇总维度展示数据来源、权重比例、计算公式与接入要点</span>
+  </div>
+  <div class="biz-grid">
+    <div class="biz-card"><h4>AI 可见性 · 25%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.32 × AI crawler 放行率 + 0.40 × snapshot citability + 0.12 × llms.txt 有效性 + 0.16 × 基础实体存在</code></li><li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、构建 snapshot 页面画像，并复用 homepage / about / service / article / case_study 的实体信号</li><li><strong>细项规则</strong>：citability 综合 answer-first、信息密度、数据点、分块结构与 FAQ / 作者 / 日期信号，输出 <code>homepage_citability</code>、<code>best_page_citability</code> 和 <code>citation_probability</code></li></ul></div>
+    <div class="biz-card"><h4>品牌权威 · 20%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs / Entity 一致性 + 0.25 × 企业信息完整度</code></li><li><strong>数据来源</strong>：站内品牌信号 + Schema sameAs + sitemap / canonical 一致性 + Semrush Backlinks Overview</li><li><strong>结构预留</strong>：当前仍由 <code>visibility</code> 产出品牌总分，但代码层已预留 <code>BrandAuthorityService</code> 边界，方便后续独立服务化</li></ul></div>
+    <div class="biz-card"><h4>内容与 E-E-A-T · 20%</h4><ul><li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li><li><strong>内容总分</strong>：服务页深度、文章页深度、FAQ、作者、日期、量化数据、标题质量、answer-first 共同构成</li><li><strong>E-E-A-T 细项</strong>：Experience 看案例与量化结果；Expertise 看服务页/文章深度与结构；Authority 看作者、资质与 sameAs；Trust 看联系信息与日期</li><li><strong>数据来源</strong>：优先复用 <code>discovery.page_profiles</code>，不再为了内容审计重复抓取这些关键页面</li></ul></div>
+    <div class="biz-card"><h4>技术基础 · 15%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li><li><strong>计算公式</strong>：<code>HTTPS8 + SSR10 + Meta5 + Canonical5 + lang4 + viewport4 + Sitemap8 + robots 指令4 + 性能8 + 渲染阻塞8 + 安全头16 + 图片8 + OG5 + Twitter3 + hreflang4</code></li><li><strong>数据来源</strong>：最终 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li><li><strong>细项说明</strong>：<code>response_time_ms</code> 已纳入正式性能评分；安全头为 5 项等比计分；图片优化由 lazyload 与显式尺寸比例组成</li></ul></div>
+    <div class="biz-card"><h4>结构化数据 · 10%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li><li><strong>计算公式</strong>：<code>JSON-LD20 + Organization20 + LocalBusiness10 + Article15 + FAQPage10 + Service10 + WebSite10 + sameAs5</code></li><li><strong>数据来源</strong>：优先复用 snapshot 中各页面的 <code>json_ld_blocks</code>，统一汇总 <code>@type</code> 与 <code>sameAs</code></li><li><strong>接入要点</strong>：schema 既参与综合分，也被平台适配模块复用，尤其影响 Google AI Overviews 与 Gemini</li></ul></div>
+    <div class="biz-card"><h4>平台适配 · 10%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，按平台战略权重汇总后再按 <code>×0.10</code> 计入综合分</li><li><strong>平台权重</strong>：ChatGPT 30%，Google AI Overviews 20%，Perplexity 20%，Gemini 15%，Bing Copilot 15%</li><li><strong>数据来源</strong>：不额外抓取，直接复用 discovery snapshot、visibility、schema 与 metadata 结果</li><li><strong>输出结果</strong>：分别产出 <code>google_ai_overviews / chatgpt_web_search / perplexity / google_gemini / bing_copilot</code> 的分数、主缺口与建议</li></ul></div>
+  </div>
+  <div class="biz-card" style="margin-top:10px"><h4>发现层与复用机制</h4><ul><li><strong>发现层升级</strong>：当前 discovery 已升级为 <code>snapshot-v2</code>，轻量抓取 homepage、about、service、article、case_study 并生成统一 <code>page_profiles</code></li><li><strong>统一画像</strong>：每个页面都输出 title、meta、canonical、lang、headings、word_count、FAQ / 作者 / 日期、JSON-LD 摘要、entity signals 等统一 profile</li><li><strong>复用机制</strong>：<code>audit_full</code> 支持直接传入已有 <code>discovery</code>，存在时复用，不再重复执行 discover</li><li><strong>GEO 导向</strong>：发现层从“只看首页”升级成“站点快照”，后续所有模块都能围绕可引用页面和实体信号做判断</li></ul></div>
+  <div class="biz-card" style="margin-top:10px"><h4>会员 AI 增强 · 机制说明</h4><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div>
+</div>
+
   <div style="margin-top:28px;margin-bottom:48px">
     <div class="section-hdr">
       <h2>API 调用步骤</h2>
@@ -1238,74 +1154,79 @@ HTML = """<!doctype html>
   let currentTaskId = null;
   let currentTaskStatus = 'idle';
 
-  const DIMENSION_META = [
-    {
-      key: 'AI Citability & Visibility',
-      name: 'AI 可见性',
-      weight: '25%',
-      formula: '0.32 × crawler + 0.40 × citability + 0.12 × llms 有效性 + 0.16 × 基础实体存在',
-      detail: result => {
-        const checks = result?.visibility?.checks || {};
-        const llmsScore = result?.visibility?.findings?.llms_quality?.score ?? 0;
-        return `${checks.allowed_ai_crawlers ?? 0}/${checks.total_ai_crawlers_checked ?? 0} 个 AI crawler 放行 · llms 有效性 ${llmsScore}`;
-      }
-    },
-    {
-      key: 'Brand Authority Signals',
-      name: '品牌权威',
-      weight: '20%',
-      formula: '0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs/Entity 一致性 + 0.25 × 企业信息完整度',
-      detail: result => {
-        const brand = result?.visibility?.checks?.brand_signals || {};
-        const backlinks = result?.visibility?.checks?.backlinks || {};
-        const authority = backlinks.authority_score ?? '未接入';
-        return `公司名 ${brand.company_name_detected ? '已识别' : '未识别'} · sameAs ${brand.same_as_detected ? '已配置' : '缺失'} · Semrush AS ${authority}`;
-      }
-    },
-    {
-      key: 'Content Quality & E-E-A-T',
-      name: '内容与 E-E-A-T',
-      weight: '20%',
-      formula: '(content + experience + expertise + authority + trust) / 5',
-      detail: result => {
-        const findings = result?.content?.findings || {};
-        return `采样 ${findings.evaluated_pages ?? 0} 页 · FAQ ${findings.has_faq_any ? '有' : '无'} · 标题质量 ${findings.average_heading_quality ?? 0}`;
-      }
-    },
-    {
-      key: 'Technical Foundations',
-      name: '技术基础',
-      weight: '15%',
-      formula: 'HTTPS / SSR / Meta / Canonical / Sitemap / 性能 / 安全头 / 图片 / 渲染阻塞等加权求和',
-      detail: result => {
-        const tech = result?.technical || {};
-        return `响应 ${tech.findings?.response_time_ms ?? '—'}ms · 性能 ${tech.checks?.performance?.classification || '—'} · 安全头 ${tech.findings?.security_headers_score ?? 0}`;
-      }
-    },
-    {
-      key: 'Structured Data',
-      name: '结构化数据',
-      weight: '10%',
-      formula: 'JSON-LD + Organization + Article + FAQPage + Service + WebSite + sameAs',
-      detail: result => {
-        const findings = result?.schema?.findings || {};
-        return `Schema 类型 ${findings.schema_type_count ?? 0} 项 · sameAs ${findings.same_as_count ?? 0} 项`;
-      }
-    },
-    {
-      key: 'Platform Optimization',
-      name: '平台适配',
-      weight: '10%',
-      formula: 'ChatGPT 30% + Google AI 20% + Perplexity 20% + Gemini 15% + Bing Copilot 15%',
-      detail: result => {
-        const scores = Object.values(result?.platform?.platform_scores || {}).map(item => item?.platform_score || 0);
-        if (!scores.length) return '等待平台结果';
-        const best = Math.max(...scores);
-        const low = Math.min(...scores);
-        return `最高 ${best} 分 · 最低 ${low} 分 · 按平台战略权重汇总`;
-      }
+
+const DIMENSION_META = [
+  {
+    key: 'AI Citability & Visibility',
+    name: 'AI 可见性',
+    weight: '25%',
+    formula: '0.32 × crawler + 0.40 × snapshot citability + 0.12 × llms 有效性 + 0.16 × 基础实体存在',
+    detail: result => {
+      const checks = result?.visibility?.checks || {};
+      const citability = result?.visibility?.findings?.citability || {};
+      const best = citability.best_page_citability || {};
+      return `${checks.allowed_ai_crawlers ?? 0}/${checks.total_ai_crawlers_checked ?? 0} 个 AI crawler 放行 · 最佳页面 ${best.page_key || 'homepage'} ${best.score ?? 0} · 引用概率 ${citability.citation_probability || 'LOW'}`;
     }
-  ];
+  },
+  {
+    key: 'Brand Authority Signals',
+    name: '品牌权威',
+    weight: '20%',
+    formula: '0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs/Entity 一致性 + 0.25 × 企业信息完整度',
+    detail: result => {
+      const brand = result?.visibility?.checks?.brand_signals || {};
+      const backlinks = result?.visibility?.checks?.backlinks || {};
+      const authority = backlinks.authority_score ?? '未接入';
+      return `公司名 ${brand.company_name_detected ? '已识别' : '未识别'} · sameAs ${brand.same_as_detected ? '已配置' : '缺失'} · Semrush AS ${authority}`;
+    }
+  },
+  {
+    key: 'Content Quality & E-E-A-T',
+    name: '内容与 E-E-A-T',
+    weight: '20%',
+    formula: '(content + experience + expertise + authority + trust) / 5',
+    detail: result => {
+      const findings = result?.content?.findings || {};
+      const sampled = Object.keys(result?.discovery?.page_profiles || {}).length;
+      return `snapshot 采样 ${sampled} 页 · FAQ ${findings.has_faq_any ? '有' : '无'} · 标题质量 ${findings.average_heading_quality ?? 0}`;
+    }
+  },
+  {
+    key: 'Technical Foundations',
+    name: '技术基础',
+    weight: '15%',
+    formula: 'HTTPS / SSR / Meta / Canonical / Sitemap / 性能 / 安全头 / 图片 / 渲染阻塞等加权求和',
+    detail: result => {
+      const tech = result?.technical || {};
+      return `响应 ${tech.findings?.response_time_ms ?? '-'}ms · 性能 ${tech.findings?.performance_classification || '-'} · 安全头 ${tech.findings?.security_headers_score ?? 0}`;
+    }
+  },
+  {
+    key: 'Structured Data',
+    name: '结构化数据',
+    weight: '10%',
+    formula: 'JSON-LD + Organization + Article + FAQPage + Service + WebSite + sameAs',
+    detail: result => {
+      const findings = result?.schema?.findings || {};
+      const sampled = Object.keys(result?.discovery?.page_profiles || {}).length;
+      return `Schema 类型 ${findings.schema_type_count ?? 0} 项 · sameAs ${findings.same_as_count ?? 0} 项 · 复用 snapshot ${sampled} 页`;
+    }
+  },
+  {
+    key: 'Platform Optimization',
+    name: '平台适配',
+    weight: '10%',
+    formula: 'ChatGPT 30% + Google AI 20% + Perplexity 20% + Gemini 15% + Bing Copilot 15%',
+    detail: result => {
+      const scores = Object.entries(result?.platform?.platform_scores || {});
+      if (!scores.length) return '等待平台结果';
+      scores.sort((a, b) => (a[1]?.platform_score || 0) - (b[1]?.platform_score || 0));
+      const low = scores[0];
+      const high = scores[scores.length - 1];
+      return `最佳 ${PLATFORM_LABELS[high?.[0]] || high?.[0]} ${high?.[1]?.platform_score ?? 0} · 最弱 ${PLATFORM_LABELS[low?.[0]] || low?.[0]} ${low?.[1]?.platform_score ?? 0}`;
+    }
+  }
+];
 
   const PLATFORM_LABELS = {
     google_ai_overviews: 'Google AI Overviews',
@@ -1340,30 +1261,31 @@ HTML = """<!doctype html>
     return '';
   }
 
-  function formatStatus(status) {
-    const map = {
-      critical: '严重',
-      poor: '较弱',
-      fair: '一般',
-      good: '良好',
-      strong: '强',
-      completed: '已完成',
-      running: '进行中',
-      pending: '待执行',
-      failed: '失败'
-    };
-    return map[status] || status || '—';
-  }
 
-  function formatBool(val, yes = '是', no = '否') {
-    return val ? yes : no;
-  }
+function formatStatus(status) {
+  const map = {
+    critical: '严重',
+    poor: '较弱',
+    fair: '一般',
+    good: '良好',
+    strong: '强',
+    completed: '已完成',
+    running: '进行中',
+    pending: '待执行',
+    failed: '失败'
+  };
+  return map[status] || status || '-';
+}
 
-  function formatList(items, fallback, limit = 5) {
-    const list = [...new Set((items || []).filter(Boolean))].slice(0, limit);
-    if (!list.length) return `<div class="report-list-item">${escapeHtml(fallback)}</div>`;
-    return list.map((item, idx) => `<div class="report-list-item"><strong>${idx + 1}.</strong> ${escapeHtml(item)}</div>`).join('');
-  }
+function formatBool(val, yes = '是', no = '否') {
+  return val ? yes : no;
+}
+
+function formatList(items, fallback, limit = 5) {
+  const list = [...new Set((items || []).filter(Boolean))].slice(0, limit);
+  if (!list.length) return `<div class="report-list-item">${escapeHtml(fallback)}</div>`;
+  return list.map((item, idx) => `<div class="report-list-item"><strong>${idx + 1}.</strong> ${escapeHtml(item)}</div>`).join('');
+}
 
   function normalizeActions(result) {
     const llmPlan = result?.summary?.llm_insights?.prioritized_action_plan;
@@ -1398,261 +1320,217 @@ HTML = """<!doctype html>
     `).join('');
   }
 
-  function renderReport(task) {
-    const host = $('summary-text');
-    const result = task?.result;
-    if (!result?.summary) {
-      host.className = 'report-empty placeholder';
-      host.innerHTML = '等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划与原始发现摘要。';
-      return;
-    }
 
-    const summary = result.summary || {};
-    const discovery = result.discovery || {};
-    const homepage = discovery.homepage || {};
-    const visibility = result.visibility || {};
-    const technical = result.technical || {};
-    const content = result.content || {};
-    const schema = result.schema || {};
-    const platform = result.platform || {};
-    const executive = summary?.llm_insights?.executive_summary || summary.summary || '暂无摘要。';
-    const topIssues = summary?.llm_insights?.top_issues || summary.top_issues || [];
-    const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
-    const actions = normalizeActions(result).slice(0, 5);
-    const weighted = summary.weighted_scores || {};
-    const platformScores = platform.platform_scores || {};
-    const pageAnalyses = Object.values(content.page_analyses || {});
-    const pageSampleHtml = pageAnalyses.length
-      ? pageAnalyses.slice(0, 4).map(page => `
-          <div class="page-sample">
-            <div class="top">
-              <span class="name">${escapeHtml(page.page_type || 'page')}</span>
-              <span class="name">${escapeHtml(String(page.word_count || 0))} 词</span>
-            </div>
-            <div class="meta">标题质量 ${escapeHtml(String(page.heading_quality_score || 0))} · FAQ ${page.has_faq ? '有' : '无'} · 作者 ${page.has_author ? '有' : '无'} · 日期 ${page.has_publish_date ? '有' : '无'}</div>
-          </div>
-        `).join('')
-      : `<div class="report-list-item">暂无可展示的页面采样。</div>`;
-
-    const dimensionHtml = DIMENSION_META.map(meta => {
-      const item = weighted[meta.key] || {};
-      const rawScore = Number(item.raw_score ?? 0);
-      const status = scoreToStatus(rawScore);
-      return `
-        <div class="report-dim-card">
-          <div class="report-dim-head">
-            <span class="report-dim-name">${escapeHtml(meta.name)}</span>
-            <span class="report-dim-pill">${escapeHtml(meta.weight)}</span>
-          </div>
-          <div class="report-dim-scoreline">
-            <span class="score">${escapeHtml(String(rawScore))}</span>
-            <span class="status">${escapeHtml(formatStatus(status))}</span>
-          </div>
-          <div class="report-dim-kpis">
-            <div class="report-dim-kpi">
-              <div class="lbl">综合贡献</div>
-              <div class="val">${escapeHtml(String(item.weighted_value ?? 0))}</div>
-            </div>
-            <div class="report-dim-kpi">
-              <div class="lbl">原始权重</div>
-              <div class="val">${escapeHtml(meta.weight)}</div>
-            </div>
-          </div>
-          <div class="report-dim-note"><strong>公式：</strong>${escapeHtml(meta.formula)}</div>
-          <div class="report-dim-note" style="margin-top:6px"><strong>当前信号：</strong>${escapeHtml(meta.detail(result))}</div>
-        </div>
-      `;
-    }).join('');
-
-    const platformHtml = Object.entries(platformScores).map(([key, item]) => `
-      <div class="platform-card">
-        <div class="hd">
-          <span class="name">${escapeHtml(PLATFORM_LABELS[key] || key)}</span>
-          <span class="score">${escapeHtml(String(item.platform_score ?? 0))}</span>
-        </div>
-        <div class="gap">${escapeHtml(item.primary_gap || '暂无缺口描述')}</div>
-        <div class="reco">${escapeHtml((item.key_recommendations || [])[0] || '暂无建议')}</div>
-      </div>
-    `).join('');
-
-    const actionHtml = actions.length
-      ? actions.map(item => `
-          <div class="report-action">
-            <div class="report-action-priority ${escapeHtml(item.priority)}">${escapeHtml(formatStatus(item.priority))}</div>
-            <div class="report-action-main">
-              <h5>${escapeHtml(item.action)}</h5>
-              <p>${escapeHtml(item.description || '暂无说明')}</p>
-            </div>
-            <div class="report-action-impact">预计影响<span>${escapeHtml(item.impact || 'High')}</span></div>
-          </div>
-        `).join('')
-      : `<div class="report-list-item">暂无行动计划。</div>`;
-
-    const strongestPlatform = Object.entries(platformScores).sort((a, b) => (b[1]?.platform_score || 0) - (a[1]?.platform_score || 0))[0];
-    const weakestPlatform = Object.entries(platformScores).sort((a, b) => (a[1]?.platform_score || 0) - (b[1]?.platform_score || 0))[0];
-    const noteText = [
-      summary.summary ? `报告摘要：${summary.summary}` : '',
-      summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
-      technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
-      schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
-    ].filter(Boolean).join('\\n\\n') || '当前无额外备注。';
-
-    host.className = 'report-shell';
-    host.innerHTML = `
-      <section class="report-hero">
-        <div class="report-score-box">
-          <div>
-            <div class="report-score-label">Composite GEO Score</div>
-            <div class="report-score-value">${escapeHtml(String(summary.composite_geo_score ?? 0))}</div>
-            <div class="report-score-sub">${escapeHtml(formatStatus(summary.status))} · 报告口径</div>
-          </div>
-          <div class="report-badges">
-            <span class="r-badge ${escapeHtml(statusTone(summary.status))}">${escapeHtml(formatStatus(summary.status))}</span>
-            <span class="r-badge">${task.mode === 'premium' ? '会员版 / AI 增强' : '普通版 / 规则版'}</span>
-            <span class="r-badge ${summary.llm_enhanced ? 'success' : ''}">${summary.llm_enhanced ? '报告已增强' : '规则汇总'}</span>
-          </div>
-        </div>
-        <div class="report-hero-main">
-          <div class="report-kicker">
-            <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '—')}</span>
-            <span class="dot"></span>
-            <span>${escapeHtml(discovery.business_type || 'unknown')}</span>
-            <span class="dot"></span>
-            <span>响应 ${escapeHtml(String(discovery.fetch?.response_time_ms ?? '—'))} ms</span>
-          </div>
-          <h3>站点 GEO 报告</h3>
-          <div class="report-summary">${escapeHtml(executive)}</div>
-          <div class="report-meta-grid">
-            <div class="report-meta-item">
-              <div class="lbl">首页标题</div>
-              <div class="val">${escapeHtml(homepage.title || '—')}</div>
-            </div>
-            <div class="report-meta-item">
-              <div class="lbl">AI 抓取 / llms</div>
-              <div class="val">${escapeHtml(String(visibility.checks?.allowed_ai_crawlers ?? 0))} / ${escapeHtml(String(visibility.checks?.total_ai_crawlers_checked ?? 0))} 放行 · llms ${escapeHtml(String(visibility.findings?.llms_quality?.score ?? 0))}</div>
-            </div>
-            <div class="report-meta-item">
-              <div class="lbl">Schema 状态</div>
-              <div class="val">${schema.structured_data_score > 0 ? '已检测到结构化数据' : '未检测到 JSON-LD'}</div>
-            </div>
-            <div class="report-meta-item">
-              <div class="lbl">最佳 / 最弱平台</div>
-              <div class="val">${escapeHtml(PLATFORM_LABELS[strongestPlatform?.[0]] || '—')} ${escapeHtml(String(strongestPlatform?.[1]?.platform_score ?? '—'))} / ${escapeHtml(PLATFORM_LABELS[weakestPlatform?.[0]] || '—')} ${escapeHtml(String(weakestPlatform?.[1]?.platform_score ?? '—'))}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="report-section">
-        <div class="report-section-hdr">
-          <h4>6 个汇总维度评分</h4>
-          <span>原始分满分 100，按权重折算进入综合分</span>
-        </div>
-        <div class="report-section-body">
-          <div class="report-dim-grid">${dimensionHtml}</div>
-        </div>
-      </section>
-
-      <div class="report-grid-2">
-        <section class="report-section">
-          <div class="report-section-hdr">
-            <h4>关键问题</h4>
-            <span>优先处理最拖分的约束项</span>
-          </div>
-          <div class="report-section-body">
-            <div class="report-list">${formatList(topIssues, '暂无关键问题。')}</div>
-          </div>
-        </section>
-        <section class="report-section">
-          <div class="report-section-hdr">
-            <h4>快速收益项</h4>
-            <span>优先处理投入低、收益快的动作</span>
-          </div>
-          <div class="report-section-body">
-            <div class="report-list">${formatList(quickWins, '暂无快速收益建议。')}</div>
-          </div>
-        </section>
-      </div>
-
-      <section class="report-section">
-        <div class="report-section-hdr">
-          <h4>优先行动计划</h4>
-          <span>结合原始模块结果与 AI 增强建议生成</span>
-        </div>
-        <div class="report-section-body">
-          <div class="report-action-list">${actionHtml}</div>
-        </div>
-      </section>
-
-      <section class="report-section">
-        <div class="report-section-hdr">
-          <h4>平台适配概览</h4>
-          <span>展示 5 个目标平台 readiness、主缺口与首要建议</span>
-        </div>
-        <div class="report-section-body">
-          <div class="report-platform-grid">${platformHtml || '<div class="report-list-item">暂无平台数据。</div>'}</div>
-        </div>
-      </section>
-
-      <section class="report-section">
-        <div class="report-section-hdr">
-          <h4>原始发现摘要</h4>
-          <span>基于 discovery 与各模块 checks / findings 的事实层展示</span>
-        </div>
-        <div class="report-section-body">
-          <div class="report-evidence-grid">
-            <div class="evidence-card">
-              <h5>站点概况</h5>
-              <div class="kv-list">
-                <div class="kv-row"><span class="kv-key">规范化 URL</span><span class="kv-val">${escapeHtml(discovery.normalized_url || '—')}</span></div>
-                <div class="kv-row"><span class="kv-key">首页 H1</span><span class="kv-val">${escapeHtml(homepage.h1 || '—')}</span></div>
-                <div class="kv-row"><span class="kv-key">字数 / 标题数</span><span class="kv-val">${escapeHtml(String(homepage.word_count ?? 0))} / ${escapeHtml(String((homepage.headings || []).length))}</span></div>
-                <div class="kv-row"><span class="kv-key">语言 / hreflang</span><span class="kv-val">${escapeHtml(homepage.lang || '—')} / ${escapeHtml(String((homepage.hreflang || []).length))}</span></div>
-                <div class="kv-row"><span class="kv-key">内部链接 / 图片</span><span class="kv-val">${escapeHtml(String((homepage.internal_links || []).length))} / ${escapeHtml(String((homepage.images || []).length))}</span></div>
-              </div>
-            </div>
-            <div class="evidence-card">
-              <h5>抓取与实体信号</h5>
-              <div class="kv-list">
-                <div class="kv-row"><span class="kv-key">robots.txt</span><span class="kv-val">${formatBool(discovery.robots?.exists, '存在', '缺失')}</span></div>
-                <div class="kv-row"><span class="kv-key">llms.txt / 有效性</span><span class="kv-val">${formatBool(discovery.llms?.exists, '存在', '缺失')} / ${escapeHtml(String(visibility.findings?.llms_quality?.score ?? discovery.llms?.effectiveness_score ?? 0))}</span></div>
-                <div class="kv-row"><span class="kv-key">Sitemap / Semrush AS</span><span class="kv-val">${formatBool(discovery.sitemap?.exists, '存在', '缺失')} / ${escapeHtml(String(discovery.backlinks?.authority_score ?? '未接入'))}</span></div>
-                <div class="kv-row"><span class="kv-key">公司名 / 电话</span><span class="kv-val">${formatBool(discovery.site_signals?.company_name_detected, '有', '无')} / ${formatBool(discovery.site_signals?.phone_detected, '有', '无')}</span></div>
-                <div class="kv-row"><span class="kv-key">地址 / 邮箱 / sameAs</span><span class="kv-val">${formatBool(discovery.site_signals?.address_detected, '有', '无')} / ${formatBool(discovery.site_signals?.email_detected, '有', '无')} / ${formatBool(discovery.site_signals?.same_as_detected, '有', '无')}</span></div>
-              </div>
-            </div>
-            <div class="evidence-card">
-              <h5>技术与结构化快照</h5>
-              <div class="kv-list">
-                <div class="kv-row"><span class="kv-key">安全头得分</span><span class="kv-val">${escapeHtml(String(technical.findings?.security_headers_score ?? 0))}</span></div>
-                <div class="kv-row"><span class="kv-key">SSR / 性能</span><span class="kv-val">${escapeHtml(technical.findings?.ssr_classification || '—')} / ${escapeHtml(technical.findings?.performance_classification || technical.checks?.performance?.classification || '—')}</span></div>
-                <div class="kv-row"><span class="kv-key">图片 lazyload / 尺寸</span><span class="kv-val">${escapeHtml(String(technical.checks?.image_optimization?.lazyload_ratio ?? 0))} / ${escapeHtml(String(technical.checks?.image_optimization?.dimension_ratio ?? 0))}</span></div>
-                <div class="kv-row"><span class="kv-key">Open Graph / Twitter Card</span><span class="kv-val">${formatBool(technical.checks?.open_graph, '有', '无')} / ${formatBool(technical.checks?.twitter_card, '有', '无')}</span></div>
-                <div class="kv-row"><span class="kv-key">Schema 类型 / sameAs</span><span class="kv-val">${escapeHtml(String(schema.findings?.schema_type_count ?? 0))} / ${escapeHtml(String(schema.findings?.same_as_count ?? 0))}</span></div>
-              </div>
-            </div>
-            <div class="evidence-card">
-              <h5>关键页面与内容采样</h5>
-              <div class="kv-list" style="margin-bottom:10px">${formatKeyPages(discovery.key_pages || {})}</div>
-              <div class="page-samples">${pageSampleHtml}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="report-section">
-        <div class="report-section-hdr">
-          <h4>说明与备注</h4>
-          <span>沉淀模型摘要、技术注释与模式说明</span>
-        </div>
-        <div class="report-section-body">
-          <div class="report-note-box">${escapeHtml(noteText)}</div>
-        </div>
-      </section>
-    `;
+function renderReport(task) {
+  const host = $('summary-text');
+  const result = task?.result;
+  if (!result?.summary) {
+    host.className = 'report-empty placeholder';
+    host.innerHTML = '等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划、snapshot 发现与引用证据。';
+    return;
   }
 
-  /* ── Render timeline ── */
+  const summary = result.summary || {};
+  const discovery = result.discovery || {};
+  const homepage = discovery.homepage || {};
+  const visibility = result.visibility || {};
+  const technical = result.technical || {};
+  const content = result.content || {};
+  const schema = result.schema || {};
+  const platform = result.platform || {};
+  const executive = summary?.llm_insights?.executive_summary || summary.summary || '暂无摘要。';
+  const topIssues = summary?.llm_insights?.top_issues || summary.top_issues || [];
+  const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
+  const actions = normalizeActions(result).slice(0, 5);
+  const weighted = summary.weighted_scores || {};
+  const platformScores = platform.platform_scores || {};
+  const citability = visibility.findings?.citability || {};
+  const homepageCitability = citability.homepage_citability || {};
+  const bestPageCitability = citability.best_page_citability || {};
+  const citationProbability = citability.citation_probability || 'LOW';
+  const citationLabelMap = { LOW: '低', MEDIUM: '中', HIGH: '高' };
+  const pageProfiles = Object.entries(discovery.page_profiles || {});
+  const fallbackPages = Object.values(content.page_analyses || {});
+  const pageSamples = pageProfiles.length ? pageProfiles.map(([key, page]) => ({ key, ...page })) : fallbackPages;
+  const pageSampleHtml = pageSamples.length
+    ? pageSamples.slice(0, 5).map(page => {
+        const schemaTypes = Array.isArray(page.json_ld_summary?.types) ? page.json_ld_summary.types.length : 0;
+        return `
+          <div class="page-sample">
+            <div class="top">
+              <span class="name">${escapeHtml(page.page_type || page.key || 'page')}</span>
+              <span class="name">${escapeHtml(String(page.word_count || 0))} 词</span>
+            </div>
+            <div class="meta">标题质量 ${escapeHtml(String(page.heading_quality_score || 0))} · 信息密度 ${escapeHtml(String(page.information_density_score || 0))} · 分块结构 ${escapeHtml(String(page.chunk_structure_score || 0))}</div>
+            <div class="meta">FAQ ${page.has_faq ? '有' : '无'} · 作者 ${page.has_author ? '有' : '无'} · 日期 ${page.has_publish_date ? '有' : '无'} · answer-first ${page.answer_first ? '有' : '无'} · Schema ${schemaTypes}</div>
+          </div>
+        `;
+      }).join('')
+    : `<div class="report-list-item">暂无可展示的页面采样。</div>`;
+
+  const dimensionHtml = DIMENSION_META.map(meta => {
+    const item = weighted[meta.key] || {};
+    const rawScore = Number(item.raw_score ?? 0);
+    const status = scoreToStatus(rawScore);
+    return `
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(meta.name)}</span>
+          <span class="report-dim-pill">${escapeHtml(meta.weight)}</span>
+        </div>
+        <div class="report-dim-scoreline">
+          <span class="score">${escapeHtml(String(rawScore))}</span>
+          <span class="status">${escapeHtml(formatStatus(status))}</span>
+        </div>
+        <div class="report-dim-kpis">
+          <div class="report-dim-kpi">
+            <div class="lbl">综合贡献</div>
+            <div class="val">${escapeHtml(String(item.weighted_value ?? 0))}</div>
+          </div>
+          <div class="report-dim-kpi">
+            <div class="lbl">原始权重</div>
+            <div class="val">${escapeHtml(meta.weight)}</div>
+          </div>
+        </div>
+        <div class="report-dim-note"><strong>公式：</strong>${escapeHtml(meta.formula)}</div>
+        <div class="report-dim-note" style="margin-top:6px"><strong>当前信号：</strong>${escapeHtml(meta.detail(result))}</div>
+      </div>
+    `;
+  }).join('');
+
+  const platformHtml = Object.entries(platformScores).map(([key, item]) => `
+    <div class="platform-card">
+      <div class="hd">
+        <span class="name">${escapeHtml(PLATFORM_LABELS[key] || key)}</span>
+        <span class="score">${escapeHtml(String(item.platform_score ?? 0))}</span>
+      </div>
+      <div class="gap">${escapeHtml(item.primary_gap || '暂无缺口描述')}</div>
+      <div class="reco">${escapeHtml((item.key_recommendations || [])[0] || '暂无建议')}</div>
+    </div>
+  `).join('');
+
+  const actionHtml = actions.length
+    ? actions.map(item => `
+        <div class="report-action">
+          <div class="report-action-priority ${escapeHtml(item.priority)}">${escapeHtml(formatStatus(item.priority))}</div>
+          <div class="report-action-main">
+            <h5>${escapeHtml(item.action)}</h5>
+            <p>${escapeHtml(item.description || '暂无说明')}</p>
+          </div>
+          <div class="report-action-impact">预计影响<span>${escapeHtml(item.impact || 'High')}</span></div>
+        </div>
+      `).join('')
+    : `<div class="report-list-item">暂无行动计划。</div>`;
+
+  const strongestPlatform = Object.entries(platformScores).sort((a, b) => (b[1]?.platform_score || 0) - (a[1]?.platform_score || 0))[0];
+  const weakestPlatform = Object.entries(platformScores).sort((a, b) => (a[1]?.platform_score || 0) - (b[1]?.platform_score || 0))[0];
+  const noteText = [
+    discovery.site_snapshot_version ? `发现层版本：${discovery.site_snapshot_version}，当前 audit_full 支持复用传入 discovery，避免重复抓取。` : '',
+    '品牌权威当前仍通过 visibility 输出，但代码层已预留 BrandAuthorityService 边界，便于后续独立服务化。',
+    summary.summary ? `报告摘要：${summary.summary}` : '',
+    summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
+    technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
+    schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
+  ].filter(Boolean).join('\n\n') || '当前无额外备注。';
+
+  host.className = 'report-shell';
+  host.innerHTML = `
+    <section class="report-hero">
+      <div class="report-score-box">
+        <div>
+          <div class="report-score-label">Composite GEO Score</div>
+          <div class="report-score-value">${escapeHtml(String(summary.composite_geo_score ?? 0))}</div>
+          <div class="report-score-sub">${escapeHtml(formatStatus(summary.status))} · 报告口径</div>
+        </div>
+        <div class="report-badges">
+          <span class="r-badge ${escapeHtml(statusTone(summary.status))}">${escapeHtml(formatStatus(summary.status))}</span>
+          <span class="r-badge">${task.mode === 'premium' ? '会员版 / AI 增强' : '普通版 / 规则版'}</span>
+          <span class="r-badge ${summary.llm_enhanced ? 'success' : ''}">${summary.llm_enhanced ? '报告已增强' : '规则汇总'}</span>
+        </div>
+      </div>
+      <div class="report-hero-main">
+        <div class="report-kicker">
+          <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '-')}</span>
+          <span class="dot"></span>
+          <span>${escapeHtml(discovery.business_type || 'unknown')}</span>
+          <span class="dot"></span>
+          <span>响应 ${escapeHtml(String(discovery.fetch?.response_time_ms ?? '-'))} ms</span>
+        </div>
+        <h3>站点 GEO 报告</h3>
+        <div class="report-summary">${escapeHtml(executive)}</div>
+        <div class="report-meta-grid">
+          <div class="report-meta-item">
+            <div class="lbl">Snapshot</div>
+            <div class="val">${escapeHtml(discovery.site_snapshot_version || 'snapshot-v1')} · ${escapeHtml(String(pageProfiles.length || 1))} 页画像</div>
+          </div>
+          <div class="report-meta-item">
+            <div class="lbl">AI 抓取 / llms</div>
+            <div class="val">${escapeHtml(String(visibility.checks?.allowed_ai_crawlers ?? 0))} / ${escapeHtml(String(visibility.checks?.total_ai_crawlers_checked ?? 0))} 放行 · llms ${escapeHtml(String(visibility.findings?.llms_quality?.score ?? 0))}</div>
+          </div>
+          <div class="report-meta-item">
+            <div class="lbl">引用概率</div>
+            <div class="val">${escapeHtml(citationLabelMap[citationProbability] || citationProbability)} · 首页 ${escapeHtml(String(homepageCitability.score ?? 0))} / 最佳页 ${escapeHtml(String(bestPageCitability.score ?? 0))}</div>
+          </div>
+          <div class="report-meta-item">
+            <div class="lbl">最佳 / 最弱平台</div>
+            <div class="val">${escapeHtml(PLATFORM_LABELS[strongestPlatform?.[0]] || '-')} ${escapeHtml(String(strongestPlatform?.[1]?.platform_score ?? '-'))} / ${escapeHtml(PLATFORM_LABELS[weakestPlatform?.[0]] || '-')} ${escapeHtml(String(weakestPlatform?.[1]?.platform_score ?? '-'))}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="report-section">
+      <div class="report-section-hdr">
+        <h4>6 个汇总维度评估</h4>
+        <span>原始分满分 100，按权重折算进入综合分</span>
+      </div>
+      <div class="report-section-body">
+        <div class="report-dim-grid">${dimensionHtml}</div>
+      </div>
+    </section>
+
+    <div class="report-grid-2">
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>关键问题</h4><span>优先处理最拖分的约束项</span></div>
+        <div class="report-section-body"><div class="report-list">${formatList(topIssues, '暂无关键问题。')}</div></div>
+      </section>
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>快速收益项</h4><span>优先处理投入低、收益快的动作</span></div>
+        <div class="report-section-body"><div class="report-list">${formatList(quickWins, '暂无快速收益建议。')}</div></div>
+      </section>
+    </div>
+
+    <section class="report-section">
+      <div class="report-section-hdr"><h4>优先行动计划</h4><span>结合规则结果与 AI 增强建议生成</span></div>
+      <div class="report-section-body"><div class="report-action-list">${actionHtml}</div></div>
+    </section>
+
+    <section class="report-section">
+      <div class="report-section-hdr"><h4>平台适配概览</h4><span>展示 5 个目标平台的 readiness、主缺口与首要建议</span></div>
+      <div class="report-section-body"><div class="report-platform-grid">${platformHtml || '<div class="report-list-item">暂无平台数据。</div>'}</div></div>
+    </section>
+
+    <section class="report-section">
+      <div class="report-section-hdr"><h4>Snapshot 与原始发现</h4><span>基于 discovery snapshot 与各模块 checks / findings 的事实层展示</span></div>
+      <div class="report-section-body">
+        <div class="report-evidence-grid">
+          <div class="evidence-card"><h5>站点概况</h5><div class="kv-list"><div class="kv-row"><span class="kv-key">规范化 URL</span><span class="kv-val">${escapeHtml(discovery.normalized_url || '-')}</span></div><div class="kv-row"><span class="kv-key">首页标题</span><span class="kv-val">${escapeHtml(homepage.title || '-')}</span></div><div class="kv-row"><span class="kv-key">首页 H1</span><span class="kv-val">${escapeHtml(homepage.h1 || '-')}</span></div><div class="kv-row"><span class="kv-key">字数 / 标题数</span><span class="kv-val">${escapeHtml(String(homepage.word_count ?? 0))} / ${escapeHtml(String((homepage.headings || []).length))}</span></div><div class="kv-row"><span class="kv-key">语言 / hreflang</span><span class="kv-val">${escapeHtml(homepage.lang || '-')} / ${escapeHtml(String((homepage.hreflang || []).length))}</span></div></div></div>
+          <div class="evidence-card"><h5>发现层快照</h5><div class="kv-list"><div class="kv-row"><span class="kv-key">snapshot 版本</span><span class="kv-val">${escapeHtml(discovery.site_snapshot_version || 'snapshot-v1')}</span></div><div class="kv-row"><span class="kv-key">page_profiles</span><span class="kv-val">${escapeHtml(String(pageProfiles.length || 1))} 页</span></div><div class="kv-row"><span class="kv-key">关键页面识别</span><span class="kv-val">${escapeHtml(String(Object.values(discovery.key_pages || {}).filter(Boolean).length))} 页</span></div><div class="kv-row"><span class="kv-key">首页引用得分</span><span class="kv-val">${escapeHtml(String(homepageCitability.score ?? 0))}</span></div><div class="kv-row"><span class="kv-key">最佳引用页</span><span class="kv-val">${escapeHtml(bestPageCitability.page_key || 'homepage')} / ${escapeHtml(String(bestPageCitability.score ?? 0))}</span></div></div></div>
+          <div class="evidence-card"><h5>抓取与实体信号</h5><div class="kv-list"><div class="kv-row"><span class="kv-key">robots.txt</span><span class="kv-val">${formatBool(discovery.robots?.exists, '存在', '缺失')}</span></div><div class="kv-row"><span class="kv-key">llms.txt / 有效性</span><span class="kv-val">${formatBool(discovery.llms?.exists, '存在', '缺失')} / ${escapeHtml(String(visibility.findings?.llms_quality?.score ?? discovery.llms?.effectiveness_score ?? 0))}</span></div><div class="kv-row"><span class="kv-key">Sitemap / Semrush AS</span><span class="kv-val">${formatBool(discovery.sitemap?.exists, '存在', '缺失')} / ${escapeHtml(String(discovery.backlinks?.authority_score ?? '未接入'))}</span></div><div class="kv-row"><span class="kv-key">公司名 / 电话</span><span class="kv-val">${formatBool(discovery.site_signals?.company_name_detected, '有', '无')} / ${formatBool(discovery.site_signals?.phone_detected, '有', '无')}</span></div><div class="kv-row"><span class="kv-key">地址 / 邮箱 / sameAs</span><span class="kv-val">${formatBool(discovery.site_signals?.address_detected, '有', '无')} / ${formatBool(discovery.site_signals?.email_detected, '有', '无')} / ${formatBool(discovery.site_signals?.same_as_detected, '有', '无')}</span></div></div></div>
+          <div class="evidence-card"><h5>技术与结构化快照</h5><div class="kv-list"><div class="kv-row"><span class="kv-key">安全头得分</span><span class="kv-val">${escapeHtml(String(technical.findings?.security_headers_score ?? 0))}</span></div><div class="kv-row"><span class="kv-key">SSR / 性能</span><span class="kv-val">${escapeHtml(technical.findings?.ssr_classification || '-')} / ${escapeHtml(technical.findings?.performance_classification || technical.checks?.performance?.classification || '-')}</span></div><div class="kv-row"><span class="kv-key">图片 lazyload / 尺寸</span><span class="kv-val">${escapeHtml(String(technical.checks?.image_optimization?.lazyload_ratio ?? 0))} / ${escapeHtml(String(technical.checks?.image_optimization?.dimension_ratio ?? 0))}</span></div><div class="kv-row"><span class="kv-key">Open Graph / Twitter Card</span><span class="kv-val">${formatBool(technical.checks?.open_graph, '有', '无')} / ${formatBool(technical.checks?.twitter_card, '有', '无')}</span></div><div class="kv-row"><span class="kv-key">Schema 类型 / sameAs</span><span class="kv-val">${escapeHtml(String(schema.findings?.schema_type_count ?? 0))} / ${escapeHtml(String(schema.findings?.same_as_count ?? 0))}</span></div></div></div>
+          <div class="evidence-card"><h5>引用与平台证据</h5><div class="kv-list"><div class="kv-row"><span class="kv-key">引用概率</span><span class="kv-val">${escapeHtml(citationLabelMap[citationProbability] || citationProbability)}</span></div><div class="kv-row"><span class="kv-key">最佳页类型</span><span class="kv-val">${escapeHtml(bestPageCitability.page_type || bestPageCitability.page_key || 'homepage')}</span></div><div class="kv-row"><span class="kv-key">最佳 / 最弱平台</span><span class="kv-val">${escapeHtml(PLATFORM_LABELS[strongestPlatform?.[0]] || '-')} / ${escapeHtml(PLATFORM_LABELS[weakestPlatform?.[0]] || '-')}</span></div><div class="kv-row"><span class="kv-key">品牌权威边界</span><span class="kv-val">BrandAuthorityService 已预留</span></div><div class="kv-row"><span class="kv-key">复用 discovery</span><span class="kv-val">audit_full 支持直接复用</span></div></div></div>
+          <div class="evidence-card"><h5>关键页面与内容采样</h5><div class="kv-list" style="margin-bottom:10px">${formatKeyPages(discovery.key_pages || {})}</div><div class="page-samples">${pageSampleHtml}</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="report-section">
+      <div class="report-section-hdr"><h4>说明与备注</h4><span>发现层版本、处理注释与模式说明</span></div>
+      <div class="report-section-body"><div class="report-note-box">${escapeHtml(noteText)}</div></div>
+    </section>
+  `;
+}
+
   function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';

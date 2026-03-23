@@ -1,8 +1,8 @@
 # GEO Audit Service
 
-面向 GEO / AI Search 的网站审计服务，支持异步任务、规则评分、会员 AI 增强，以及可视化 Demo 报告页。
+面向 GEO / AI Search 的站点审计服务。项目保持原有 API 风格不变，但内部已经从“传统 SEO 检测器”升级成“站点快照 + GEO 审计引擎”。
 
-当前服务围绕 6 个汇总层输出最终综合分：
+当前综合评分围绕 6 个汇总维度输出：
 
 - AI 可见性 `25%`
 - 品牌权威 `20%`
@@ -11,23 +11,52 @@
 - 结构化数据 `10%`
 - 平台适配 `10%`
 
-## 核心能力
+## 核心设计
 
-### 1. 发现层
+### 1. 发现层：Site Snapshot
 
-自动抓取并汇总：
+`DiscoveryService` 不再只抓首页，而是构建站点级快照。
 
-- 首页元数据、标题结构、图片、脚本、样式、JSON-LD
-- `robots.txt`
-- `llms.txt`
-- `sitemap.xml`
-- 关键页面识别：`about / service / contact / article / case_study`
-- 站点品牌信号：公司名、电话、邮箱、地址、资质、sameAs
-- 可选站外权威信号：Semrush Backlinks Overview
+默认轻量抓取：
 
-### 2. 审计层
+- `homepage`
+- `about`
+- `service`
+- `article/news`
+- `case_study`
 
-并行执行 5 个审计模块：
+每个页面都会输出统一 `page_profiles`：
+
+- `final_url`
+- `title`
+- `meta_description`
+- `canonical`
+- `lang`
+- `headings`
+- `word_count`
+- `has_faq`
+- `has_author`
+- `has_publish_date`
+- `has_quantified_data`
+- `answer_first`
+- `heading_quality_score`
+- `information_density_score`
+- `chunk_structure_score`
+- `json_ld_summary`
+- `entity_signals`
+
+发现层新增字段：
+
+- `page_profiles`
+- `site_snapshot_version`
+
+当前版本号为：
+
+- `snapshot-v2`
+
+### 2. 审计层：5 个执行模块
+
+系统仍保持 5 个审计模块，便于兼容现有 API 与任务编排：
 
 - `visibility`
 - `technical`
@@ -35,36 +64,78 @@
 - `schema`
 - `platform`
 
-### 3. 汇总层
+所有模块统一新增元数据：
 
-将审计结果映射为 6 个业务维度综合分，而不是简单按 5 个模块平均。
+- `module_key`
+- `input_pages`
+- `duration_ms`
+- `confidence`
+- `processing_notes`
 
-## 评分口径
+### 3. 汇总层：6 个 GEO 业务维度
+
+汇总层不是简单把 5 个模块平均，而是按 GEO 业务口径重组：
+
+- `AI Citability & Visibility`
+- `Brand Authority Signals`
+- `Content Quality & E-E-A-T`
+- `Technical Foundations`
+- `Structured Data`
+- `Platform Optimization`
+
+其中：
+
+- `visibility` 被拆成 `AI 可见性` 和 `品牌权威`
+- `content` 被汇总成 `内容与 E-E-A-T`
+- 其余模块一对一映射到汇总维度
+
+## Discovery 复用机制
+
+`FullAuditService.audit_full(...)` 已支持可选 `discovery` 参数。
+
+行为如下：
+
+- 如果传入 `discovery`，则直接复用，不重复执行 `discover(url)`
+- 如果未传入 `discovery`，才执行新的站点发现
+
+这让异步任务、批量流程和外部编排系统可以把发现层与审计层解耦。
+
+## GEO 评分口径
 
 ### AI 可见性 `25%`
 
-原始分取自 `visibility.ai_visibility_score`。
+来源字段：
 
-公式：
+- `visibility.ai_visibility_score`
+
+当前公式：
 
 ```text
 0.32 × AI crawler 放行率
-+ 0.40 × citability
++ 0.40 × snapshot citability
 + 0.12 × llms.txt 有效性
 + 0.16 × 基础实体存在
 ```
 
 说明：
 
-- `citability` 看 `title / meta / H1 / canonical / headings>=3 / 字数>=250`
-- `llms.txt` 不只看存在，还看长度、品牌词、服务说明、machine-facing guidance
-- `基础实体存在` 看公司名、about、contact、基础联系方式
+- `citability` 不再只看首页
+- 会同时输出：
+  - `homepage_citability`
+  - `best_page_citability`
+  - `citation_probability`
+- `citation_probability` 取值：
+  - `LOW`
+  - `MEDIUM`
+  - `HIGH`
 
 ### 品牌权威 `20%`
 
-原始分取自 `visibility.brand_authority_score`。
+来源字段：
 
-公式：
+- `visibility.brand_authority_score`
+
+当前公式：
 
 ```text
 0.25 × 外链质量
@@ -75,105 +146,65 @@
 
 说明：
 
-- 外链质量来自 Semrush Backlinks Overview，可选接入
-- 若未配置 Semrush，不会直接扣分，而是跳过该项并按剩余项重算权重
-- Entity 一致性会检查 sameAs、Organization schema、品牌名一致性、sitemap 与主域一致性
+- 当前品牌权威仍由 `visibility` 输出
+- 代码层已预留 `BrandAuthorityService`
+- 这为后续独立品牌权威模块保留了服务边界
 
 ### 内容与 E-E-A-T `20%`
 
-汇总层公式：
+公式：
 
 ```text
 (content_score + experience_score + expertise_score + authoritativeness_score + trustworthiness_score) / 5
 ```
 
-内容模块主要覆盖：
-
-- 服务页/文章页深度
-- FAQ、作者、发布日期
-- 量化数据、案例、answer-first
-- 标题结构质量
-- E-E-A-T 五类子分
+内容评估优先复用 `discovery.page_profiles`，避免为了内容模块重复抓取同一批关键页面。
 
 ### 技术基础 `15%`
 
-原始分取自 `technical.technical_score`。
+来源字段：
 
-当前技术权重：
+- `technical.technical_score`
 
-```text
-HTTPS 8
-SSR 10
-Meta 5
-Canonical 5
-lang 4
-viewport 4
-Sitemap 8
-robots Sitemap 指令 4
-Performance 8
-Render Blocking 8
-Security Headers 16
-Image Optimization 8
-Open Graph 5
-Twitter Card 3
-hreflang 4
-```
+已正式纳入：
 
-说明：
-
-- `response_time_ms` 已纳入正式性能评分
-- 图片优化按 `lazyload` 比例与显式尺寸比例各占 50%
-- SSR 使用 HTML 长度与字数联合判断
+- HTTPS
+- SSR
+- Meta / Canonical
+- Sitemap / robots 指令
+- `response_time_ms`
+- render-blocking
+- security headers
+- image optimization
+- Open Graph / Twitter Card / hreflang
 
 ### 结构化数据 `10%`
 
-原始分取自 `schema.structured_data_score`。
+来源字段：
 
-当前规则：
+- `schema.structured_data_score`
 
-```text
-JSON-LD 20
-Organization 20
-LocalBusiness 10
-Article 15
-FAQPage 10
-Service 10
-WebSite 10
-sameAs 5
-```
+优先复用 snapshot 中各页面的 JSON-LD 数据，而不是二次抓取。
 
 ### 平台适配 `10%`
 
-原始分取自 `platform.platform_optimization_score`。
+来源字段：
 
-不再按 5 平台简单平均，而是按平台战略权重汇总：
+- `platform.platform_optimization_score`
 
-```text
-ChatGPT Web Search 30%
-Google AI Overviews 20%
-Perplexity 20%
-Google Gemini 15%
-Bing Copilot 15%
-```
+已从“简单平均”升级成“平台战略权重汇总”：
 
-每个平台仍保留自己的 readiness 分数、主缺口和建议。
+- ChatGPT Web Search `30%`
+- Google AI Overviews `20%`
+- Perplexity `20%`
+- Google Gemini `15%`
+- Bing Copilot `15%`
 
-## 会员 AI 增强
+## Semrush Backlinks 接入
 
-`premium` 模式下会对以下模块执行规则结果增强：
+项目支持使用 [Semrush Backlinks Overview](https://developer.semrush.com/api/seo/backlinks/#backlinks-overview) 作为品牌权威的站外信号源。
 
-- `visibility`
-- `content`
-- `platform`
-- `summary`
-
-`technical` 与 `schema` 仍保持规则制，优先保证可解释性与确定性。
-
-## Semrush 外链接入
-
-项目支持用 [Semrush Backlinks Overview](https://developer.semrush.com/api/seo/backlinks/#backlinks-overview) 作为品牌权威的站外信号源。
-
-新增环境变量：
+环境变量：
 
 ```env
 SEMRUSH_ENABLED=true
@@ -182,7 +213,7 @@ SEMRUSH_BASE_URL=https://api.semrush.com/
 SEMRUSH_TARGET_TYPE=root_domain
 ```
 
-当前使用字段：
+当前会用到的指标包括：
 
 - `ascore`
 - `backlinks_num`
@@ -194,12 +225,26 @@ SEMRUSH_TARGET_TYPE=root_domain
 - `sponsored_num`
 - `ugc_num`
 
-外链质量评分主要参考：
+如果未配置 Semrush：
 
-- Authority Score
-- Referring Domains
-- Referring IP / C-Class 多样性
-- Follow Ratio
+- 不会直接硬扣品牌权威总分
+- 会跳过外链项，并对剩余品牌项重算权重
+
+## 会员 AI 增强
+
+`premium` 模式下会对以下模块执行规则结果增强：
+
+- `visibility`
+- `content`
+- `platform`
+- `summary`
+
+以下模块仍保持规则制：
+
+- `technical`
+- `schema`
+
+这样可以优先保证确定性与可解释性。
 
 ## 运行
 
@@ -212,7 +257,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8023
 ```
 
-打开 Demo：
+Demo 地址：
 
 ```text
 http://127.0.0.1:8023
@@ -232,7 +277,7 @@ docker run -d \
 
 ## 环境变量
 
-基础：
+### 基础
 
 ```env
 APP_ENV=development
@@ -250,7 +295,7 @@ DEFAULT_USER_AGENT=GEOAuditBot/1.0 (+https://example.com/bot)
 ALLOW_PLAYWRIGHT=false
 ```
 
-AI 增强：
+### AI 增强
 
 ```env
 LLM_REQUEST_TIMEOUT_SECONDS=30
@@ -261,7 +306,7 @@ OPENROUTER_SITE_URL=http://127.0.0.1:8023
 OPENROUTER_APP_NAME=geo-audit-service
 ```
 
-Semrush：
+### Semrush
 
 ```env
 SEMRUSH_ENABLED=true
@@ -281,66 +326,68 @@ SEMRUSH_TARGET_TYPE=root_domain
 
 ### 推荐：异步任务模式
 
+提交审计任务：
+
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","mode":"standard"}'
 ```
 
+查询任务：
+
 ```bash
 curl http://127.0.0.1:8023/api/v1/tasks/{task_id}
 ```
+
+导出报告：
 
 ```bash
 curl -L http://127.0.0.1:8023/api/v1/tasks/{task_id}/report -o report.md
 ```
 
-会员模式：
+### 直接审计
+
+完整审计：
 
 ```bash
-curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
+curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","mode":"premium","llm":{"provider":"openrouter","model":"openai/gpt-4.1"}}'
+  -d '{"url":"https://example.com","mode":"standard"}'
 ```
 
-### 单模块接口
+如果你已经持有 discovery 结果，也可以直接传入复用：
 
-```text
-POST /api/v1/discovery
-POST /api/v1/audit/visibility
-POST /api/v1/audit/technical
-POST /api/v1/audit/content
-POST /api/v1/audit/schema
-POST /api/v1/audit/platform
-POST /api/v1/audit/full
-POST /api/v1/audit/summarize
-POST /api/v1/report/export
+```json
+{
+  "url": "https://example.com",
+  "mode": "standard",
+  "discovery": {
+    "...": "已有 discovery 结果"
+  }
+}
 ```
 
-### 执行顺序
-
-```text
-discovery -> [visibility, technical, content, schema, platform] -> summary
-```
-
-## 分级标准
-
-```text
-critical  0-24
-poor      25-44
-fair      45-64
-good      65-84
-strong    85-100
-```
-
-## 测试
+### 发现层
 
 ```bash
-pytest
+curl -X POST http://127.0.0.1:8023/api/v1/discovery \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
 ```
 
-如果本地环境未安装 `pytest`，请先安装依赖后再运行。
+返回结果中会包含：
 
-## License
+- `page_profiles`
+- `site_snapshot_version`
 
-MIT
+## 当前状态
+
+这套实现的目标不是替换现有 API，而是在保持兼容的前提下，让系统具备更强的 GEO 审计能力：
+
+- 发现层从首页检查升级为站点快照
+- 审计层统一模块元数据
+- Citability 升级为可引用概率评估
+- 品牌权威具备独立一级维度与独立服务预留
+- 平台适配具备战略权重
+- Demo 与 README 已同步为 GEO 报告口径
