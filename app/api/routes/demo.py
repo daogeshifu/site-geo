@@ -541,7 +541,7 @@ HTML = """<!doctype html>
             </div>
           </div>
           <div class="field">
-            <label for="force" class="toggle-wrap" style="margin-bottom:0">
+            <label for="force" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
               <input id="force" type="checkbox" />
               <span class="toggle-lbl">强制刷新缓存</span>
               <span class="toggle-hint">忽略一周内的历史结果</span>
