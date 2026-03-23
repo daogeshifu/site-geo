@@ -5,7 +5,12 @@ from app.models.requests import LLMConfig
 from app.services.audit_service import AuditBaseService
 from app.services.llm_enrichment_service import LLMEnrichmentService
 from app.services.scoring_service import ScoringService
-from app.utils.heuristics import assess_citability, calculate_brand_authority
+from app.utils.heuristics import (
+    assess_basic_brand_presence,
+    assess_citability,
+    assess_llms_effectiveness,
+    calculate_brand_authority,
+)
 
 
 class VisibilityService(AuditBaseService):
@@ -28,10 +33,27 @@ class VisibilityService(AuditBaseService):
 
         homepage_dict = resolved.homepage.model_dump()
         citability = assess_citability(homepage_dict)
-        brand = calculate_brand_authority(resolved.site_signals, bool(resolved.key_pages.about))
-        llms_score = 100 if resolved.llms.exists else 20
+        llms_quality = assess_llms_effectiveness(
+            resolved.llms,
+            company_name=resolved.site_signals.detected_company_name,
+            business_type=resolved.business_type,
+        )
+        basic_brand_presence = assess_basic_brand_presence(resolved.site_signals, resolved.key_pages)
+        brand = calculate_brand_authority(
+            signals=resolved.site_signals,
+            homepage=homepage_dict,
+            llms=resolved.llms,
+            key_pages=resolved.key_pages,
+            schema_summary=resolved.schema_summary,
+            primary_domain=resolved.domain,
+            sitemap_urls=resolved.robots.sitemaps,
+            backlinks=resolved.backlinks,
+        )
         ai_visibility_score = self.scoring.clamp_score(
-            crawler_score * 0.35 + citability["score"] * 0.35 + llms_score * 0.15 + brand["score"] * 0.15
+            crawler_score * 0.32
+            + citability["score"] * 0.40
+            + llms_quality["score"] * 0.12
+            + basic_brand_presence["score"] * 0.16
         )
         status = self.scoring.status_from_score(ai_visibility_score)
 
@@ -48,6 +70,9 @@ class VisibilityService(AuditBaseService):
         if not resolved.llms.exists:
             issues.append("Site does not expose llms.txt guidance.")
             recommendations.append("Publish a concise llms.txt that describes the site, services, and citation preferences.")
+        elif llms_quality["score"] < 60:
+            issues.append("llms.txt exists but does not yet provide strong machine-facing guidance.")
+            recommendations.append("Expand llms.txt with brand context, services, citation preferences, and structured sections.")
         else:
             strengths.append("llms.txt exists and can help AI systems understand the site.")
 
@@ -57,24 +82,38 @@ class VisibilityService(AuditBaseService):
         else:
             strengths.append("Homepage exposes baseline citability signals.")
 
+        if basic_brand_presence["score"] < 50:
+            issues.append("Basic entity presence is thin across about/contact and contact signals.")
+            recommendations.append("Strengthen homepage, about, and contact-page entity signals with brand and contact details.")
+        else:
+            strengths.append("Baseline entity presence is detectable across the site.")
+
         if brand["score"] < 50:
             issues.append("Brand authority signals are weak on-site.")
-            recommendations.append("Add complete company details, contact information, about page content, and social sameAs links.")
+            recommendations.append(
+                "Add complete company details, sameAs references, stronger entity consistency, and external authority proof."
+            )
         else:
-            strengths.append("On-site brand authority signals are present.")
+            strengths.append("Brand authority signals show meaningful baseline coverage.")
 
         findings = {
             "ai_crawler_access_score": crawler_score,
             "citability": citability,
+            "llms_quality": llms_quality,
+            "basic_brand_presence": basic_brand_presence,
             "brand_authority": brand,
             "llms_exists": resolved.llms.exists,
+            "backlink_provider_available": resolved.backlinks.available,
         }
         checks = {
             "allowed_ai_crawlers": allowed_crawlers,
             "total_ai_crawlers_checked": len(crawler_rules),
             "llms_exists": resolved.llms.exists,
+            "llms_effectiveness": llms_quality["signals"],
             "citability_signals": citability["signals"],
             "brand_signals": resolved.site_signals.model_dump(),
+            "brand_authority_components": brand.get("components", {}),
+            "backlinks": resolved.backlinks.model_dump(),
         }
         result = VisibilityAuditResult(
             score=ai_visibility_score,

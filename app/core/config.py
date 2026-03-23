@@ -54,6 +54,10 @@ class Settings:
     openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     openrouter_site_url: str = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:8023")
     openrouter_app_name: str = os.getenv("OPENROUTER_APP_NAME", "geo-audit-service")
+    semrush_api_key: str | None = os.getenv("SEMRUSH_API_KEY")
+    semrush_base_url: str = os.getenv("SEMRUSH_BASE_URL", "https://api.semrush.com/")
+    semrush_target_type: str = os.getenv("SEMRUSH_TARGET_TYPE", "root_domain")
+    semrush_enabled: bool = os.getenv("SEMRUSH_ENABLED", "true").lower() == "true"
 
 
 settings = Settings()

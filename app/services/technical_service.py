@@ -28,6 +28,15 @@ class TechnicalService(AuditBaseService):
             "dimension_ratio": round(dimension_ratio, 2),
         }
 
+    def _performance_score(self, response_time_ms: int) -> dict:
+        if response_time_ms <= 300:
+            return {"score": 100, "classification": "fast"}
+        if response_time_ms <= 800:
+            return {"score": 75, "classification": "good"}
+        if response_time_ms <= 1500:
+            return {"score": 50, "classification": "moderate"}
+        return {"score": 25, "classification": "slow"}
+
     async def audit(
         self,
         url: str,
@@ -44,22 +53,24 @@ class TechnicalService(AuditBaseService):
             homepage.model_dump()["stylesheets"],
         )
         image_score, image_details = self._image_optimization_score(homepage.model_dump()["images"])
+        performance_score = self._performance_score(resolved.fetch.response_time_ms)
 
         weights = {
-            "https": 10,
+            "https": 8,
             "ssr": 10,
-            "meta_description": 6,
-            "canonical": 6,
-            "lang": 5,
-            "viewport": 5,
+            "meta_description": 5,
+            "canonical": 5,
+            "lang": 4,
+            "viewport": 4,
             "sitemap": 8,
             "robots_sitemap_directive": 4,
-            "open_graph": 6,
-            "twitter_card": 4,
+            "open_graph": 5,
+            "twitter_card": 3,
             "hreflang": 4,
-            "security_headers": 18,
-            "image_optimization": 10,
-            "render_blocking": 4,
+            "security_headers": 16,
+            "image_optimization": 8,
+            "render_blocking": 8,
+            "performance": 8,
         }
 
         checks = {
@@ -77,6 +88,7 @@ class TechnicalService(AuditBaseService):
             "security_headers": security_headers,
             "image_optimization": image_details,
             "render_blocking": render_blocking_risk,
+            "performance": performance_score,
         }
 
         technical_score = self.scoring.clamp_score(
@@ -94,6 +106,7 @@ class TechnicalService(AuditBaseService):
             + weights["security_headers"] * (security_headers["score"] / 100)
             + weights["image_optimization"] * (image_score / 100)
             + weights["render_blocking"] * (render_blocking_risk["score"] / 100)
+            + weights["performance"] * (performance_score["score"] / 100)
         )
         status = self.scoring.status_from_score(technical_score)
 
@@ -125,6 +138,12 @@ class TechnicalService(AuditBaseService):
         else:
             strengths.append("Render-blocking risk looks manageable.")
 
+        if performance_score["score"] < 60:
+            issues.append("Observed response time is slower than ideal for AI retrieval and user experience.")
+            recommendations.append("Reduce server response latency and optimize page-critical assets.")
+        else:
+            strengths.append("Observed response time is within a healthy baseline.")
+
         if image_score < 60:
             issues.append("Images are missing lazy loading and/or explicit dimensions.")
             recommendations.append("Add lazy loading and width/height attributes to primary images.")
@@ -135,6 +154,7 @@ class TechnicalService(AuditBaseService):
             "response_time_ms": resolved.fetch.response_time_ms,
             "security_headers_score": security_headers["score"],
             "ssr_classification": ssr_signal["classification"],
+            "performance_classification": performance_score["classification"],
             "render_blocking_risk": render_blocking_risk["risk_level"],
             "image_optimization": image_details,
         }

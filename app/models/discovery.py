@@ -95,6 +95,24 @@ class LlmsResult(BaseModel):
     status_code: int | None = None
     content_preview: str = ""
     content_length: int = 0
+    effectiveness_score: int = 0
+    signals: dict[str, bool] = Field(default_factory=dict)
+
+
+class BacklinkOverviewResult(BaseModel):
+    provider: str = "semrush"
+    available: bool = False
+    source: str | None = None
+    target: str | None = None
+    target_type: str = "root_domain"
+    authority_score: int | None = None
+    backlinks_num: int | None = None
+    referring_domains: int | None = None
+    referring_ips: int | None = None
+    referring_ip_classes: int | None = None
+    follow_ratio: float | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
 
 
 class SiteSignals(BaseModel):
@@ -106,6 +124,7 @@ class SiteSignals(BaseModel):
     certifications_detected: bool = False
     same_as_detected: bool = False
     detected_company_name: str | None = None
+    homepage_brand_mentions: int = 0
 
 
 class KeyPages(BaseModel):
@@ -130,3 +149,4 @@ class DiscoveryResult(BaseModel):
     key_pages: KeyPages
     schema_summary: dict[str, Any] = Field(default_factory=dict)
     site_signals: SiteSignals = Field(default_factory=SiteSignals)
+    backlinks: BacklinkOverviewResult = Field(default_factory=BacklinkOverviewResult)

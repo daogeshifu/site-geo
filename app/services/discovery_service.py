@@ -7,6 +7,7 @@ import httpx
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.models.discovery import DiscoveryResult, FetchMetadata, HomepageExtract
+from app.services.backlink_service import BacklinkService
 from app.utils.fetcher import fetch_url
 from app.utils.heuristics import detect_site_signals, infer_business_type, select_key_pages
 from app.utils.html_parser import parse_html
@@ -18,6 +19,9 @@ from app.utils.url_utils import normalize_url, registered_domain
 
 
 class DiscoveryService:
+    def __init__(self) -> None:
+        self.backlink_service = BacklinkService()
+
     async def discover(self, url: str) -> DiscoveryResult:
         try:
             normalized_url = normalize_url(url)
@@ -38,9 +42,11 @@ class DiscoveryService:
                 )
             parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text)
 
-            robots_result, llms_result = await asyncio.gather(
+            target_domain = registered_domain(homepage_response.final_url)
+            robots_result, llms_result, backlinks_result = await asyncio.gather(
                 inspect_robots(homepage_response.final_url, client=client),
                 inspect_llms(homepage_response.final_url, client=client),
+                self.backlink_service.fetch_overview(target_domain, client=client),
             )
             sitemap_result = await inspect_sitemap(
                 homepage_response.final_url,
@@ -69,7 +75,7 @@ class DiscoveryService:
             url=url,
             normalized_url=normalized_url,
             final_url=homepage_response.final_url,
-            domain=registered_domain(homepage_response.final_url),
+            domain=target_domain,
             fetch=FetchMetadata(
                 final_url=homepage_response.final_url,
                 status_code=homepage_response.status_code,
@@ -84,4 +90,5 @@ class DiscoveryService:
             key_pages=key_pages,
             schema_summary=schema_summary,
             site_signals=site_signals,
+            backlinks=backlinks_result,
         )
