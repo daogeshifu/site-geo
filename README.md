@@ -27,7 +27,23 @@ Two execution modes:
 
 ## Quick Start
 
-**Local**
+### 1. Clone & configure
+
+```bash
+git clone https://github.com/your-org/geo-audit-service.git
+cd geo-audit-service
+cp .env.example .env
+```
+
+Open `.env` and set the one required key:
+
+```env
+OPENROUTER_API_KEY=sk-or-xxxxx
+```
+
+### 2. Run
+
+**Local (Python)**
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -39,15 +55,38 @@ uvicorn app.main:app --reload --port 8023
 
 ```bash
 docker build -t geo-audit-service .
-docker run -d --name geo-audit-service -p 8023:8023 --restart unless-stopped geo-audit-service:latest
+docker run -d \
+  --name geo-audit-service \
+  -p 8023:8023 \
+  --env-file .env \
+  --restart unless-stopped \
+  geo-audit-service:latest
 ```
 
-**Docker — 国内服务器（离线镜像包）**
+**Docker — 国内服务器离线镜像（Linux amd64）**
 
 ```bash
-wget http://dtcpack.cn/geo-audit-service.tar
-docker load -i geo-audit-service.tar
-docker run -d --name geo-audit-service -p 8023:8023 --restart unless-stopped geo-audit-service:latest
+wget http://dtcpack.cn/geo-audit-service-amd64.tar
+docker load -i geo-audit-service-amd64.tar
+docker run -d \
+  --name geo-audit-service \
+  -p 8023:8023 \
+  --env-file /home/html/site-geo/.env \
+  --restart unless-stopped \
+  geo-audit-service:latest
+```
+
+**Docker — 国内服务器离线镜像（Mac arm64）**
+
+```bash
+wget http://dtcpack.cn/geo-audit-service-arm.tar
+docker load -i geo-audit-service-arm.tar
+docker run -d \
+  --name geo-audit-service \
+  -p 8023:8023 \
+  --env-file /home/html/site-geo/.env \
+  --restart unless-stopped \
+  geo-audit-service:latest
 ```
 
 Open the built-in demo UI: `http://127.0.0.1:8023`
