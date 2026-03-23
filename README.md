@@ -35,11 +35,19 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8023
 ```
 
-**Docker**
+**Docker — Build from source**
 
 ```bash
 docker build -t geo-audit-service .
-docker run --rm -p 8023:8023 geo-audit-service
+docker run -d --name geo-audit-service -p 8023:8023 --restart unless-stopped geo-audit-service:latest
+```
+
+**Docker — 国内服务器（离线镜像包）**
+
+```bash
+wget http://dtcpack.cn/geo-audit-service.tar
+docker load -i geo-audit-service.tar
+docker run -d --name geo-audit-service -p 8023:8023 --restart unless-stopped geo-audit-service:latest
 ```
 
 Open the built-in demo UI: `http://127.0.0.1:8023`
