@@ -276,9 +276,224 @@ HTML = """<!doctype html>
     .tab-panel { display: none; padding: 22px; }
     .tab-panel.active { display: block; }
 
-    /* ── Summary tab ── */
-    .summary-content { font-size: 14px; line-height: 1.75; min-height: 72px; }
+    /* ── Report tab ── */
     .placeholder { color: var(--muted); font-style: italic; }
+    .report-empty {
+      min-height: 96px;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 18px;
+      border: 1px dashed var(--border); border-radius: 12px;
+      background: linear-gradient(180deg, #fbfcfd 0%, #f5f7f8 100%);
+      font-size: 13.5px; line-height: 1.8;
+    }
+    .report-shell { display: flex; flex-direction: column; gap: 16px; }
+    .report-hero {
+      position: relative; overflow: hidden;
+      border: 1px solid #0f172a;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at top right, rgba(52,211,153,0.22), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(16,185,129,0.18), transparent 30%),
+        linear-gradient(135deg, #0f172a 0%, #111827 55%, #172554 100%);
+      color: #f8fafc;
+      padding: 22px;
+      display: grid; grid-template-columns: 220px 1fr; gap: 20px;
+    }
+    .report-score-box {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(6px);
+      padding: 18px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      min-height: 198px;
+    }
+    .report-score-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: rgba(226,232,240,0.72);
+    }
+    .report-score-value { font-size: 58px; font-weight: 800; line-height: 1; margin: 10px 0 6px; }
+    .report-score-sub { font-size: 13px; color: rgba(226,232,240,0.78); }
+    .report-hero-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .report-kicker {
+      display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; color: rgba(226,232,240,0.86);
+    }
+    .report-kicker .dot {
+      width: 4px; height: 4px; border-radius: 50%;
+      background: rgba(226,232,240,0.45);
+    }
+    .report-hero h3 { font-size: 22px; line-height: 1.3; font-weight: 700; }
+    .report-summary {
+      font-size: 13.5px; line-height: 1.8; color: rgba(226,232,240,0.88);
+      max-width: 1000px;
+    }
+    .report-badges {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .r-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06); color: #f8fafc;
+    }
+    .r-badge.success { background: rgba(16,185,129,0.14); color: #6ee7b7; }
+    .r-badge.warn { background: rgba(245,158,11,0.14); color: #fbbf24; }
+    .r-badge.danger { background: rgba(239,68,68,0.14); color: #fca5a5; }
+    .report-meta-grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+    }
+    .report-meta-item {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      padding: 12px 13px;
+    }
+    .report-meta-item .lbl {
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: rgba(226,232,240,0.62); font-weight: 700; margin-bottom: 6px;
+    }
+    .report-meta-item .val {
+      font-size: 13px; line-height: 1.45; color: #f8fafc; font-weight: 600;
+      word-break: break-word;
+    }
+    .report-section {
+      border: 1px solid var(--border); border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    .report-section-hdr {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #fbfcfd 0%, #f8fafc 100%);
+    }
+    .report-section-hdr h4 { font-size: 14px; font-weight: 700; }
+    .report-section-hdr span { font-size: 12px; color: var(--muted); }
+    .report-section-body { padding: 18px; }
+    .report-dim-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+    }
+    .report-dim-card {
+      border: 1px solid var(--border); border-radius: 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      padding: 14px;
+    }
+    .report-dim-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;
+    }
+    .report-dim-name { font-size: 13px; font-weight: 700; }
+    .report-dim-pill {
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      background: var(--accent-dim); border-radius: 999px; padding: 3px 8px;
+      white-space: nowrap;
+    }
+    .report-dim-scoreline {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+      margin-bottom: 8px;
+    }
+    .report-dim-scoreline .score { font-size: 30px; font-weight: 800; line-height: 1; }
+    .report-dim-scoreline .status { font-size: 11.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    .report-dim-kpis {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
+    }
+    .report-dim-kpi {
+      border: 1px solid var(--border); border-radius: 10px;
+      background: #fff; padding: 9px 10px;
+    }
+    .report-dim-kpi .lbl { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-bottom: 4px; }
+    .report-dim-kpi .val { font-size: 13px; font-weight: 700; }
+    .report-dim-note { font-size: 12px; color: var(--muted); line-height: 1.65; }
+    .report-grid-2 {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .report-list {
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .report-list-item {
+      border: 1px solid var(--border); border-radius: 11px;
+      padding: 11px 12px; background: #fff;
+      font-size: 12.5px; line-height: 1.65;
+    }
+    .report-list-item strong { color: var(--text); }
+    .report-action-list {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .report-action {
+      display: grid; grid-template-columns: 86px 1fr 84px; gap: 12px;
+      align-items: start;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      padding: 12px;
+    }
+    .report-action-priority {
+      border-radius: 10px; padding: 8px 10px; text-align: center;
+      font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+      background: var(--bg); color: var(--muted);
+    }
+    .report-action-priority.high, .report-action-priority.critical { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .report-action-priority.medium { background: rgba(245,158,11,0.12); color: #d97706; }
+    .report-action-priority.low { background: rgba(16,185,129,0.1); color: #059669; }
+    .report-action-main h5 { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .report-action-main p { font-size: 12px; color: var(--muted); line-height: 1.65; }
+    .report-action-impact {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--muted); text-align: right;
+    }
+    .report-action-impact span {
+      display: inline-block; margin-top: 6px; padding: 5px 9px; border-radius: 999px;
+      background: var(--accent-dim); color: var(--accent);
+    }
+    .report-platform-grid {
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
+    }
+    .platform-card {
+      border: 1px solid var(--border); border-radius: 13px;
+      padding: 12px; background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+    }
+    .platform-card .hd {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .platform-card .name { font-size: 12px; font-weight: 700; line-height: 1.4; }
+    .platform-card .score { font-size: 20px; font-weight: 800; }
+    .platform-card .gap { font-size: 11.5px; color: var(--muted); line-height: 1.55; min-height: 52px; }
+    .platform-card .reco { margin-top: 8px; font-size: 11.5px; color: var(--text); line-height: 1.55; }
+    .report-evidence-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+    }
+    .evidence-card {
+      border: 1px solid var(--border); border-radius: 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      padding: 14px;
+    }
+    .evidence-card h5 { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+    .kv-list { display: flex; flex-direction: column; gap: 8px; }
+    .kv-row {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+      border-bottom: 1px dashed var(--border); padding-bottom: 8px;
+      font-size: 12px;
+    }
+    .kv-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .kv-key { color: var(--muted); flex: 1; min-width: 0; }
+    .kv-val { color: var(--text); font-weight: 600; text-align: right; flex: 1; min-width: 0; word-break: break-word; }
+    .page-samples { display: flex; flex-direction: column; gap: 9px; }
+    .page-sample {
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 11px; background: #fff;
+    }
+    .page-sample .top {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px;
+    }
+    .page-sample .name { font-size: 12px; font-weight: 700; }
+    .page-sample .meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+    .report-note-box {
+      border: 1px solid var(--border); border-radius: 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      padding: 14px 15px;
+      font-size: 12.5px; line-height: 1.8; color: var(--muted);
+      white-space: pre-wrap;
+    }
 
     /* ── LLM tab ── */
     .llm-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
@@ -371,7 +586,7 @@ HTML = """<!doctype html>
     /* scoring dimensions */
     .dim-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
       margin-bottom: 14px;
     }
@@ -472,10 +687,21 @@ HTML = """<!doctype html>
       .grid-top { grid-template-columns: 1fr; }
       .row-2 { grid-template-columns: 1fr; }
       .llm-stats { grid-template-columns: 1fr; }
+      .report-hero { grid-template-columns: 1fr; }
+      .report-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .report-dim-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .report-grid-2 { grid-template-columns: 1fr; }
+      .report-platform-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .report-evidence-grid { grid-template-columns: 1fr; }
       .dim-grid { grid-template-columns: repeat(2, 1fr); }
       .biz-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 640px) {
+      .report-meta-grid { grid-template-columns: 1fr; }
+      .report-dim-grid { grid-template-columns: 1fr; }
+      .report-platform-grid { grid-template-columns: 1fr; }
+      .report-action { grid-template-columns: 1fr; }
+      .report-action-impact { text-align: left; }
       .dim-grid { grid-template-columns: 1fr; }
       .biz-grid { grid-template-columns: 1fr; }
     }
@@ -601,7 +827,7 @@ HTML = """<!doctype html>
 
   <!-- 结果区 -->
   <div class="tabs-bar">
-    <button class="tab-btn active" data-tab="summary">摘要</button>
+    <button class="tab-btn active" data-tab="summary">报告</button>
     <button class="tab-btn" data-tab="llm">AI 增强</button>
     <button class="tab-btn" data-tab="compare">版本对比</button>
     <button class="tab-btn" data-tab="json">原始数据</button>
@@ -609,7 +835,7 @@ HTML = """<!doctype html>
   <div class="tabs-body">
 
     <div id="tab-summary" class="tab-panel active">
-      <div id="summary-text" class="summary-content placeholder">等待任务完成后展示摘要。</div>
+      <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划与原始发现摘要。</div>
     </div>
 
     <div id="tab-llm" class="tab-panel">
@@ -678,81 +904,99 @@ HTML = """<!doctype html>
   <div style="margin-top:28px">
     <div class="section-hdr">
       <h2>打分维度与规则</h2>
-      <span>各模块关键指标及权重，满分均为 100 分</span>
+      <span>按 6 个汇总层展示关键指标、内部公式与综合分权重，单维度原始分满分均为 100 分</span>
     </div>
 
     <div class="dim-grid">
-      <!-- Visibility -->
+      <!-- AI Visibility -->
       <div class="dim-card">
         <div class="dim-head">
           <span class="dim-name">👁 AI 可见性</span>
-          <span class="dim-score">visibility</span>
+          <span class="dim-score">25%</span>
         </div>
         <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">AI 爬虫访问率</span><span class="dim-row-val">×0.35</span></div>
-          <div class="dim-row"><span class="dim-row-label">可引用性得分</span><span class="dim-row-val">×0.35</span></div>
-          <div class="dim-row"><span class="dim-row-label">llms.txt 存在</span><span class="dim-row-val">×0.15</span></div>
-          <div class="dim-row"><span class="dim-row-label">品牌权威信号</span><span class="dim-row-val">×0.15</span></div>
+          <div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.35</span></div>
+          <div class="dim-row"><span class="dim-row-label">citability 得分</span><span class="dim-row-val">×0.35</span></div>
+          <div class="dim-row"><span class="dim-row-label">llms.txt</span><span class="dim-row-val">×0.15</span></div>
+          <div class="dim-row"><span class="dim-row-label">品牌权威</span><span class="dim-row-val">×0.15</span></div>
           <div class="dim-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
-            <span class="dim-row-label" style="color:var(--subtle);font-size:11px">llms.txt：有=100 / 无=20</span>
+            <span class="dim-row-label" style="color:var(--subtle);font-size:11px">citability：title/meta/H1/canonical/heading/字数</span>
           </div>
+        </div>
+      </div>
+      <!-- Brand Authority -->
+      <div class="dim-card">
+        <div class="dim-head">
+          <span class="dim-name">🏛️ 品牌权威</span>
+          <span class="dim-score">20%</span>
+        </div>
+        <div class="dim-rows">
+          <div class="dim-row"><span class="dim-row-label">公司名 / 品牌词</span><span class="dim-row-val">20 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">地址 / 电话 / 邮箱</span><span class="dim-row-val">15/10/10</span></div>
+          <div class="dim-row"><span class="dim-row-label">奖项 / 认证</span><span class="dim-row-val">15/10</span></div>
+          <div class="dim-row"><span class="dim-row-label">About 页</span><span class="dim-row-val">10 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">10 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">总分封顶</span><span class="dim-row-val">100 pts</span></div>
+        </div>
+      </div>
+      <!-- Content -->
+      <div class="dim-card">
+        <div class="dim-head">
+          <span class="dim-name">📝 内容与 E-E-A-T</span>
+          <span class="dim-score">20%</span>
+        </div>
+        <div class="dim-rows">
+          <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 子分均值</span></div>
+          <div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">内容基础分</span></div>
+          <div class="dim-row"><span class="dim-row-label">experience / expertise</span><span class="dim-row-val">各占 1 份</span></div>
+          <div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">各占 1 份</span></div>
+          <div class="dim-row"><span class="dim-row-label">关键信号</span><span class="dim-row-val">FAQ/作者/日期/案例</span></div>
+          <div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">service/article/about/case</span></div>
         </div>
       </div>
       <!-- Technical -->
       <div class="dim-card">
         <div class="dim-head">
           <span class="dim-name">⚙️ 技术基础</span>
-          <span class="dim-score">technical</span>
+          <span class="dim-score">15%</span>
         </div>
         <div class="dim-rows">
           <div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">18 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">HTTPS 强制</span><span class="dim-row-val">10 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">SSR 信号</span><span class="dim-row-val">10 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">10/10</span></div>
+          <div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">6/6</span></div>
+          <div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8/4</span></div>
           <div class="dim-row"><span class="dim-row-label">图片优化</span><span class="dim-row-val">10 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">Sitemap 存在</span><span class="dim-row-val">8 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">Meta/Canonical/OG…</span><span class="dim-row-val">其余</span></div>
-        </div>
-      </div>
-      <!-- Content -->
-      <div class="dim-card">
-        <div class="dim-head">
-          <span class="dim-name">📝 内容质量</span>
-          <span class="dim-score">content</span>
-        </div>
-        <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">文章页词数 ≥800</span><span class="dim-row-val">20 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">标题层级质量</span><span class="dim-row-val">15 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">服务页词数 ≥400</span><span class="dim-row-val">15 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">FAQ / 作者 / 日期</span><span class="dim-row-val">各 10 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">量化数据 / 先答后述</span><span class="dim-row-val">各 10 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">OG / Twitter / hreflang</span><span class="dim-row-val">6/4/4</span></div>
         </div>
       </div>
       <!-- Schema -->
       <div class="dim-card">
         <div class="dim-head">
           <span class="dim-name">🏷️ 结构化数据</span>
-          <span class="dim-score">schema</span>
+          <span class="dim-score">10%</span>
         </div>
         <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">JSON-LD 存在</span><span class="dim-row-val">20 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">JSON-LD</span><span class="dim-row-val">20 pts</span></div>
           <div class="dim-row"><span class="dim-row-label">Organization</span><span class="dim-row-val">20 pts</span></div>
           <div class="dim-row"><span class="dim-row-label">Article</span><span class="dim-row-val">15 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">LocalBusiness / FAQ</span><span class="dim-row-val">各 10 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">Service / WebSite</span><span class="dim-row-val">各 10 pts</span></div>
-          <div class="dim-row"><span class="dim-row-label">sameAs 链接</span><span class="dim-row-val">5 pts</span></div>
+          <div class="dim-row"><span class="dim-row-label">LocalBusiness / FAQPage</span><span class="dim-row-val">10/10</span></div>
+          <div class="dim-row"><span class="dim-row-label">Service / WebSite</span><span class="dim-row-val">10/10</span></div>
+          <div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">5 pts</span></div>
         </div>
       </div>
       <!-- Platform -->
       <div class="dim-card">
         <div class="dim-head">
           <span class="dim-name">🌐 平台适配</span>
-          <span class="dim-score">platform</span>
+          <span class="dim-score">10%</span>
         </div>
         <div class="dim-rows">
-          <div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val" style="font-size:10.5px">引用×0.35+Schema×0.35</span></div>
-          <div class="dim-row"><span class="dim-row-label">ChatGPT Web Search</span><span class="dim-row-val" style="font-size:10.5px">爬虫×0.40+llms×0.25</span></div>
-          <div class="dim-row"><span class="dim-row-label">Perplexity / Gemini</span><span class="dim-row-val" style="font-size:10.5px">引用+权威组合</span></div>
-          <div class="dim-row"><span class="dim-row-label">Bing Copilot</span><span class="dim-row-val" style="font-size:10.5px">元数据+爬虫</span></div>
+          <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 平台均值</span></div>
+          <div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val" style="font-size:10.5px">引用×0.35 + Schema×0.35</span></div>
+          <div class="dim-row"><span class="dim-row-label">ChatGPT Web Search</span><span class="dim-row-val" style="font-size:10.5px">crawler×40 + llms×0.25</span></div>
+          <div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val" style="font-size:10.5px">引用×0.4 + 品牌×0.2</span></div>
+          <div class="dim-row"><span class="dim-row-label">Gemini</span><span class="dim-row-val" style="font-size:10.5px">Schema×0.4 + metadata×0.2</span></div>
+          <div class="dim-row"><span class="dim-row-label">Bing Copilot</span><span class="dim-row-val" style="font-size:10.5px">metadata×0.3 + 品牌×0.25</span></div>
         </div>
       </div>
     </div>
@@ -774,62 +1018,73 @@ HTML = """<!doctype html>
   <hr class="section-divider" style="margin-top:32px" />
   <div style="margin-top:28px">
     <div class="section-hdr">
-      <h2>计算维度业务落成</h2>
-      <span>各维度数据来源与业务接入要点</span>
+      <h2>汇总层维度业务落成</h2>
+      <span>按 6 个汇总维度展示数据来源、权重比例、计算公式与接入要点</span>
     </div>
     <div class="biz-grid">
       <div class="biz-card">
-        <h4>👁 AI 可见性 · 数据来源</h4>
+        <h4>👁 AI 可见性 · 25%</h4>
         <ul>
-          <li><strong>爬虫访问</strong>：抓取 <code>robots.txt</code>，统计 GPTBot / PerplexityBot / Google-Extended 等主流 AI 爬虫的 Allow 比例</li>
-          <li><strong>可引用性</strong>：解析首页 HTML，检测 meta description、OG 标签、标题层级、内容深度等启发式信号</li>
-          <li><strong>llms.txt</strong>：请求 <code>/llms.txt</code>，200 即有效；无文件得 20 分基础分</li>
-          <li><strong>品牌权威</strong>：检测 About 页、联系方式、社交 sameAs 链接等站内品牌信号</li>
+          <li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li>
+          <li><strong>计算公式</strong>：<code>0.35 × AI crawler 放行率 + 0.35 × citability + 0.15 × llms.txt + 0.15 × brand</code></li>
+          <li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、解析首页 HTML、复用站点品牌信号</li>
+          <li><strong>细项规则</strong>：citability 由 <code>title / meta / H1 / canonical / headings&gt;=3 / 字数&gt;=250</code> 组成；<code>llms.txt</code> 有=100，无=20</li>
         </ul>
       </div>
       <div class="biz-card">
-        <h4>⚙️ 技术基础 · 数据来源</h4>
+        <h4>🏛️ 品牌权威 · 20%</h4>
         <ul>
-          <li><strong>HTTPS / SSR</strong>：检查最终跳转 URL 协议；通过 HTML 长度与词数比判断服务端渲染</li>
-          <li><strong>安全响应头</strong>：检测 HSTS / CSP / X-Frame-Options / X-Content-Type-Options / Referrer-Policy</li>
-          <li><strong>图片优化</strong>：统计 <code>loading=lazy</code> 比例 + 显式 width/height 比例，各占 50 分</li>
-          <li><strong>Sitemap</strong>：robots.txt 中的 Sitemap 指令 + 直接请求 <code>/sitemap.xml</code></li>
+          <li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li>
+          <li><strong>计算公式</strong>：<code>公司名20 + 地址15 + 电话10 + 邮箱10 + 奖项15 + 认证10 + About10 + sameAs10</code></li>
+          <li><strong>数据来源</strong>：首页正文、标题品牌词、About 页、联系方式、Schema 中的 <code>sameAs</code></li>
+          <li><strong>接入要点</strong>：品牌信号同时服务于 AI 可见性、Perplexity、Bing Copilot、Gemini 等平台适配判断</li>
         </ul>
       </div>
       <div class="biz-card">
-        <h4>📝 内容质量 · 数据来源</h4>
+        <h4>📝 内容与 E-E-A-T · 20%</h4>
         <ul>
-          <li><strong>多页面采样</strong>：Discovery 阶段自动发现 service / article / about / case_study 页面，逐页抓取分析</li>
-          <li><strong>E-E-A-T 信号</strong>：正则检测作者署名、发布日期、数字/百分比（量化数据）</li>
-          <li><strong>先答后述</strong>：检测正文前 200 字是否包含答案性内容</li>
-          <li><strong>标题质量</strong>：评估 H1–H3 层级完整度、关键词分布与唯一性</li>
+          <li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li>
+          <li><strong>内容总分</strong>：service 页深度、article 页深度、FAQ、作者、日期、量化数据、标题质量、先答后述共同构成</li>
+          <li><strong>E-E-A-T 细项</strong>：Experience 看案例/量化数据/About；Expertise 看服务页和文章深度；Authority 看作者/奖项/认证/sameAs；Trust 看 contact/电话/邮箱/地址/日期</li>
+          <li><strong>数据来源</strong>：Discovery 自动发现 <code>service / article / about / case_study</code> 页面并逐页抓取解析</li>
         </ul>
       </div>
       <div class="biz-card">
-        <h4>🏷️ 结构化数据 · 数据来源</h4>
+        <h4>⚙️ 技术基础 · 15%</h4>
         <ul>
-          <li><strong>多页抽取</strong>：首页 + key_pages（service / article / about）的所有 <code>&lt;script type="application/ld+json"&gt;</code></li>
-          <li><strong>类型识别</strong>：提取 @type 字段，匹配 Organization / LocalBusiness / Article / FAQPage / Service / WebSite</li>
-          <li><strong>sameAs</strong>：计数 Organization/LocalBusiness 下的 sameAs 数组条目</li>
+          <li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li>
+          <li><strong>计算公式</strong>：<code>HTTPS10 + SSR10 + Meta6 + Canonical6 + lang5 + viewport5 + Sitemap8 + robots 指令4 + OG6 + Twitter4 + hreflang4 + 安全头18 + 图片10 + 渲染阻塞4</code></li>
+          <li><strong>数据来源</strong>：最终跳转 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li>
+          <li><strong>细项说明</strong>：安全头为 5 项等比分；图片优化由 <code>lazyload 比例 50%</code> + <code>显式尺寸比例 50%</code> 组成；SSR 由 HTML 长度与词数联合判断</li>
         </ul>
       </div>
       <div class="biz-card">
-        <h4>🌐 平台适配 · 计算逻辑</h4>
+        <h4>🏷️ 结构化数据 · 10%</h4>
         <ul>
-          <li><strong>复用上游结果</strong>：platform 模块不做额外爬取，直接复用 discovery、visibility、schema 的信号量</li>
-          <li><strong>平台差异权重</strong>：Google AI Overviews 侧重 Schema+FAQ；ChatGPT 侧重爬虫准入+llms.txt；Perplexity 侧重引用性+权威</li>
-          <li><strong>Gap 判定</strong>：各平台独立输出 <code>primary_gap</code> + <code>key_recommendations</code>（最多 3 条）</li>
+          <li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li>
+          <li><strong>计算公式</strong>：<code>JSON-LD20 + Organization20 + LocalBusiness10 + Article15 + FAQPage10 + Service10 + WebSite10 + sameAs5</code></li>
+          <li><strong>数据来源</strong>：首页与关键页中的全部 <code>&lt;script type="application/ld+json"&gt;</code>，统一做 <code>@type</code> 与 <code>sameAs</code> 抽取</li>
+          <li><strong>接入要点</strong>：Schema 结果既参与综合分，也会被平台适配模块复用，尤其影响 Google AI Overviews 与 Gemini</li>
         </ul>
       </div>
       <div class="biz-card">
-        <h4>🤖 会员 AI 增强 · 机制说明</h4>
+        <h4>🌐 平台适配 · 10%</h4>
         <ul>
-          <li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li>
-          <li><strong>增强模块</strong>：visibility / content / platform / summary 四个模块支持 LLM 语义增强</li>
-          <li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code></li>
-          <li><strong>缓存策略</strong>：同域名结果缓存 7 天（按 URL 规范化后哈希），<code>force_refresh=true</code> 可强制刷新</li>
+          <li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，即 5 个平台 readiness 平均值，再按 <code>×0.10</code> 计入综合分</li>
+          <li><strong>平台公式</strong>：AIO 看 <code>citability + schema + FAQ + metadata</code>；ChatGPT 看 <code>crawler + llms + citability + brand</code>；Perplexity / Gemini / Bing 各自组合品牌、结构化数据与 metadata</li>
+          <li><strong>数据来源</strong>：不额外抓取，直接复用 discovery、visibility、schema 的上游结果</li>
+          <li><strong>输出结果</strong>：分别产出 <code>google_ai_overviews / chatgpt_web_search / perplexity / google_gemini / bing_copilot</code> 的分数、主缺口与建议</li>
         </ul>
       </div>
+    </div>
+    <div class="biz-card" style="margin-top:10px">
+      <h4>🤖 会员 AI 增强 · 机制说明</h4>
+      <ul>
+        <li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li>
+        <li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li>
+        <li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li>
+        <li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li>
+      </ul>
     </div>
   </div>
 
@@ -982,6 +1237,416 @@ HTML = """<!doctype html>
   let pollTimer = null;
   let currentTaskId = null;
   let currentTaskStatus = 'idle';
+
+  const DIMENSION_META = [
+    {
+      key: 'AI Citability & Visibility',
+      name: 'AI 可见性',
+      weight: '25%',
+      formula: '0.35 × crawler + 0.35 × citability + 0.15 × llms.txt + 0.15 × brand',
+      detail: result => {
+        const checks = result?.visibility?.checks || {};
+        return `${checks.allowed_ai_crawlers ?? 0}/${checks.total_ai_crawlers_checked ?? 0} 个 AI crawler 放行 · llms.txt ${checks.llms_exists ? '已部署' : '缺失'}`;
+      }
+    },
+    {
+      key: 'Brand Authority Signals',
+      name: '品牌权威',
+      weight: '20%',
+      formula: '公司名 20 + 地址 15 + 电话 10 + 邮箱 10 + 奖项 15 + 认证 10 + About 10 + sameAs 10',
+      detail: result => {
+        const brand = result?.visibility?.checks?.brand_signals || {};
+        return `公司名 ${brand.company_name_detected ? '已识别' : '未识别'} · 电话 ${brand.phone_detected ? '已识别' : '缺失'} · sameAs ${brand.same_as_detected ? '已配置' : '缺失'}`;
+      }
+    },
+    {
+      key: 'Content Quality & E-E-A-T',
+      name: '内容与 E-E-A-T',
+      weight: '20%',
+      formula: '(content + experience + expertise + authority + trust) / 5',
+      detail: result => {
+        const findings = result?.content?.findings || {};
+        return `采样 ${findings.evaluated_pages ?? 0} 页 · FAQ ${findings.has_faq_any ? '有' : '无'} · 标题质量 ${findings.average_heading_quality ?? 0}`;
+      }
+    },
+    {
+      key: 'Technical Foundations',
+      name: '技术基础',
+      weight: '15%',
+      formula: 'HTTPS / SSR / Meta / Canonical / Sitemap / 安全头 / 图片 / 渲染阻塞等加权求和',
+      detail: result => {
+        const tech = result?.technical || {};
+        return `响应 ${tech.findings?.response_time_ms ?? '—'}ms · 安全头 ${tech.findings?.security_headers_score ?? 0} · 阻塞风险 ${tech.findings?.render_blocking_risk || '—'}`;
+      }
+    },
+    {
+      key: 'Structured Data',
+      name: '结构化数据',
+      weight: '10%',
+      formula: 'JSON-LD + Organization + Article + FAQPage + Service + WebSite + sameAs',
+      detail: result => {
+        const findings = result?.schema?.findings || {};
+        return `Schema 类型 ${findings.schema_type_count ?? 0} 个 · sameAs ${findings.same_as_count ?? 0} 个`;
+      }
+    },
+    {
+      key: 'Platform Optimization',
+      name: '平台适配',
+      weight: '10%',
+      formula: '5 个平台 readiness 平均值',
+      detail: result => {
+        const scores = Object.values(result?.platform?.platform_scores || {}).map(item => item?.platform_score || 0);
+        if (!scores.length) return '等待平台结果';
+        const best = Math.max(...scores);
+        const low = Math.min(...scores);
+        return `最佳 ${best} 分 · 最弱 ${low} 分 · 复用 discovery/visibility/schema 信号`;
+      }
+    }
+  ];
+
+  const PLATFORM_LABELS = {
+    google_ai_overviews: 'Google AI Overviews',
+    chatgpt_web_search: 'ChatGPT Web Search',
+    perplexity: 'Perplexity',
+    google_gemini: 'Google Gemini',
+    bing_copilot: 'Bing Copilot'
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function scoreToStatus(score) {
+    const n = Number(score ?? 0);
+    if (n <= 24) return 'critical';
+    if (n <= 44) return 'poor';
+    if (n <= 64) return 'fair';
+    if (n <= 84) return 'good';
+    return 'strong';
+  }
+
+  function statusTone(status) {
+    if (status === 'strong' || status === 'good' || status === 'completed') return 'success';
+    if (status === 'fair' || status === 'running' || status === 'pending') return 'warn';
+    if (status === 'poor' || status === 'critical' || status === 'failed') return 'danger';
+    return '';
+  }
+
+  function formatStatus(status) {
+    const map = {
+      critical: '严重',
+      poor: '较弱',
+      fair: '一般',
+      good: '良好',
+      strong: '强',
+      completed: '已完成',
+      running: '进行中',
+      pending: '待执行',
+      failed: '失败'
+    };
+    return map[status] || status || '—';
+  }
+
+  function formatBool(val, yes = '是', no = '否') {
+    return val ? yes : no;
+  }
+
+  function formatList(items, fallback, limit = 5) {
+    const list = [...new Set((items || []).filter(Boolean))].slice(0, limit);
+    if (!list.length) return `<div class="report-list-item">${escapeHtml(fallback)}</div>`;
+    return list.map((item, idx) => `<div class="report-list-item"><strong>${idx + 1}.</strong> ${escapeHtml(item)}</div>`).join('');
+  }
+
+  function normalizeActions(result) {
+    const llmPlan = result?.summary?.llm_insights?.prioritized_action_plan;
+    if (Array.isArray(llmPlan) && llmPlan.length) {
+      return llmPlan.map(item => ({
+        priority: (item.priority || 'medium').toLowerCase(),
+        action: item.action || '待补充',
+        description: item.description || item.rationale || '',
+        impact: item.expected_impact || 'High'
+      }));
+    }
+    return (result?.summary?.prioritized_action_plan || []).map(item => ({
+      priority: (item.priority || 'medium').toLowerCase(),
+      action: item.action || '待补充',
+      description: item.rationale || `${item.module || '该模块'} 需要优先优化。`,
+      impact: item.priority === 'high' ? 'High' : item.priority === 'low' ? 'Medium' : 'High'
+    }));
+  }
+
+  function formatKeyPages(keyPages) {
+    return Object.entries({
+      About: keyPages?.about,
+      Service: keyPages?.service,
+      Contact: keyPages?.contact,
+      Article: keyPages?.article,
+      'Case Study': keyPages?.case_study
+    }).map(([name, value]) => `
+      <div class="kv-row">
+        <span class="kv-key">${escapeHtml(name)}</span>
+        <span class="kv-val">${value ? '已识别' : '缺失'}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderReport(task) {
+    const host = $('summary-text');
+    const result = task?.result;
+    if (!result?.summary) {
+      host.className = 'report-empty placeholder';
+      host.innerHTML = '等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划与原始发现摘要。';
+      return;
+    }
+
+    const summary = result.summary || {};
+    const discovery = result.discovery || {};
+    const homepage = discovery.homepage || {};
+    const visibility = result.visibility || {};
+    const technical = result.technical || {};
+    const content = result.content || {};
+    const schema = result.schema || {};
+    const platform = result.platform || {};
+    const executive = summary?.llm_insights?.executive_summary || summary.summary || '暂无摘要。';
+    const topIssues = summary?.llm_insights?.top_issues || summary.top_issues || [];
+    const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
+    const actions = normalizeActions(result).slice(0, 5);
+    const weighted = summary.weighted_scores || {};
+    const platformScores = platform.platform_scores || {};
+    const pageAnalyses = Object.values(content.page_analyses || {});
+    const pageSampleHtml = pageAnalyses.length
+      ? pageAnalyses.slice(0, 4).map(page => `
+          <div class="page-sample">
+            <div class="top">
+              <span class="name">${escapeHtml(page.page_type || 'page')}</span>
+              <span class="name">${escapeHtml(String(page.word_count || 0))} 词</span>
+            </div>
+            <div class="meta">标题质量 ${escapeHtml(String(page.heading_quality_score || 0))} · FAQ ${page.has_faq ? '有' : '无'} · 作者 ${page.has_author ? '有' : '无'} · 日期 ${page.has_publish_date ? '有' : '无'}</div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">暂无可展示的页面采样。</div>`;
+
+    const dimensionHtml = DIMENSION_META.map(meta => {
+      const item = weighted[meta.key] || {};
+      const rawScore = Number(item.raw_score ?? 0);
+      const status = scoreToStatus(rawScore);
+      return `
+        <div class="report-dim-card">
+          <div class="report-dim-head">
+            <span class="report-dim-name">${escapeHtml(meta.name)}</span>
+            <span class="report-dim-pill">${escapeHtml(meta.weight)}</span>
+          </div>
+          <div class="report-dim-scoreline">
+            <span class="score">${escapeHtml(String(rawScore))}</span>
+            <span class="status">${escapeHtml(formatStatus(status))}</span>
+          </div>
+          <div class="report-dim-kpis">
+            <div class="report-dim-kpi">
+              <div class="lbl">综合贡献</div>
+              <div class="val">${escapeHtml(String(item.weighted_value ?? 0))}</div>
+            </div>
+            <div class="report-dim-kpi">
+              <div class="lbl">原始权重</div>
+              <div class="val">${escapeHtml(meta.weight)}</div>
+            </div>
+          </div>
+          <div class="report-dim-note"><strong>公式：</strong>${escapeHtml(meta.formula)}</div>
+          <div class="report-dim-note" style="margin-top:6px"><strong>当前信号：</strong>${escapeHtml(meta.detail(result))}</div>
+        </div>
+      `;
+    }).join('');
+
+    const platformHtml = Object.entries(platformScores).map(([key, item]) => `
+      <div class="platform-card">
+        <div class="hd">
+          <span class="name">${escapeHtml(PLATFORM_LABELS[key] || key)}</span>
+          <span class="score">${escapeHtml(String(item.platform_score ?? 0))}</span>
+        </div>
+        <div class="gap">${escapeHtml(item.primary_gap || '暂无缺口描述')}</div>
+        <div class="reco">${escapeHtml((item.key_recommendations || [])[0] || '暂无建议')}</div>
+      </div>
+    `).join('');
+
+    const actionHtml = actions.length
+      ? actions.map(item => `
+          <div class="report-action">
+            <div class="report-action-priority ${escapeHtml(item.priority)}">${escapeHtml(formatStatus(item.priority))}</div>
+            <div class="report-action-main">
+              <h5>${escapeHtml(item.action)}</h5>
+              <p>${escapeHtml(item.description || '暂无说明')}</p>
+            </div>
+            <div class="report-action-impact">预计影响<span>${escapeHtml(item.impact || 'High')}</span></div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">暂无行动计划。</div>`;
+
+    const strongestPlatform = Object.entries(platformScores).sort((a, b) => (b[1]?.platform_score || 0) - (a[1]?.platform_score || 0))[0];
+    const weakestPlatform = Object.entries(platformScores).sort((a, b) => (a[1]?.platform_score || 0) - (b[1]?.platform_score || 0))[0];
+
+    host.className = 'report-shell';
+    host.innerHTML = `
+      <section class="report-hero">
+        <div class="report-score-box">
+          <div>
+            <div class="report-score-label">Composite GEO Score</div>
+            <div class="report-score-value">${escapeHtml(String(summary.composite_geo_score ?? 0))}</div>
+            <div class="report-score-sub">${escapeHtml(formatStatus(summary.status))} · 报告口径</div>
+          </div>
+          <div class="report-badges">
+            <span class="r-badge ${escapeHtml(statusTone(summary.status))}">${escapeHtml(formatStatus(summary.status))}</span>
+            <span class="r-badge">${task.mode === 'premium' ? '会员版 / AI 增强' : '普通版 / 规则版'}</span>
+            <span class="r-badge ${summary.llm_enhanced ? 'success' : ''}">${summary.llm_enhanced ? '报告已增强' : '规则汇总'}</span>
+          </div>
+        </div>
+        <div class="report-hero-main">
+          <div class="report-kicker">
+            <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '—')}</span>
+            <span class="dot"></span>
+            <span>${escapeHtml(discovery.business_type || 'unknown')}</span>
+            <span class="dot"></span>
+            <span>响应 ${escapeHtml(String(discovery.fetch?.response_time_ms ?? '—'))} ms</span>
+          </div>
+          <h3>站点 GEO 报告</h3>
+          <div class="report-summary">${escapeHtml(executive)}</div>
+          <div class="report-meta-grid">
+            <div class="report-meta-item">
+              <div class="lbl">首页标题</div>
+              <div class="val">${escapeHtml(homepage.title || '—')}</div>
+            </div>
+            <div class="report-meta-item">
+              <div class="lbl">AI Crawlers</div>
+              <div class="val">${escapeHtml(String(visibility.checks?.allowed_ai_crawlers ?? 0))} / ${escapeHtml(String(visibility.checks?.total_ai_crawlers_checked ?? 0))} 放行</div>
+            </div>
+            <div class="report-meta-item">
+              <div class="lbl">Schema 状态</div>
+              <div class="val">${schema.structured_data_score > 0 ? '已检测到结构化数据' : '未检测到 JSON-LD'}</div>
+            </div>
+            <div class="report-meta-item">
+              <div class="lbl">最佳 / 最弱平台</div>
+              <div class="val">${escapeHtml(PLATFORM_LABELS[strongestPlatform?.[0]] || '—')} ${escapeHtml(String(strongestPlatform?.[1]?.platform_score ?? '—'))} / ${escapeHtml(PLATFORM_LABELS[weakestPlatform?.[0]] || '—')} ${escapeHtml(String(weakestPlatform?.[1]?.platform_score ?? '—'))}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr">
+          <h4>6 个汇总维度评分</h4>
+          <span>原始分满分 100，按权重折算进入综合分</span>
+        </div>
+        <div class="report-section-body">
+          <div class="report-dim-grid">${dimensionHtml}</div>
+        </div>
+      </section>
+
+      <div class="report-grid-2">
+        <section class="report-section">
+          <div class="report-section-hdr">
+            <h4>关键问题</h4>
+            <span>优先处理最拖分的约束项</span>
+          </div>
+          <div class="report-section-body">
+            <div class="report-list">${formatList(topIssues, '暂无关键问题。')}</div>
+          </div>
+        </section>
+        <section class="report-section">
+          <div class="report-section-hdr">
+            <h4>快速收益项</h4>
+            <span>优先处理投入低、收益快的动作</span>
+          </div>
+          <div class="report-section-body">
+            <div class="report-list">${formatList(quickWins, '暂无快速收益建议。')}</div>
+          </div>
+        </section>
+      </div>
+
+      <section class="report-section">
+        <div class="report-section-hdr">
+          <h4>优先行动计划</h4>
+          <span>结合原始模块结果与 AI 增强建议生成</span>
+        </div>
+        <div class="report-section-body">
+          <div class="report-action-list">${actionHtml}</div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr">
+          <h4>平台适配概览</h4>
+          <span>展示 5 个目标平台 readiness、主缺口与首要建议</span>
+        </div>
+        <div class="report-section-body">
+          <div class="report-platform-grid">${platformHtml || '<div class="report-list-item">暂无平台数据。</div>'}</div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr">
+          <h4>原始发现摘要</h4>
+          <span>基于 discovery 与各模块 checks / findings 的事实层展示</span>
+        </div>
+        <div class="report-section-body">
+          <div class="report-evidence-grid">
+            <div class="evidence-card">
+              <h5>站点概况</h5>
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">规范化 URL</span><span class="kv-val">${escapeHtml(discovery.normalized_url || '—')}</span></div>
+                <div class="kv-row"><span class="kv-key">首页 H1</span><span class="kv-val">${escapeHtml(homepage.h1 || '—')}</span></div>
+                <div class="kv-row"><span class="kv-key">字数 / 标题数</span><span class="kv-val">${escapeHtml(String(homepage.word_count ?? 0))} / ${escapeHtml(String((homepage.headings || []).length))}</span></div>
+                <div class="kv-row"><span class="kv-key">语言 / hreflang</span><span class="kv-val">${escapeHtml(homepage.lang || '—')} / ${escapeHtml(String((homepage.hreflang || []).length))}</span></div>
+                <div class="kv-row"><span class="kv-key">内部链接 / 图片</span><span class="kv-val">${escapeHtml(String((homepage.internal_links || []).length))} / ${escapeHtml(String((homepage.images || []).length))}</span></div>
+              </div>
+            </div>
+            <div class="evidence-card">
+              <h5>抓取与实体信号</h5>
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">robots.txt</span><span class="kv-val">${formatBool(discovery.robots?.exists, '存在', '缺失')}</span></div>
+                <div class="kv-row"><span class="kv-key">llms.txt</span><span class="kv-val">${formatBool(discovery.llms?.exists, '存在', '缺失')}</span></div>
+                <div class="kv-row"><span class="kv-key">Sitemap</span><span class="kv-val">${formatBool(discovery.sitemap?.exists, '存在', '缺失')}</span></div>
+                <div class="kv-row"><span class="kv-key">公司名 / 电话</span><span class="kv-val">${formatBool(discovery.site_signals?.company_name_detected, '有', '无')} / ${formatBool(discovery.site_signals?.phone_detected, '有', '无')}</span></div>
+                <div class="kv-row"><span class="kv-key">地址 / 邮箱 / sameAs</span><span class="kv-val">${formatBool(discovery.site_signals?.address_detected, '有', '无')} / ${formatBool(discovery.site_signals?.email_detected, '有', '无')} / ${formatBool(discovery.site_signals?.same_as_detected, '有', '无')}</span></div>
+              </div>
+            </div>
+            <div class="evidence-card">
+              <h5>技术与结构化快照</h5>
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">安全头得分</span><span class="kv-val">${escapeHtml(String(technical.findings?.security_headers_score ?? 0))}</span></div>
+                <div class="kv-row"><span class="kv-key">SSR / 渲染阻塞</span><span class="kv-val">${escapeHtml(technical.findings?.ssr_classification || '—')} / ${escapeHtml(technical.findings?.render_blocking_risk || '—')}</span></div>
+                <div class="kv-row"><span class="kv-key">图片 lazyload / 尺寸</span><span class="kv-val">${escapeHtml(String(technical.checks?.image_optimization?.lazyload_ratio ?? 0))} / ${escapeHtml(String(technical.checks?.image_optimization?.dimension_ratio ?? 0))}</span></div>
+                <div class="kv-row"><span class="kv-key">Open Graph / Twitter Card</span><span class="kv-val">${formatBool(technical.checks?.open_graph, '有', '无')} / ${formatBool(technical.checks?.twitter_card, '有', '无')}</span></div>
+                <div class="kv-row"><span class="kv-key">Schema 类型 / sameAs</span><span class="kv-val">${escapeHtml(String(schema.findings?.schema_type_count ?? 0))} / ${escapeHtml(String(schema.findings?.same_as_count ?? 0))}</span></div>
+              </div>
+            </div>
+            <div class="evidence-card">
+              <h5>关键页面与内容采样</h5>
+              <div class="kv-list" style="margin-bottom:10px">${formatKeyPages(discovery.key_pages || {})}</div>
+              <div class="page-samples">${pageSampleHtml}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr">
+          <h4>说明与备注</h4>
+          <span>沉淀模型摘要、技术注释与模式说明</span>
+        </div>
+        <div class="report-section-body">
+          <div class="report-note-box">${escapeHtml([
+            summary.summary ? `报告摘要：${summary.summary}` : '',
+            summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
+            technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
+            schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
+          ].filter(Boolean).join('\n\n') || '当前无额外备注。')}</div>
+        </div>
+      </section>
+    `;
+  }
 
   /* ── Render timeline ── */
   function renderTimeline(steps) {
