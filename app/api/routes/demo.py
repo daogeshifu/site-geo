@@ -1487,6 +1487,12 @@ HTML = """<!doctype html>
 
     const strongestPlatform = Object.entries(platformScores).sort((a, b) => (b[1]?.platform_score || 0) - (a[1]?.platform_score || 0))[0];
     const weakestPlatform = Object.entries(platformScores).sort((a, b) => (a[1]?.platform_score || 0) - (b[1]?.platform_score || 0))[0];
+    const noteText = [
+      summary.summary ? `报告摘要：${summary.summary}` : '',
+      summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
+      technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
+      schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
+    ].filter(Boolean).join('\\n\\n') || '当前无额外备注。';
 
     host.className = 'report-shell';
     host.innerHTML = `
@@ -1637,12 +1643,7 @@ HTML = """<!doctype html>
           <span>沉淀模型摘要、技术注释与模式说明</span>
         </div>
         <div class="report-section-body">
-          <div class="report-note-box">${escapeHtml([
-            summary.summary ? `报告摘要：${summary.summary}` : '',
-            summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
-            technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
-            schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
-          ].filter(Boolean).join('\n\n') || '当前无额外备注。')}</div>
+          <div class="report-note-box">${escapeHtml(noteText)}</div>
         </div>
       </section>
     `;
@@ -1752,6 +1753,7 @@ HTML = """<!doctype html>
       el.textContent = task.result.summary.summary;
       el.classList.remove('placeholder');
     }
+    renderReport(task);
     $('json-output').textContent = JSON.stringify(task.result || task, null, 2);
     if (task.status === 'completed' || task.status === 'failed') {
       resetBtn();
@@ -1779,6 +1781,8 @@ HTML = """<!doctype html>
     const summaryEl = $('summary-text');
     summaryEl.textContent = '任务已创建，等待后台返回各阶段结果……';
     summaryEl.classList.add('placeholder');
+    summaryEl.className = 'report-empty placeholder';
+    summaryEl.innerHTML = '任务已创建，等待后台返回各阶段结果……<br />报告将在结果完成后自动生成。';
     $('llm-notes').textContent = '等待会员增强状态。';
     $('json-output').textContent = '{}';
     $('export-btn').disabled = true;
@@ -1810,6 +1814,7 @@ HTML = """<!doctype html>
       setMeta(task);
       renderTimeline(task.steps);
       renderLlmStatus(task);
+      renderReport(task);
       $('json-output').textContent = JSON.stringify(task.result || task, null, 2);
 
       if (task.status === 'completed') {
@@ -1818,6 +1823,7 @@ HTML = """<!doctype html>
           summaryEl.textContent = task.result.summary.summary;
           summaryEl.classList.remove('placeholder');
         }
+        renderReport(task);
         showToast('审计已完成', 'success');
         return;
       }

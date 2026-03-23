@@ -41,7 +41,7 @@ class CacheService:
         if not path.exists():
             return None
         try:
-            payload = json.loads(path.read_text())
+            payload = json.loads(path.read_text(encoding="utf-8"))
             record = CachedAuditRecord.model_validate(payload)
         except Exception:
             return None
@@ -72,5 +72,8 @@ class CacheService:
             expires_at=now + timedelta(days=self.ttl_days),
             payload=payload,
         )
-        self._cache_path(cache_key).write_text(record.model_dump_json(indent=2))
+        self._cache_path(cache_key).write_text(
+            record.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
         return record
