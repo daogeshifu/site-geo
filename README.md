@@ -74,20 +74,20 @@ project_root/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8023
 ```
 
 Default base URL:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8023
 ```
 
 ## Docker Run
 
 ```bash
 docker build -t geo-audit-service .
-docker run --rm -p 8000:8000 geo-audit-service
+docker run --rm -p 8023:8023 geo-audit-service
 ```
 
 ## Test
@@ -232,7 +232,7 @@ Task behavior:
 Task request example:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/tasks/audit \
+curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
   -d '{
     "url":"https://example.com",
@@ -244,7 +244,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/tasks/audit \
 Premium task example:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/tasks/audit \
+curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
   -d '{
     "url":"https://example.com",
@@ -282,13 +282,13 @@ The export report feature is designed to cover every major dimension present in 
 Export by completed task:
 
 ```bash
-curl -L http://127.0.0.1:8000/api/v1/tasks/<task_id>/report -o geo-report.md
+curl -L http://127.0.0.1:8023/api/v1/tasks/<task_id>/report -o geo-report.md
 ```
 
 Export from existing saved JSON payloads:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/report/export \
+curl -X POST http://127.0.0.1:8023/api/v1/report/export \
   -H "Content-Type: application/json" \
   -d @report-payload.json
 ```
@@ -303,7 +303,7 @@ The `POST /api/v1/report/export` response returns:
 Discovery:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/discovery \
+curl -X POST http://127.0.0.1:8023/api/v1/discovery \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
 ```
@@ -311,7 +311,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/discovery \
 Full audit:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/audit/full \
+curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","mode":"standard"}'
 ```
@@ -319,7 +319,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/audit/full \
 Premium full audit with OpenRouter:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/audit/full \
+curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
   -d '{
     "url":"https://example.com",
@@ -351,14 +351,14 @@ cp .env.example .env
 ```env
 OPENROUTER_API_KEY=sk-or-xxxxx
 DEFAULT_OPENROUTER_MODEL=openai/gpt-4.1
-OPENROUTER_SITE_URL=http://127.0.0.1:8000
+OPENROUTER_SITE_URL=http://127.0.0.1:8023
 OPENROUTER_APP_NAME=geo-audit-service
 ```
 
 3. Start the server:
 
 ```bash
-.venv/bin/uvicorn app.main:app --reload
+.venv/bin/uvicorn app.main:app --reload --port 8023
 ```
 
 ## OpenRouter Key Setup By Environment Variable
@@ -367,7 +367,7 @@ If you do not want to use `.env`, you can still export variables in the current 
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-xxxxx"
-export OPENROUTER_SITE_URL="http://127.0.0.1:8000"
+export OPENROUTER_SITE_URL="http://127.0.0.1:8023"
 export OPENROUTER_APP_NAME="geo-audit-service"
 ```
 
@@ -375,7 +375,7 @@ If you want it to persist across terminal sessions, add it to `~/.zshrc`:
 
 ```bash
 echo 'export OPENROUTER_API_KEY="sk-or-xxxxx"' >> ~/.zshrc
-echo 'export OPENROUTER_SITE_URL="http://127.0.0.1:8000"' >> ~/.zshrc
+echo 'export OPENROUTER_SITE_URL="http://127.0.0.1:8023"' >> ~/.zshrc
 echo 'export OPENROUTER_APP_NAME="geo-audit-service"' >> ~/.zshrc
 source ~/.zshrc
 ```
