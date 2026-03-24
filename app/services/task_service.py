@@ -56,6 +56,16 @@ class TaskService:
         completed = sum(1 for step in task.steps.values() if step.status == "completed")
         return int((completed / len(task.steps)) * 100)
 
+    def _detect_llm_model_used(self, payload: dict | None) -> bool:
+        """根据模块结果判断是否真正使用并生效了 LLM 增强。"""
+        if not payload:
+            return False
+        for step_name in ("visibility", "technical", "content", "schema", "platform", "summary"):
+            step_payload = payload.get(step_name)
+            if isinstance(step_payload, dict) and step_payload.get("llm_enhanced") is True:
+                return True
+        return False
+
     async def create_task(self, request: TaskAuditRequest) -> AuditTask:
         """创建审计任务并触发后台执行
 
@@ -108,6 +118,7 @@ class TaskService:
             task.progress_percent = 100
             task.completed_at = now
             task.result = cached_record.payload
+            task.llm_model_used = self._detect_llm_model_used(cached_record.payload)
             self.tasks[task_id] = task
             return task
 
@@ -140,6 +151,8 @@ class TaskService:
         step.status = status
         if data is not None:
             step.data = data
+            if isinstance(data, dict) and data.get("llm_enhanced") is True:
+                task.llm_model_used = True
         if error:
             step.error = error
         # 非 completed 状态时更新 current_step 指向当前步骤
@@ -222,6 +235,7 @@ class TaskService:
                 "platform": module_results["platform"].model_dump(),
                 "summary": summary_payload,
             }
+            task.llm_model_used = self._detect_llm_model_used(task.result)
             # 写入文件缓存，供后续相同请求直接命中
             self.cache_service.set(
                 task.cache_key,

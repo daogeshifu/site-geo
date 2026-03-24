@@ -44,6 +44,7 @@ class AuditTask(BaseModel):
     current_step: str = "queued"          # 当前正在执行的步骤名称
     progress_percent: int = 0             # 完成进度百分比（0-100）
     cached: bool = False                  # 是否从缓存加载结果
+    llm_model_used: bool = False          # 是否真正使用并生效了 llm.model
     force_refresh: bool = False
     created_at: datetime
     updated_at: datetime

@@ -207,6 +207,17 @@ HTML = """<!doctype html>
     .meta-cell:last-child { border-radius: 0 0 10px 0; }
     .meta-lbl { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
     .meta-val { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-all; }
+    .meta-sub-row {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .meta-sub-lbl {
+      font-size: 10.5px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .meta-sub-val { font-size: 12.5px; font-weight: 700; color: var(--text); }
 
     /* ── Progress ── */
     .prog-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
@@ -805,6 +816,10 @@ HTML = """<!doctype html>
           <div class="meta-cell">
             <div class="meta-lbl">缓存命中</div>
             <div class="meta-val" id="cached-flag">否</div>
+            <div class="meta-sub-row">
+              <span class="meta-sub-lbl">LLM 模型生效</span>
+              <span class="meta-sub-val" id="llm-model-used-flag">否</span>
+            </div>
           </div>
           <div class="meta-cell">
             <div class="meta-lbl">执行模式</div>
@@ -1051,6 +1066,7 @@ HTML = """<!doctype html>
             <div class="param-row"><span class="param-key">status</span><span class="param-type">string</span><span class="param-desc">queued → running → completed | failed</span></div>
             <div class="param-row"><span class="param-key">progress_percent</span><span class="param-type">int</span><span class="param-desc">0–100，按完成步骤数计算</span></div>
             <div class="param-row"><span class="param-key">cached</span><span class="param-type">boolean</span><span class="param-desc">命中缓存时为 true，直接返回历史结果</span></div>
+            <div class="param-row"><span class="param-key">llm_model_used</span><span class="param-type">boolean</span><span class="param-desc">只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</span></div>
             <div class="param-row"><span class="param-key">result</span><span class="param-type">object</span><span class="param-desc">completed 后包含完整的 visibility / technical / content / schema / platform / summary</span></div>
           </div>
           <div class="code-snippet"><pre>// 响应结构示意
@@ -1061,6 +1077,7 @@ HTML = """<!doctype html>
     "status": "completed",          // queued | running | completed | failed
     "progress_percent": 100,
     "cached": false,
+    "llm_model_used": true,
     "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
     "result": {
       "visibility": { "score": 72, "status": "good", "llm_enhanced": true, ... },
@@ -1577,6 +1594,7 @@ function renderReport(task) {
     $('progress').textContent   = `${pct}%`;
     $('prog-fill').style.width  = `${pct}%`;
     $('cached-flag').textContent = task.cached ? '是 ✓' : '否';
+    $('llm-model-used-flag').textContent = task.llm_model_used ? '是 ✓' : '否';
     $('mode-display').textContent = task.mode === 'premium' ? '会员版' : (task.mode ? '普通版' : '—');
     $('current-mode-display').textContent = task.mode === 'premium'
       ? '会员版（规则 + OpenRouter）'
