@@ -14,12 +14,28 @@ from app.utils.url_utils import normalize_url
 
 
 class CacheService:
+    """基于文件系统的审计结果缓存服务
+
+    缓存键（SHA256）格式：domain|mode|provider|model
+    缓存文件：{cache_dir}/{sha256_key}.json
+    TTL：默认 7 天（可通过 CACHE_TTL_DAYS 配置）
+
+    设计决策：
+    - 使用 SHA256 哈希键避免文件名包含特殊字符
+    - standard 模式的缓存键中 provider/model 为 "none"，与 premium 模式隔离
+    """
+
     def __init__(self, cache_dir: str | None = None, ttl_days: int | None = None) -> None:
         self.cache_dir = Path(cache_dir or settings.cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)   # 自动创建缓存目录
         self.ttl_days = ttl_days or settings.cache_ttl_days
 
     def build_cache_key(self, url: str, mode: str, llm_config: LLMConfig | None = None) -> tuple[str, str, str]:
+        """生成缓存键，返回 (sha256_digest, normalized_url, domain)
+
+        - standard 模式：provider=none, model=none（不区分 LLM 配置）
+        - premium 模式：包含 provider 和 model（不同模型结果不共享缓存）
+        """
         normalized_url = normalize_url(url)
         parsed = urlparse(normalized_url)
         domain = parsed.netloc.lower()
@@ -34,9 +50,11 @@ class CacheService:
         return digest, normalized_url, domain
 
     def _cache_path(self, cache_key: str) -> Path:
+        """返回缓存文件的完整路径"""
         return self.cache_dir / f"{cache_key}.json"
 
     def get(self, cache_key: str) -> CachedAuditRecord | None:
+        """读取缓存记录，过期或解析失败时返回 None"""
         path = self._cache_path(cache_key)
         if not path.exists():
             return None
@@ -45,6 +63,7 @@ class CacheService:
             record = CachedAuditRecord.model_validate(payload)
         except Exception:
             return None
+        # TTL 过期检查
         if record.expires_at <= datetime.now(timezone.utc):
             return None
         return record
@@ -59,6 +78,7 @@ class CacheService:
         payload: dict[str, Any],
         llm_config: LLMConfig | None = None,
     ) -> CachedAuditRecord:
+        """将审计结果写入缓存文件（JSON 格式，缩进 2 格）"""
         now = datetime.now(timezone.utc)
         record = CachedAuditRecord(
             cache_key=cache_key,
@@ -66,6 +86,7 @@ class CacheService:
             normalized_url=normalized_url,
             domain=domain,
             mode=mode,
+            # premium 模式记录 LLM 提供商和模型，便于缓存管理和调试
             llm_provider=llm_config.provider if llm_config and mode == "premium" else None,
             llm_model=llm_config.model if llm_config and mode == "premium" else None,
             created_at=now,

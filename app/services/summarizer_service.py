@@ -16,11 +16,23 @@ from app.services.scoring_service import ScoringService
 
 
 class SummarizerService:
+    """GEO 审计汇总服务：将 5 个模块结果合并为复合 GEO 评分
+
+    GEO 综合分由 6 个维度加权计算（总权重 100%）：
+    - AI Citability & Visibility:   25%（ai_visibility_score）
+    - Brand Authority Signals:      20%（brand_authority_score）
+    - Content Quality & E-E-A-T:   20%（E-E-A-T 五维平均）
+    - Technical Foundations:        15%（technical_score）
+    - Structured Data:              10%（structured_data_score）
+    - Platform Optimization:        10%（platform_optimization_score）
+    """
+
     def __init__(self) -> None:
         self.scoring = ScoringService()
         self.llm_enrichment = LLMEnrichmentService()
 
     def _content_eeat_score(self, content: ContentAuditResult) -> int:
+        """计算内容 E-E-A-T 综合分：5 项评分的简单平均值"""
         return self.scoring.clamp_score(
             (
                 content.content_score
@@ -33,6 +45,10 @@ class SummarizerService:
         )
 
     def _visibility_dimension_views(self, visibility: VisibilityAuditResult) -> tuple[dict, dict]:
+        """将 visibility 模块结果拆分为"AI 可见性"和"品牌权威"两个独立维度视图
+
+        返回 (ai_dimension, brand_dimension) 元组，每个视图包含 module/score/issues/recommendations
+        """
         llms_quality = visibility.findings.get("llms_quality", {}).get("score", 0)
         citability = visibility.findings.get("citability", {}).get("score", 0)
         crawler_score = visibility.findings.get("ai_crawler_access_score", 0)
@@ -41,6 +57,7 @@ class SummarizerService:
         backlink_component = brand_components.get("backlink_quality", {})
         entity_component = brand_components.get("entity_consistency", {})
 
+        # AI 可见性维度问题
         ai_issues: list[str] = []
         ai_actions: list[str] = []
         if crawler_score < 100:
@@ -58,6 +75,7 @@ class SummarizerService:
             ai_issues.append("Basic entity presence across homepage, about, and contact experiences is thin.")
             ai_actions.append("Strengthen homepage, about, and contact-page brand and contact signals.")
 
+        # 品牌权威维度问题
         brand_issues: list[str] = []
         brand_actions: list[str] = []
         if visibility.brand_authority_score < 60:
@@ -98,7 +116,18 @@ class SummarizerService:
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> SummaryResult:
+        """计算复合 GEO 评分并生成汇总报告
+
+        流程：
+        1. 计算内容 E-E-A-T 综合分
+        2. 按 6 维权重加权计算复合 GEO 分
+        3. 将 6 个维度按分数从低到高排序（最弱维度排前面）
+        4. 从最弱维度提取问题/快速行动/优先计划
+        5. premium 模式：LLM 生成更丰富的执行摘要
+        """
         content_eeat_score = self._content_eeat_score(content)
+
+        # 6 个维度的加权输入
         weighted_inputs = {
             "AI Citability & Visibility": {"raw_score": visibility.ai_visibility_score, "weight": 0.25},
             "Brand Authority Signals": {"raw_score": visibility.brand_authority_score, "weight": 0.20},
@@ -111,6 +140,7 @@ class SummarizerService:
         status = self.scoring.status_from_score(composite_score)
 
         ai_dimension, brand_dimension = self._visibility_dimension_views(visibility)
+        # 构建 6 个维度视图（中文标签便于展示）
         dimensions = [
             ("AI 可见性", ai_dimension),
             ("品牌权威", brand_dimension),
@@ -151,6 +181,7 @@ class SummarizerService:
                 },
             ),
         ]
+        # 按分数升序排列维度（最弱的优先处理）
         ordered_dimensions = sorted(dimensions, key=lambda item: item[1]["score"])
 
         top_issues: list[str] = []
@@ -158,17 +189,20 @@ class SummarizerService:
         prioritized_action_plan: list[ActionPlanItem] = []
 
         for index, (label, payload) in enumerate(ordered_dimensions):
+            # 提取每个维度的顶部问题（合并后最多 5 条）
             for issue in payload["issues"]:
                 if len(top_issues) >= 5:
                     break
                 formatted = f"{label}: {issue}"
                 if formatted not in top_issues:
                     top_issues.append(formatted)
+            # 提取快速行动建议（最多 5 条）
             for recommendation in payload["recommendations"]:
                 if len(quick_wins) >= 5:
                     break
                 if recommendation not in quick_wins:
                     quick_wins.append(recommendation)
+            # 为最弱维度生成优先行动计划（分数最低→high, 前3→medium, 其余→low）
             if payload["recommendations"]:
                 prioritized_action_plan.append(
                     ActionPlanItem(
@@ -179,6 +213,7 @@ class SummarizerService:
                     )
                 )
 
+        # 生成文字摘要
         summary_text = (
             f"{discovery.domain or url} currently scores {composite_score}/100 for GEO readiness. "
             f"The biggest gaps are in {ordered_dimensions[0][0]} and {ordered_dimensions[1][0]}."
@@ -192,11 +227,12 @@ class SummarizerService:
             summary=summary_text,
             top_issues=top_issues,
             quick_wins=quick_wins,
-            prioritized_action_plan=prioritized_action_plan[:5],
+            prioritized_action_plan=prioritized_action_plan[:5],  # 最多 5 条优先行动
         )
         if llm_config:
             result.llm_provider = llm_config.provider
             result.llm_model = llm_config.model
+        # premium 模式：LLM 生成更丰富的执行摘要和行动计划
         if mode == "premium":
             result = await self.llm_enrichment.enrich_summary(discovery, visibility, content, platform, result, llm_config)
         return result

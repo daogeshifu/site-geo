@@ -12,20 +12,25 @@ from app.core.exceptions import AppError
 
 @dataclass
 class FetchedResponse:
-    final_url: str
+    """HTTP 请求响应的标准化数据类"""
+
+    final_url: str         # 跟随重定向后的最终 URL
     status_code: int
     headers: dict[str, str]
-    text: str
-    response_time_ms: int
+    text: str              # 响应正文文本
+    response_time_ms: int  # 请求总耗时（毫秒）
 
 
 @retry(
+    # 仅对网络错误和超时进行重试（HTTP 4xx/5xx 不重试）
     retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
     stop=stop_after_attempt(settings.request_retries),
+    # 指数退避：初始 0.5s，最大 4s
     wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
     reraise=True,
 )
 async def _send_request(client: httpx.AsyncClient, method: str, url: str) -> httpx.Response:
+    """带重试的底层 HTTP 请求（由 fetch_url 调用）"""
     return await client.request(method, url)
 
 
@@ -34,6 +39,20 @@ async def fetch_url(
     client: httpx.AsyncClient | None = None,
     method: str = "GET",
 ) -> FetchedResponse:
+    """异步抓取 URL，自动处理重试、超时和响应时间统计
+
+    Args:
+        url: 目标 URL
+        client: 可选的共享 httpx.AsyncClient（用于连接复用）
+        method: HTTP 方法，默认 GET
+
+    Returns:
+        FetchedResponse（包含最终 URL、状态码、响应头、正文和耗时）
+
+    Raises:
+        AppError(502): 网络错误或超时（重试耗尽后）
+    """
+    # 若未注入 client，创建临时 client（finally 中关闭）
     owns_client = client is None
     request_client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(settings.request_timeout_seconds),

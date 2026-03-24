@@ -24,12 +24,28 @@ from app.utils.text_analyzer import (
 
 
 class ContentService(AuditBaseService):
+    """内容质量审计模块（占 GEO 总分 20%）
+
+    评估 E-E-A-T 四个维度：
+    - Experience（经验）：案例研究、量化数据、关于页、服务页深度
+    - Expertise（专业度）：服务页深度、文章深度、先答后述、标题质量
+    - Authoritativeness（权威性）：关于页、作者署名、奖项认证、sameAs 引用
+    - Trustworthiness（可信度）：联系页、电话/邮件/地址、发布日期、作者信息
+
+    优先从 discovery 的 page_profiles 获取数据；
+    若关键页在 discovery 中缺失但有 URL，则补充抓取
+    """
+
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
         self.llm_enrichment = LLMEnrichmentService()
 
     async def _analyze_page(self, client: httpx.AsyncClient, page_type: str, page_url: str) -> ContentPageAnalysis:
+        """实时抓取并分析页面内容，返回 ContentPageAnalysis
+
+        当 discovery 阶段未能覆盖该页面时调用
+        """
         response = await fetch_url(page_url, client=client)
         parsed = parse_html(response.final_url, response.text)
         heading_quality = evaluate_heading_quality(parsed["headings"])
@@ -48,6 +64,7 @@ class ContentService(AuditBaseService):
         )
 
     def _analysis_from_profile(self, page_type: str, profile) -> ContentPageAnalysis:
+        """从已有的 PageProfile 直接映射为 ContentPageAnalysis，避免重复抓取"""
         return ContentPageAnalysis(
             url=profile.final_url,
             page_type=page_type,
@@ -69,6 +86,14 @@ class ContentService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> ContentAuditResult:
+        """执行内容质量审计
+
+        流程：
+        1. 优先从 page_profiles 读取已有页面数据（无需网络请求）
+        2. 对 discovery 阶段未覆盖的关键页，并发补充抓取
+        3. 聚合各页面信号，计算内容分和 E-E-A-T 四维评分
+        4. premium 模式下进行 LLM E-E-A-T 深度评估
+        """
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         targets = {
@@ -79,11 +104,13 @@ class ContentService(AuditBaseService):
         }
         page_analyses: dict[str, ContentPageAnalysis] = {}
 
+        # 优先从 discovery 的 page_profiles 复用数据
         for page_type in ["service", "article", "about", "case_study"]:
             profile = resolved.page_profiles.get(page_type)
             if profile:
                 page_analyses[page_type] = self._analysis_from_profile(page_type, profile)
 
+        # 仅对有 URL 但 discovery 未覆盖的页面补充抓取
         missing_targets = {
             key: page_url
             for key, page_url in targets.items()
@@ -110,6 +137,7 @@ class ContentService(AuditBaseService):
         about_page = page_analyses.get("about")
         case_study_page = page_analyses.get("case_study")
 
+        # 跨页面聚合信号（任一页面满足即为 True）
         has_faq_any = any(page.has_faq for page in page_analyses.values())
         has_author_any = any(page.has_author for page in page_analyses.values())
         has_publish_any = any(page.has_publish_date for page in page_analyses.values())
@@ -121,7 +149,9 @@ class ContentService(AuditBaseService):
             else 0
         )
 
+        # 内容综合评分（满分 100）
         content_score = self.scoring.clamp_score(
+            # 服务页词数越多得分越高（≥400词满分，≥200词半分）
             (15 if service_page and service_page.word_count >= 400 else 7 if service_page and service_page.word_count >= 200 else 0)
             + (20 if article_page and article_page.word_count >= 800 else 10 if article_page and article_page.word_count >= 400 else 0)
             + (10 if has_faq_any else 0)
@@ -132,8 +162,9 @@ class ContentService(AuditBaseService):
             + (10 if has_answer_first_any else 0)
         )
 
+        # E-E-A-T 四维评分
         experience_score = self.scoring.clamp_score(
-            (30 if case_study_page else 0)
+            (30 if case_study_page else 0)    # 案例研究是经验的最强证明
             + (20 if has_quant_any else 0)
             + (20 if service_page and service_page.word_count >= 300 else 0)
             + (30 if about_page else 0)
@@ -147,12 +178,12 @@ class ContentService(AuditBaseService):
         authoritativeness_score = self.scoring.clamp_score(
             (25 if about_page else 0)
             + (20 if has_author_any else 0)
-            + (20 if resolved.site_signals.awards_detected else 0)
+            + (20 if resolved.site_signals.awards_detected else 0)    # 奖项强化权威
             + (15 if resolved.site_signals.certifications_detected else 0)
-            + (20 if resolved.site_signals.same_as_detected else 0)
+            + (20 if resolved.site_signals.same_as_detected else 0)   # sameAs 引用验证实体
         )
         trustworthiness_score = self.scoring.clamp_score(
-            (25 if resolved.key_pages.contact else 0)
+            (25 if resolved.key_pages.contact else 0)   # 联系页是可信度基础
             + (15 if resolved.site_signals.phone_detected else 0)
             + (15 if resolved.site_signals.email_detected else 0)
             + (15 if resolved.site_signals.address_detected else 0)
@@ -232,8 +263,10 @@ class ContentService(AuditBaseService):
             page_analyses=page_analyses,
         )
         self.set_execution_metadata(result, mode, llm_config)
+        # premium 模式：LLM 评估 E-E-A-T 深度并微调各维度评分（±15 点上限）
         if mode == "premium":
             result = await self.llm_enrichment.enrich_content(resolved, result, llm_config)
+        # 置信度随覆盖页面数增加（最多 4 个关键页）
         result = self.finalize_audit_result(
             result,
             module_key="content",

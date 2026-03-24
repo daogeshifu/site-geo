@@ -16,6 +16,16 @@ from app.utils.heuristics import (
 
 
 class VisibilityService(AuditBaseService):
+    """AI 可见性审计模块（占 GEO 总分 45%：AI 可见性 25% + 品牌权威 20%）
+
+    评分公式：
+        ai_visibility_score =
+            crawler_score * 0.32        # AI 爬虫访问权限
+            + citability * 0.40         # 页面可引用性（最高权重）
+            + llms_quality * 0.12       # llms.txt 有效性
+            + basic_brand_presence * 0.16  # 基础品牌实体存在感
+    """
+
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
@@ -29,12 +39,24 @@ class VisibilityService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> VisibilityAuditResult:
+        """执行 AI 可见性审计
+
+        1. 计算 AI 爬虫访问率（robots.txt）
+        2. 评估首页和多页面的可引用性
+        3. 评估 llms.txt 有效性
+        4. 评估基础品牌实体存在感
+        5. 综合计算 AI 可见性分数，并生成问题/优势/建议
+        6. premium 模式下进行 LLM 增强
+        """
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
+
+        # 计算 AI 爬虫访问率（允许爬取的爬虫数 / 总检查爬虫数）
         crawler_rules = resolved.robots.user_agents
         allowed_crawlers = sum(1 for rule in crawler_rules.values() if rule.allowed)
         crawler_score = int((allowed_crawlers / max(len(crawler_rules), 1)) * 100)
 
+        # 评估各维度信号
         homepage_dict = resolved.homepage.model_dump()
         citability = assess_citability(homepage_dict, resolved.page_profiles)
         llms_quality = assess_llms_effectiveness(
@@ -44,6 +66,8 @@ class VisibilityService(AuditBaseService):
         )
         basic_brand_presence = assess_basic_brand_presence(resolved.site_signals, resolved.key_pages)
         brand = self.brand_authority.assess(resolved)
+
+        # 加权计算 AI 可见性分数
         ai_visibility_score = self.scoring.clamp_score(
             crawler_score * 0.32
             + citability["score"] * 0.40
@@ -56,12 +80,14 @@ class VisibilityService(AuditBaseService):
         strengths: list[str] = []
         recommendations: list[str] = []
 
+        # AI 爬虫访问权限检查
         if allowed_crawlers < len(crawler_rules):
             issues.append("robots.txt blocks one or more major AI crawlers.")
             recommendations.append("Review robots.txt and allow GPTBot, OAI-SearchBot, PerplexityBot, and Google-Extended.")
         else:
             strengths.append("robots.txt appears open to major AI crawlers.")
 
+        # llms.txt 检查
         if not resolved.llms.exists:
             issues.append("Site does not expose llms.txt guidance.")
             recommendations.append("Publish a concise llms.txt that describes the site, services, and citation preferences.")
@@ -71,18 +97,21 @@ class VisibilityService(AuditBaseService):
         else:
             strengths.append("llms.txt exists and can help AI systems understand the site.")
 
+        # 可引用性检查
         if citability["score"] < 60:
             issues.append("Homepage lacks strong citation-friendly structure and content depth.")
             recommendations.append("Improve homepage metadata, add clearer headings, and strengthen answer-first copy.")
         else:
             strengths.append("Homepage exposes baseline citability signals.")
 
+        # 基础品牌实体检查
         if basic_brand_presence["score"] < 50:
             issues.append("Basic entity presence is thin across about/contact and contact signals.")
             recommendations.append("Strengthen homepage, about, and contact-page entity signals with brand and contact details.")
         else:
             strengths.append("Baseline entity presence is detectable across the site.")
 
+        # 品牌权威检查
         if brand["score"] < 50:
             issues.append("Brand authority signals are weak on-site.")
             recommendations.append(
@@ -122,8 +151,12 @@ class VisibilityService(AuditBaseService):
             checks=checks,
         )
         self.set_execution_metadata(result, mode, llm_config)
+
+        # premium 模式：使用 LLM 微调评分并增加深度洞察
         if mode == "premium":
             result = await self.llm_enrichment.enrich_visibility(resolved, result, llm_config)
+
+        # 置信度随覆盖页面数增加（最多 5 页），llms.txt 存在额外加 0.05
         result = self.finalize_audit_result(
             result,
             module_key="visibility",

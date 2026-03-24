@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
+# Demo 路由：提供内置的交互式 GEO 审计控制台页面（单页 HTML 应用）
+# 挂载在根路径 /，供开发者和演示场景直接在浏览器中使用
 router = APIRouter(tags=["demo"])
 
 
@@ -1751,4 +1753,16 @@ function renderReport(task) {
 
 @router.get("/", response_class=HTMLResponse)
 async def demo_page() -> HTMLResponse:
+    """返回内置的 GEO 审计交互控制台页面
+
+    该页面是一个完整的单页应用（SPA），内嵌在 Python 字符串 HTML 中，
+    无需额外静态文件服务。提供以下功能：
+    - 输入 URL 触发全量 GEO 审计（调用 /api/v1/tasks/audit）
+    - 实时轮询任务进度（步骤时间线展示）
+    - 展示各模块审计分数和详情（可折叠卡片）
+    - 报告导出和调试面板
+
+    Returns:
+        HTMLResponse：包含完整前端界面的 HTML 文档
+    """
     return HTMLResponse(HTML)

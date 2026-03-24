@@ -10,6 +10,19 @@ from app.utils.schema_extractor import extract_schema_summary
 
 
 class SchemaService(AuditBaseService):
+    """结构化数据审计模块（占 GEO 总分 10%）
+
+    评分构成（满分 100）：
+    - json_ld_present: 20分（是否存在任何 JSON-LD）
+    - organization: 20分（Organization schema）
+    - local_business: 10分（LocalBusiness schema）
+    - article: 15分（Article/NewsArticle schema）
+    - faq_page: 10分（FAQPage schema）
+    - service: 10分（Service schema）
+    - website: 10分（WebSite schema）
+    - same_as: 5分（至少一个 sameAs 引用）
+    """
+
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
@@ -21,8 +34,14 @@ class SchemaService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> SchemaAuditResult:
+        """执行结构化数据审计
+
+        合并首页和所有关键页的 JSON-LD 块，统一提取 Schema 类型和 sameAs 引用
+        """
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
+
+        # 收集所有页面的 JSON-LD 块
         blocks = list(resolved.homepage.json_ld_blocks)
         for page_type in ["service", "article", "about", "case_study"]:
             profile = resolved.page_profiles.get(page_type)
@@ -40,6 +59,8 @@ class SchemaService(AuditBaseService):
             "website": summary["has_website"],
             "same_as_count": len(summary["same_as"]),
         }
+
+        # 计算结构化数据分数
         structured_data_score = self.scoring.clamp_score(
             (20 if checks["json_ld_present"] else 0)
             + (20 if checks["organization"] else 0)
@@ -63,6 +84,7 @@ class SchemaService(AuditBaseService):
             issues.append("No JSON-LD structured data detected.")
             missing_schema_recommendations.append("Implement baseline JSON-LD on homepage and core landing pages.")
 
+        # 各 Schema 类型检查及对应的缺失建议
         schema_requirements = {
             "organization": "Add Organization schema with name, url, logo, contactPoint, and sameAs.",
             "local_business": "Add LocalBusiness schema if the business serves a local or regional market.",
@@ -85,6 +107,7 @@ class SchemaService(AuditBaseService):
         else:
             strengths.append("Structured data exposes sameAs entity references.")
 
+        # 取前 5 条缺失 Schema 建议
         recommendations.extend(missing_schema_recommendations[:5])
         findings = {
             "schema_type_count": len(summary["types"]),
@@ -104,8 +127,10 @@ class SchemaService(AuditBaseService):
             missing_schema_recommendations=missing_schema_recommendations,
         )
         self.set_execution_metadata(result, mode, llm_config)
+        # schema 模块保持规则驱动，确保校验结果的确定性
         if mode == "premium":
             result.processing_notes.append("Premium mode currently keeps schema audit rule-based for deterministic validation.")
+        # 置信度随覆盖页面数增加
         result = self.finalize_audit_result(
             result,
             module_key="schema",

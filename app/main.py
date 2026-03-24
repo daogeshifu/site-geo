@@ -17,9 +17,11 @@ from app.core.exceptions import AppError
 from app.core.logging import configure_logging
 from app.models.responses import error_response
 
+# 初始化结构化日志
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# 创建 FastAPI 应用实例，默认使用高性能的 ORJSONResponse 响应格式
 app = FastAPI(
     title="GEO Audit Service",
     version="1.0.0",
@@ -30,23 +32,27 @@ app = FastAPI(
 
 @app.exception_handler(AppError)
 async def app_error_handler(_: Request, exc: AppError) -> ORJSONResponse:
+    """处理业务逻辑异常，返回带状态码的标准错误响应"""
     return ORJSONResponse(status_code=exc.status_code, content=error_response(exc.message, exc.errors))
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(_: Request, exc: RequestValidationError) -> ORJSONResponse:
+    """处理请求参数校验失败，返回 422 错误"""
     return ORJSONResponse(status_code=422, content=error_response("validation error", exc.errors()))
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(_: Request, exc: Exception) -> ORJSONResponse:
+    """兜底异常处理器：记录未捕获的服务端错误并返回 500"""
     logger.exception("Unhandled server error", exc_info=exc)
     return ORJSONResponse(status_code=500, content=error_response("internal server error"))
 
 
-app.include_router(demo_router)
-app.include_router(health_router)
-app.include_router(discovery_router)
-app.include_router(audit_router)
-app.include_router(task_router)
-app.include_router(report_router)
+# 注册所有路由模块
+app.include_router(demo_router)        # 交互式演示 UI
+app.include_router(health_router)      # 健康检查
+app.include_router(discovery_router)   # 站点快照
+app.include_router(audit_router)       # 各审计模块
+app.include_router(task_router)        # 异步任务管理
+app.include_router(report_router)      # 报告导出

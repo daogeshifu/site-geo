@@ -11,11 +11,24 @@ from app.utils.security_headers import evaluate_security_headers
 
 
 class TechnicalService(AuditBaseService):
+    """技术基础审计模块（占 GEO 总分 15%）
+
+    检查项（共 15 项，总权重 100 分）：
+    - HTTPS(8)、SSR(10)、meta_description(5)、canonical(5)、lang(4)
+    - viewport(4)、sitemap(8)、robots_sitemap_directive(4)
+    - open_graph(5)、twitter_card(3)、hreflang(4)
+    - security_headers(16)、image_optimization(8)、render_blocking(8)、performance(8)
+    """
+
     def __init__(self, discovery_service=None) -> None:
         super().__init__(discovery_service)
         self.scoring = ScoringService()
 
     def _image_optimization_score(self, images: list[dict]) -> tuple[int, dict]:
+        """评估图片优化情况：懒加载比例（50%）+ 声明尺寸比例（50%）
+
+        无图片时返回基础分 70（不因无图片而被惩罚）
+        """
         if not images:
             return 70, {"image_count": 0, "lazyload_ratio": 0, "dimension_ratio": 0}
 
@@ -31,6 +44,10 @@ class TechnicalService(AuditBaseService):
         }
 
     def _performance_score(self, response_time_ms: int) -> dict:
+        """基于服务器响应时间评估性能等级
+
+        ≤300ms: 100分(fast) | ≤800ms: 75分(good) | ≤1500ms: 50分(moderate) | >1500ms: 25分(slow)
+        """
         if response_time_ms <= 300:
             return {"score": 100, "classification": "fast"}
         if response_time_ms <= 800:
@@ -46,9 +63,15 @@ class TechnicalService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> TechnicalAuditResult:
+        """执行技术基础审计
+
+        注：technical 模块在 premium 模式下仍保持规则驱动（确定性结果）
+        """
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         homepage = resolved.homepage
+
+        # 各子项检查
         security_headers = evaluate_security_headers(resolved.fetch.headers)
         ssr_signal = assess_ssr_signal(homepage.html_length, homepage.word_count)
         render_blocking_risk = assess_render_blocking(
@@ -58,6 +81,7 @@ class TechnicalService(AuditBaseService):
         image_score, image_details = self._image_optimization_score(homepage.model_dump()["images"])
         performance_score = self._performance_score(resolved.fetch.response_time_ms)
 
+        # 各项检查点的权重定义（总和约等于 100）
         weights = {
             "https": 8,
             "ssr": 10,
@@ -70,7 +94,7 @@ class TechnicalService(AuditBaseService):
             "open_graph": 5,
             "twitter_card": 3,
             "hreflang": 4,
-            "security_headers": 16,
+            "security_headers": 16,   # 最高权重：安全响应头
             "image_optimization": 8,
             "render_blocking": 8,
             "performance": 8,
@@ -94,6 +118,7 @@ class TechnicalService(AuditBaseService):
             "performance": performance_score,
         }
 
+        # 加权求和计算技术分数
         technical_score = self.scoring.clamp_score(
             weights["https"] * int(checks["https"])
             + weights["ssr"] * (ssr_signal["score"] / 100)
@@ -117,6 +142,7 @@ class TechnicalService(AuditBaseService):
         issues: list[str] = []
         recommendations: list[str] = []
 
+        # 根据各项检查结果生成问题和建议
         if checks["https"]:
             strengths.append("Site resolves over HTTPS.")
         else:
@@ -175,6 +201,7 @@ class TechnicalService(AuditBaseService):
             render_blocking_risk=render_blocking_risk,
         )
         self.set_execution_metadata(result, mode, llm_config)
+        # 技术模块保持规则驱动，premium 模式仅记录说明
         if mode == "premium":
             result.processing_notes.append("Premium mode currently keeps technical audit rule-based for determinism.")
         result = self.finalize_audit_result(
@@ -182,6 +209,6 @@ class TechnicalService(AuditBaseService):
             module_key="technical",
             input_pages=self.collect_input_pages(resolved, "homepage"),
             started_at=started_at,
-            confidence=0.95,
+            confidence=0.95,   # 技术检查完全基于规则，置信度固定较高
         )
         return result

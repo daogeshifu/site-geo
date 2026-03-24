@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 
+# 从 .env 文件加载环境变量
 load_dotenv()
 
 
 def _get_float(name: str, default: float) -> float:
+    """从环境变量读取浮点数，无效时返回默认值"""
     value = os.getenv(name)
     if value is None:
         return default
@@ -20,6 +22,7 @@ def _get_float(name: str, default: float) -> float:
 
 
 def _get_int(name: str, default: int) -> int:
+    """从环境变量读取整数，无效时返回默认值"""
     value = os.getenv(name)
     if value is None:
         return default
@@ -31,33 +34,51 @@ def _get_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True)
 class Settings:
+    """全局配置类（不可变），所有配置项从环境变量读取，提供合理默认值"""
+
+    # 应用基础信息
     app_name: str = os.getenv("APP_NAME", "geo-audit-service")
     environment: str = os.getenv("APP_ENV", "development")
     debug: bool = os.getenv("APP_DEBUG", "false").lower() == "true"
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = _get_int("PORT", 8023)
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+    # HTTP 请求参数
     request_timeout_seconds: float = _get_float("REQUEST_TIMEOUT_SECONDS", 15.0)
     request_retries: int = _get_int("REQUEST_RETRIES", 3)
+
+    # 站点地图抓取限制
     max_sitemap_urls: int = _get_int("MAX_SITEMAP_URLS", 50)
     max_sitemap_indexes: int = _get_int("MAX_SITEMAP_INDEXES", 10)
+
+    # 审计结果缓存配置
     cache_ttl_days: int = _get_int("CACHE_TTL_DAYS", 7)
     cache_dir: str = os.getenv("CACHE_DIR", ".cache/audits")
+
+    # 爬虫 UA 标识
     default_user_agent: str = os.getenv(
         "DEFAULT_USER_AGENT",
         "GEOAuditBot/1.0 (+https://example.com/bot)",
     )
+
+    # 是否允许使用 Playwright 进行浏览器渲染
     allow_playwright: bool = os.getenv("ALLOW_PLAYWRIGHT", "false").lower() == "true"
+
+    # LLM 调用配置（OpenRouter）
     llm_request_timeout_seconds: float = _get_float("LLM_REQUEST_TIMEOUT_SECONDS", 30.0)
     default_openrouter_model: str = os.getenv("DEFAULT_OPENROUTER_MODEL", "openai/gpt-4.1")
     openrouter_api_key: str | None = os.getenv("OPENROUTER_API_KEY")
     openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     openrouter_site_url: str = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:8023")
     openrouter_app_name: str = os.getenv("OPENROUTER_APP_NAME", "geo-audit-service")
+
+    # Semrush 外链数据集成配置
     semrush_api_key: str | None = os.getenv("SEMRUSH_API_KEY")
     semrush_base_url: str = os.getenv("SEMRUSH_BASE_URL", "https://api.semrush.com/")
     semrush_target_type: str = os.getenv("SEMRUSH_TARGET_TYPE", "root_domain")
     semrush_enabled: bool = os.getenv("SEMRUSH_ENABLED", "true").lower() == "true"
 
 
+# 全局单例配置对象
 settings = Settings()

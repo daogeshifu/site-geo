@@ -16,10 +16,27 @@ from app.services.scoring_service import ScoringService
 
 
 class ReportService:
+    """Markdown 报告渲染服务：将全量审计结果格式化为专业报告文档
+
+    报告结构：
+    1. 执行摘要（复合 GEO 分数 + 状态）
+    2. 评分仪表盘（6 维加权分数表格）
+    3. AI 平台就绪度（5 平台评分表格）
+    4. 关键问题（按模块分数排序的 CRITICAL/HIGH/MEDIUM 问题）
+    5. 核心优势（去重后最多 10 条）
+    6. E-E-A-T 评估（4 维表格）
+    7. 技术审计概要（15 项检查结果）
+    8. 优先行动计划（快速行动 / 中期 / 战略行动）
+    9. 实施路线图（4 周 + 1-3 个月）
+    10. 预期分数提升（改善后估算）
+    11. 附录（站点基本信息）
+    """
+
     def __init__(self) -> None:
         self.scoring = ScoringService()
 
     def build_filename(self, discovery: DiscoveryResult) -> str:
+        """生成报告文件名：geo-audit-report-{domain}-{YYYYMMDD}.md"""
         stamp = datetime.now().strftime("%Y%m%d")
         domain = discovery.domain or "site"
         return f"geo-audit-report-{domain}-{stamp}.md"
@@ -36,23 +53,27 @@ class ReportService:
         platform: PlatformAuditResult,
         summary: SummaryResult,
     ) -> str:
+        """渲染完整的 Markdown 报告，返回报告字符串"""
         date_str = datetime.now().strftime("%Y-%m-%d")
         business_label = discovery.business_type.replace("_", " ").title()
         composite = summary.composite_geo_score
         composite_status = summary.status.title()
 
+        # 评分仪表盘：6 维加权分数行
         weighted_rows = []
         for name, item in summary.weighted_scores.items():
             weighted_rows.append(
                 f"| {name} | {int(item['weight'] * 100)}% | {item['raw_score']}/100 | {item['weighted_value']} | {self._status_badge(self.scoring.status_from_score(item['raw_score']))} |"
             )
 
+        # AI 平台就绪度行
         platform_rows = []
         for platform_name, detail in platform.platform_scores.items():
             platform_rows.append(
                 f"| {platform_name.replace('_', ' ').title()} | {detail.platform_score}/100 | {detail.primary_gap} |"
             )
 
+        # 关键问题：按模块分数升序排序，取前 5 个模块，每个模块最多 4 条问题
         critical_sections = []
         module_pairs = [
             ("Visibility", visibility),
@@ -83,6 +104,7 @@ class ReportService:
                 )
             )
 
+        # 合并所有模块优势并去重
         strengths = self._unique_items(
             visibility.strengths
             + technical.strengths
@@ -91,6 +113,7 @@ class ReportService:
             + platform.strengths
         )[:10]
 
+        # E-E-A-T 评估行
         eeat_rows = [
             f"| Experience | {content.experience_score}/100 | {self._dimension_comment(content.experience_score, 'experience proof and case evidence')} |",
             f"| Expertise | {content.expertise_score}/100 | {self._dimension_comment(content.expertise_score, 'topical depth and expert explanation')} |",
@@ -98,6 +121,7 @@ class ReportService:
             f"| Trustworthiness | {content.trustworthiness_score}/100 | {self._dimension_comment(content.trustworthiness_score, 'contact, transparency, and publication trust')} |",
         ]
 
+        # 技术检查结果行（15 项）
         technical_rows = [
             ("HTTPS", self._pass_fail(discovery.final_url.startswith("https://")), "Critical" if not discovery.final_url.startswith("https://") else "Pass"),
             ("Server-Side Rendering", self._pass_fail(technical.ssr_signal.get("score", 0) >= 70), technical.ssr_signal.get("classification", "unknown").title()),
@@ -116,12 +140,14 @@ class ReportService:
             ("llms.txt", self._pass_fail(discovery.llms.exists), "Medium" if not discovery.llms.exists else "Pass"),
         ]
 
+        # 行动计划分三个时间维度
         quick_wins = summary.quick_wins[:7]
         medium_term = self._build_medium_term_actions(content, schema_result, technical, platform)
         strategic = self._build_strategic_actions(discovery, content, platform)
         if not quick_wins:
             quick_wins = ["Address the highest-priority technical and structured-data gaps first."]
 
+        # 实施路线图
         roadmap = [
             "Week 1-2: Foundation",
             *[f"  - {item}" for item in quick_wins[:5]],
@@ -134,7 +160,6 @@ class ReportService:
         ]
 
         projected_rows = self._projected_scores(summary)
-
         appendix_rows = self._appendix_rows(discovery, technical, schema_result)
 
         return "\n".join(
@@ -261,6 +286,7 @@ class ReportService:
         )
 
     def _status_badge(self, status: str) -> str:
+        """将状态字符串转为带颜色 emoji 的展示文本"""
         mapping = {
             "critical": "🔴 Critical",
             "poor": "🟠 Poor",
@@ -271,6 +297,7 @@ class ReportService:
         return mapping.get(status, status.title())
 
     def _unique_items(self, items: list[str]) -> list[str]:
+        """去重并保留原始顺序"""
         seen = set()
         ordered = []
         for item in items:
@@ -280,6 +307,7 @@ class ReportService:
         return ordered
 
     def _eeat_average(self, content: ContentAuditResult) -> int:
+        """计算 E-E-A-T 四维平均分（不含 content_score，仅 E/E/A/T 四项）"""
         return self.scoring.clamp_score(
             (
                 content.experience_score
@@ -291,6 +319,7 @@ class ReportService:
         )
 
     def _dimension_comment(self, score: int, dimension: str) -> str:
+        """根据分数生成维度评价文字：≥75 强/≥50 中/否则弱"""
         if score >= 75:
             return f"Strong {dimension}."
         if score >= 50:
@@ -298,9 +327,11 @@ class ReportService:
         return f"Weak {dimension}; this needs focused work."
 
     def _pass_fail(self, passed: bool) -> str:
+        """将布尔检查结果转为 ✅/❌ 显示"""
         return "✅ Pass" if passed else "❌ Missing"
 
     def _severity_label(self, score: int) -> str:
+        """将评分转为严重程度标签：≥80 Pass / ≥50 Medium / 否则 Critical"""
         if score >= 80:
             return "Pass"
         if score >= 50:
@@ -314,6 +345,7 @@ class ReportService:
         technical: TechnicalAuditResult,
         platform: PlatformAuditResult,
     ) -> list[str]:
+        """构建中期行动建议：合并 Schema 缺失建议 + 各模块建议，去重取前 8 条"""
         actions = (
             schema_result.missing_schema_recommendations
             + content.recommendations
@@ -328,6 +360,12 @@ class ReportService:
         content: ContentAuditResult,
         platform: PlatformAuditResult,
     ) -> list[str]:
+        """构建战略性长期行动建议（1-3 个月）
+
+        根据站点特征动态插入额外建议：
+        - 无文章页：首先建议启动内容计划
+        - 权威性弱：建议暴露专家信息
+        """
         actions = [
             "Build English-language thought leadership pages for the highest-value services.",
             "Create external entity/profile coverage on LinkedIn, Crunchbase, Clutch, and other AI-cited platforms.",
@@ -342,6 +380,10 @@ class ReportService:
         return self._unique_items(actions)[:8]
 
     def _projected_scores(self, summary: SummaryResult) -> list[str]:
+        """生成各维度 3 个月后的预估分数行
+
+        低于 60 分的维度预估可提升 20 分，60 分以上预估提升 10 分
+        """
         rows = []
         for name, item in summary.weighted_scores.items():
             current = int(item["raw_score"])
@@ -358,6 +400,7 @@ class ReportService:
         technical: TechnicalAuditResult,
         schema_result: SchemaAuditResult,
     ) -> list[str]:
+        """生成附录站点信息表格行"""
         rows = [
             f"| Domain | {discovery.domain} |",
             f"| Final URL | {discovery.final_url} |",

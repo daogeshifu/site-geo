@@ -36,9 +36,19 @@ from app.utils.url_utils import normalize_url, registered_domain
 
 
 class DiscoveryService:
+    """站点快照服务（snapshot-v2）：负责抓取并聚合首页、关键页、协议文件和实体信号
+
+    工作流程：
+    1. 抓取首页，并发获取 robots.txt / llms.txt / 外链数据
+    2. 解析 Sitemap，从候选 URL 中识别关键页面类型
+    3. 并发抓取 about/service/article/case_study 四类关键页
+    4. 聚合全站 Schema 和实体信号，推断业务类型
+    """
+
     SNAPSHOT_VERSION = "snapshot-v2"
 
     def __init__(self) -> None:
+        # 注入外链查询服务
         self.backlink_service = BacklinkService()
 
     def _build_page_profile(
@@ -48,6 +58,10 @@ class DiscoveryService:
         final_url: str,
         parsed: dict,
     ) -> PageProfile:
+        """将 HTML 解析结果构建为 PageProfile 对象
+
+        综合 Schema 摘要、实体信号、标题质量、信息密度和分块结构评估
+        """
         schema_summary = extract_schema_summary(parsed["json_ld_blocks"])
         entity_signals = detect_site_signals(
             text=parsed["text_content"],
@@ -82,12 +96,14 @@ class DiscoveryService:
         )
 
     def _aggregate_schema_summary(self, page_profiles: dict[str, PageProfile]) -> dict:
+        """合并所有页面的 JSON-LD 块，生成全站 Schema 摘要"""
         blocks: list[str] = []
         for profile in page_profiles.values():
             blocks.extend(profile.json_ld_blocks)
         return extract_schema_summary(blocks)
 
     def _aggregate_site_signals(self, page_profiles: dict[str, PageProfile]) -> SiteSignals:
+        """跨页面聚合实体信号：任意一页检测到即标记为 True，取最大品牌提及次数"""
         if not page_profiles:
             return SiteSignals()
 
@@ -96,8 +112,11 @@ class DiscoveryService:
         merged = SiteSignals()
         for profile in page_profiles.values():
             signals = profile.entity_signals
+            # 取第一个检测到的公司名称
             company_name = company_name or signals.detected_company_name
+            # 品牌提及次数取最大值
             homepage_mentions = max(homepage_mentions, signals.homepage_brand_mentions)
+            # 各布尔信号做 OR 聚合
             merged.company_name_detected = merged.company_name_detected or signals.company_name_detected
             merged.address_detected = merged.address_detected or signals.address_detected
             merged.phone_detected = merged.phone_detected or signals.phone_detected
@@ -115,6 +134,7 @@ class DiscoveryService:
         page_type: str,
         page_url: str,
     ) -> PageProfile | None:
+        """异步抓取单个页面并构建 PageProfile，失败或 4xx 时返回 None"""
         try:
             response = await fetch_url(page_url, client=client)
         except Exception:
@@ -125,6 +145,15 @@ class DiscoveryService:
         return self._build_page_profile(page_type=page_type, final_url=response.final_url, parsed=parsed)
 
     async def discover(self, url: str) -> DiscoveryResult:
+        """执行完整的站点快照发现流程
+
+        步骤：
+        1. URL 规范化和首页抓取（400+ 则抛出 AppError）
+        2. 并发获取 robots.txt、llms.txt、Semrush 外链数据
+        3. 解析 Sitemap，识别关键页面 URL
+        4. 并发抓取 4 个关键页，构建 PageProfile
+        5. 聚合全站 Schema、实体信号，推断业务类型
+        """
         try:
             normalized_url = normalize_url(url)
         except ValueError as exc:
@@ -135,6 +164,7 @@ class DiscoveryService:
             follow_redirects=True,
             headers={"User-Agent": settings.default_user_agent},
         ) as client:
+            # 抓取首页
             homepage_response = await fetch_url(normalized_url, client=client)
             if homepage_response.status_code >= 400:
                 raise AppError(
@@ -145,22 +175,26 @@ class DiscoveryService:
             parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text)
 
             target_domain = registered_domain(homepage_response.final_url)
+            # 并发获取 robots.txt、llms.txt 和外链数据
             robots_result, llms_result, backlinks_result = await asyncio.gather(
                 inspect_robots(homepage_response.final_url, client=client),
                 inspect_llms(homepage_response.final_url, client=client),
                 self.backlink_service.fetch_overview(target_domain, client=client),
             )
+            # 获取 Sitemap（优先使用 robots.txt 中声明的路径）
             sitemap_result = await inspect_sitemap(
                 homepage_response.final_url,
                 client=client,
                 candidate_urls=robots_result.sitemaps or None,
             )
 
+            # 合并 Sitemap URL 和首页内部链接作为关键页候选
             candidate_urls = sitemap_result.discovered_urls + [
                 item["url"] for item in parsed_homepage["internal_links"]
             ]
             key_pages = select_key_pages(candidate_urls)
 
+            # 首页 PageProfile 必定存在
             page_profiles: dict[str, PageProfile] = {
                 "homepage": self._build_page_profile(
                     page_type="homepage",
@@ -169,6 +203,7 @@ class DiscoveryService:
                 )
             }
 
+            # 并发抓取其他关键页面（有 URL 的才抓取）
             snapshot_targets = {
                 "about": key_pages.about,
                 "service": key_pages.service,
@@ -183,10 +218,12 @@ class DiscoveryService:
             if coroutines:
                 results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
                 for page_type, result in zip(coroutines.keys(), results):
+                    # 跳过抓取失败的页面，不影响整体流程
                     if isinstance(result, Exception) or result is None:
                         continue
                     page_profiles[page_type] = result
 
+        # 用实际 final_url 更新关键页索引（处理重定向）
         if page_profiles.get("about"):
             key_pages.about = page_profiles["about"].final_url
         if page_profiles.get("service"):
@@ -196,6 +233,7 @@ class DiscoveryService:
         if page_profiles.get("case_study"):
             key_pages.case_study = page_profiles["case_study"].final_url
 
+        # 聚合全站数据
         schema_summary = self._aggregate_schema_summary(page_profiles)
         site_signals = self._aggregate_site_signals(page_profiles)
         business_type = infer_business_type(
