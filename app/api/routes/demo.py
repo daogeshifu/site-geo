@@ -1431,7 +1431,7 @@ function renderReport(task) {
     summary.processing_notes?.length ? `汇总注释：${summary.processing_notes.join(' | ')}` : '',
     technical.processing_notes?.length ? `技术模块：${technical.processing_notes.join(' | ')}` : '',
     schema.processing_notes?.length ? `结构化数据模块：${schema.processing_notes.join(' | ')}` : ''
-  ].filter(Boolean).join('\n\n') || '当前无额外备注。';
+  ].filter(Boolean).join('\\n\\n') || '当前无额外备注。';
 
   host.className = 'report-shell';
   host.innerHTML = `
