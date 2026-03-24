@@ -35,6 +35,6 @@ jobs:
 
       - name: Push to Gitee
         run: |
-          git remote add gitee git@gitee.com:你的Gitee用户名/site-geo.git
+          git remote add gitee git@gitee.com:adsuperman/site-geo.git
           git push gitee HEAD:main --force
           git push gitee --tags --force
