@@ -1,272 +1,144 @@
-# GEO Audit Service
+<div align="center">
 
-面向 GEO / AI Search 的站点审计服务。项目保持原有 API 风格不变，但内部已经从“传统 SEO 检测器”升级成“站点快照 + GEO 审计引擎”。
+# 🔍 GEO Audit Service
 
-当前综合评分围绕 6 个汇总维度输出：
+**Generative Engine Optimization audit engine for AI-powered search visibility**
 
-- AI 可见性 `25%`
-- 品牌权威 `20%`
-- 内容与 E-E-A-T `20%`
-- 技术基础 `15%`
-- 结构化数据 `10%`
-- 平台适配 `10%`
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-## 核心设计
+[**Live Demo →**](https://www.idtcpack.com/geo/brand-site-grader) · [Report Bug](https://github.com/your-org/geo-audit-service/issues) · [Request Feature](https://github.com/your-org/geo-audit-service/issues)
 
-### 1. 发现层：Site Snapshot
+</div>
 
-`DiscoveryService` 不再只抓首页，而是构建站点级快照。
+---
 
-默认轻量抓取：
+## What is GEO Audit?
 
-- `homepage`
-- `about`
-- `service`
-- `article/news`
-- `case_study`
+GEO Audit Service is an open-source audit engine built for the **AI search era**. Traditional SEO tools measure Google rankings — GEO Audit measures how likely **ChatGPT, Perplexity, Google AI Overviews, and Gemini** are to cite your site.
 
-每个页面都会输出统一 `page_profiles`：
+It builds a full **Site Snapshot** across key pages, then scores your site across 6 GEO dimensions:
 
-- `final_url`
-- `title`
-- `meta_description`
-- `canonical`
-- `lang`
-- `headings`
-- `word_count`
-- `has_faq`
-- `has_author`
-- `has_publish_date`
-- `has_quantified_data`
-- `answer_first`
-- `heading_quality_score`
-- `information_density_score`
-- `chunk_structure_score`
-- `json_ld_summary`
-- `entity_signals`
+| Dimension | Weight | What it measures |
+|---|---|---|
+| AI Citability & Visibility | 25% | Crawler access, citability probability, llms.txt |
+| Brand Authority Signals | 20% | Backlinks, entity consistency, brand mentions |
+| Content Quality & E-E-A-T | 20% | Experience, Expertise, Authoritativeness, Trust |
+| Technical Foundations | 15% | HTTPS, SSR, Core Web Vitals, security headers |
+| Structured Data | 10% | JSON-LD coverage and schema quality |
+| Platform Optimization | 10% | Per-platform readiness (ChatGPT, Perplexity, etc.) |
 
-发现层新增字段：
+---
 
-- `page_profiles`
-- `site_snapshot_version`
+## Features
 
-当前版本号为：
+- **Site Snapshot** — crawls homepage, about, services, articles, and case studies in a single pass
+- **5 Audit Modules** — visibility, technical, content, schema, platform
+- **Async Task API** — submit jobs, poll status, export Markdown reports
+- **Discovery Reuse** — decouple crawling from scoring for batch/pipeline workflows
+- **AI Enhancement** — optional LLM-powered analysis for visibility, content, platform, and summary
+- **Semrush Integration** — plug in backlink authority signals via the Semrush API
+- **Docker ready** — single `docker run` to production
 
-- `snapshot-v2`
+---
 
-### 2. 审计层：5 个执行模块
+## Quick Start
 
-系统仍保持 5 个审计模块，便于兼容现有 API 与任务编排：
+### Prerequisites
 
-- `visibility`
-- `technical`
-- `content`
-- `schema`
-- `platform`
+- Python 3.10+
+- Git
 
-所有模块统一新增元数据：
-
-- `module_key`
-- `input_pages`
-- `duration_ms`
-- `confidence`
-- `processing_notes`
-
-### 3. 汇总层：6 个 GEO 业务维度
-
-汇总层不是简单把 5 个模块平均，而是按 GEO 业务口径重组：
-
-- `AI Citability & Visibility`
-- `Brand Authority Signals`
-- `Content Quality & E-E-A-T`
-- `Technical Foundations`
-- `Structured Data`
-- `Platform Optimization`
-
-其中：
-
-- `visibility` 被拆成 `AI 可见性` 和 `品牌权威`
-- `content` 被汇总成 `内容与 E-E-A-T`
-- 其余模块一对一映射到汇总维度
-
-## Discovery 复用机制
-
-`FullAuditService.audit_full(...)` 已支持可选 `discovery` 参数。
-
-行为如下：
-
-- 如果传入 `discovery`，则直接复用，不重复执行 `discover(url)`
-- 如果未传入 `discovery`，才执行新的站点发现
-
-这让异步任务、批量流程和外部编排系统可以把发现层与审计层解耦。
-
-## GEO 评分口径
-
-### AI 可见性 `25%`
-
-来源字段：
-
-- `visibility.ai_visibility_score`
-
-当前公式：
-
-```text
-0.32 × AI crawler 放行率
-+ 0.40 × snapshot citability
-+ 0.12 × llms.txt 有效性
-+ 0.16 × 基础实体存在
-```
-
-说明：
-
-- `citability` 不再只看首页
-- 会同时输出：
-  - `homepage_citability`
-  - `best_page_citability`
-  - `citation_probability`
-- `citation_probability` 取值：
-  - `LOW`
-  - `MEDIUM`
-  - `HIGH`
-
-### 品牌权威 `20%`
-
-来源字段：
-
-- `visibility.brand_authority_score`
-
-当前公式：
-
-```text
-0.25 × 外链质量
-+ 0.25 × 品牌提及覆盖
-+ 0.25 × sameAs / Entity 一致性
-+ 0.25 × 企业信息完整度
-```
-
-说明：
-
-- 当前品牌权威仍由 `visibility` 输出
-- 代码层已预留 `BrandAuthorityService`
-- 这为后续独立品牌权威模块保留了服务边界
-
-### 内容与 E-E-A-T `20%`
-
-公式：
-
-```text
-(content_score + experience_score + expertise_score + authoritativeness_score + trustworthiness_score) / 5
-```
-
-内容评估优先复用 `discovery.page_profiles`，避免为了内容模块重复抓取同一批关键页面。
-
-### 技术基础 `15%`
-
-来源字段：
-
-- `technical.technical_score`
-
-已正式纳入：
-
-- HTTPS
-- SSR
-- Meta / Canonical
-- Sitemap / robots 指令
-- `response_time_ms`
-- render-blocking
-- security headers
-- image optimization
-- Open Graph / Twitter Card / hreflang
-
-### 结构化数据 `10%`
-
-来源字段：
-
-- `schema.structured_data_score`
-
-优先复用 snapshot 中各页面的 JSON-LD 数据，而不是二次抓取。
-
-### 平台适配 `10%`
-
-来源字段：
-
-- `platform.platform_optimization_score`
-
-已从“简单平均”升级成“平台战略权重汇总”：
-
-- ChatGPT Web Search `30%`
-- Google AI Overviews `20%`
-- Perplexity `20%`
-- Google Gemini `15%`
-- Bing Copilot `15%`
-
-## Semrush Backlinks 接入
-
-项目支持使用 [Semrush Backlinks Overview](https://developer.semrush.com/api/seo/backlinks/#backlinks-overview) 作为品牌权威的站外信号源。
-
-环境变量：
-
-```env
-SEMRUSH_ENABLED=true
-SEMRUSH_API_KEY=
-SEMRUSH_BASE_URL=https://api.semrush.com/
-SEMRUSH_TARGET_TYPE=root_domain
-```
-
-当前会用到的指标包括：
-
-- `ascore`
-- `backlinks_num`
-- `domains_num`
-- `ips_num`
-- `ipclass_c_num`
-- `follows_num`
-- `nofollows_num`
-- `sponsored_num`
-- `ugc_num`
-
-如果未配置 Semrush：
-
-- 不会直接硬扣品牌权威总分
-- 会跳过外链项，并对剩余品牌项重算权重
-
-## 会员 AI 增强
-
-`premium` 模式下会对以下模块执行规则结果增强：
-
-- `visibility`
-- `content`
-- `platform`
-- `summary`
-
-以下模块仍保持规则制：
-
-- `technical`
-- `schema`
-
-这样可以优先保证确定性与可解释性。
-
-## 运行
-
-### 本地运行
+Clone the repository:
 
 ```bash
-python -m venv .venv
-.venv\\Scripts\\activate
+git clone https://github.com/your-org/geo-audit-service.git
+cd geo-audit-service
+cp .env.example .env
+```
+
+---
+
+### macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8023
 ```
 
-Demo 地址：
+---
 
-```text
-http://127.0.0.1:8023
+### Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8023
 ```
+
+---
+
+### Windows
+
+**Command Prompt (cmd)**
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8023
+```
+
+**PowerShell**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8023
+```
+
+> If you see a PowerShell execution policy error, run:
+> `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+
+---
 
 ### Docker
 
+#### Option A — Load pre-built image (no Docker Hub required)
+
+> This is useful if you cannot access Docker Hub from your network.
+
+**Linux / AMD64**
+
+```bash
+wget https://www.idtcpack.com/geo-audit-service-amd64.tar
+docker load -i geo-audit-service-amd64.tar
+```
+
+**macOS / ARM (Apple Silicon)**
+
+```bash
+wget https://www.idtcpack.com/geo-audit-service-arm.tar
+docker load -i geo-audit-service-arm.tar
+```
+
+#### Option B — Build from source
+
 ```bash
 docker build -t geo-audit-service .
+```
+
+#### Run
+
+After loading or building the image:
+
+```bash
 docker run -d \
   --name geo-audit-service \
   -p 8023:8023 \
@@ -275,9 +147,15 @@ docker run -d \
   geo-audit-service:latest
 ```
 
-## 环境变量
+Once running, open [http://127.0.0.1:8023/docs](http://127.0.0.1:8023/docs) to explore the interactive API docs.
 
-### 基础
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in the values you need.
+
+### Core
 
 ```env
 APP_ENV=development
@@ -295,99 +173,190 @@ DEFAULT_USER_AGENT=GEOAuditBot/1.0 (+https://example.com/bot)
 ALLOW_PLAYWRIGHT=false
 ```
 
-### AI 增强
+### AI Enhancement (optional)
+
+Enables LLM-powered analysis for visibility, content, platform, and summary modules.
 
 ```env
 LLM_REQUEST_TIMEOUT_SECONDS=30
 DEFAULT_OPENROUTER_MODEL=openai/gpt-4.1
-OPENROUTER_API_KEY=
+OPENROUTER_API_KEY=your_key_here
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_SITE_URL=http://127.0.0.1:8023
 OPENROUTER_APP_NAME=geo-audit-service
 ```
 
-### Semrush
+### Semrush Backlinks (optional)
+
+Adds external backlink authority signals to the Brand Authority score.
 
 ```env
 SEMRUSH_ENABLED=true
-SEMRUSH_API_KEY=
+SEMRUSH_API_KEY=your_key_here
 SEMRUSH_BASE_URL=https://api.semrush.com/
 SEMRUSH_TARGET_TYPE=root_domain
 ```
 
-## API
+> When `SEMRUSH_ENABLED=false`, the backlink sub-score is skipped and remaining brand authority weights are redistributed automatically.
 
-统一响应包裹：
+---
+
+## API Reference
+
+All responses use a unified envelope:
 
 ```json
-{ "success": true, "data": {} }
-{ "success": false, "message": "...", "errors": {} }
+{ "success": true, "data": { ... } }
+{ "success": false, "message": "...", "errors": { ... } }
 ```
 
-### 推荐：异步任务模式
+### Recommended: Async Task Mode
 
-提交审计任务：
+**Submit an audit job**
 
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","mode":"standard"}'
+  -d '{"url": "https://example.com", "mode": "standard"}'
 ```
 
-查询任务：
+**Poll for status**
 
 ```bash
 curl http://127.0.0.1:8023/api/v1/tasks/{task_id}
 ```
 
-导出报告：
+**Export Markdown report**
 
 ```bash
 curl -L http://127.0.0.1:8023/api/v1/tasks/{task_id}/report -o report.md
 ```
 
-### 直接审计
+---
 
-完整审计：
+### Direct Audit (synchronous)
 
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","mode":"standard"}'
+  -d '{"url": "https://example.com", "mode": "standard"}'
 ```
 
-如果你已经持有 discovery 结果，也可以直接传入复用：
+Pass an existing discovery result to skip re-crawling:
 
 ```json
 {
   "url": "https://example.com",
   "mode": "standard",
-  "discovery": {
-    "...": "已有 discovery 结果"
-  }
+  "discovery": { "...": "existing discovery payload" }
 }
 ```
 
-### 发现层
+---
+
+### Discovery Only
+
+Run just the site snapshot layer without a full audit:
 
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/discovery \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com"}'
+  -d '{"url": "https://example.com"}'
 ```
 
-返回结果中会包含：
+Response includes `page_profiles` and `site_snapshot_version` for all crawled pages.
 
-- `page_profiles`
-- `site_snapshot_version`
+---
 
-## 当前状态
+## Architecture
 
-这套实现的目标不是替换现有 API，而是在保持兼容的前提下，让系统具备更强的 GEO 审计能力：
+```
+┌─────────────────────────────────────────────┐
+│              API Layer (FastAPI)            │
+│  /tasks  /audit/full  /discovery  /report  │
+└────────────────────┬────────────────────────┘
+                     │
+         ┌───────────▼───────────┐
+         │   DiscoveryService    │  ← Site Snapshot (v2)
+         │  homepage / about /   │
+         │  service / article /  │
+         │  case_study           │
+         └───────────┬───────────┘
+                     │  page_profiles[]
+         ┌───────────▼───────────────────────────┐
+         │           Audit Modules               │
+         │  visibility · technical · content     │
+         │  schema · platform                    │
+         └───────────┬───────────────────────────┘
+                     │  module results + metadata
+         ┌───────────▼───────────┐
+         │    Summary Engine     │  ← 6 GEO dimensions
+         │    + AI Enhancement   │    (premium mode)
+         └───────────────────────┘
+```
 
-- 发现层从首页检查升级为站点快照
-- 审计层统一模块元数据
-- Citability 升级为可引用概率评估
-- 品牌权威具备独立一级维度与独立服务预留
-- 平台适配具备战略权重
-- Demo 与 README 已同步为 GEO 报告口径
+### Scoring — AI Visibility (25%)
+
+```
+0.32 × AI crawler allowance
++ 0.40 × snapshot citability (multi-page)
++ 0.12 × llms.txt validity
++ 0.16 × entity signal presence
+```
+
+Citability outputs: `homepage_citability`, `best_page_citability`, `citation_probability` (`LOW` / `MEDIUM` / `HIGH`)
+
+### Scoring — Brand Authority (20%)
+
+```
+0.25 × backlink quality (Semrush)
++ 0.25 × brand mention coverage
++ 0.25 × sameAs / entity consistency
++ 0.25 × business information completeness
+```
+
+### Scoring — Platform Optimization (10%)
+
+| Platform | Weight |
+|---|---|
+| ChatGPT Web Search | 30% |
+| Google AI Overviews | 20% |
+| Perplexity | 20% |
+| Google Gemini | 15% |
+| Bing Copilot | 15% |
+
+---
+
+## Audit Modes
+
+| Mode | Description |
+|---|---|
+| `standard` | Rule-based scoring across all 5 modules |
+| `premium` | Standard + LLM enhancement for visibility, content, platform, and summary |
+
+`technical` and `schema` modules always use deterministic rule-based scoring for consistency.
+
+---
+
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Commit your changes (`git commit -m 'feat: add your feature'`)
+4. Push and open a Pull Request
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+Built for the AI search era · [Live Demo](https://www.idtcpack.com/geo/brand-site-grader)
+
+</div>
