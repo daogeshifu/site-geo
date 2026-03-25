@@ -31,13 +31,16 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Show branches for debug
+      - name: Verify current branch
         run: |
-          git branch -a
+          git branch --show-current
           git remote -v
 
-      - name: Push to Gitee
+      - name: Push main branch to Gitee
         run: |
           git remote add gitee git@gitee.com:adsuperman/site-geo.git
           git push gitee main:main --force
+
+      - name: Push tags to Gitee
+        run: |
           git push gitee --tags --force
