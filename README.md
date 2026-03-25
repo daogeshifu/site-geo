@@ -44,6 +44,40 @@ It builds a full **Site Snapshot** across key pages, then scores your site acros
 
 ---
 
+## Preview
+
+A quick look at the GEO Audit workflow and report screens:
+
+### 1. Overview
+
+![Overview](./preview/1%E3%80%81overview.png)
+
+### 2. Summary
+
+![Summary](./preview/2%E3%80%81summary.png)
+
+### 3. Issues & TODO
+
+![Issues and TODO](./preview/3%E3%80%81issue%26todo.png)
+
+### 4. How to Fix
+
+![How to Fix](./preview/4%E3%80%81how-to-fix.png)
+
+### 5. Key Snapshot
+
+![Key Snapshot](./preview/5%E3%80%81key-snapshot.png)
+
+### 6. Platform
+
+![Platform](./preview/6%E3%80%81platform.png)
+
+### 7. Score Rule
+
+![Score Rule](./preview/7%E3%80%81score-rule.png)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
