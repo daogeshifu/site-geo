@@ -46,6 +46,17 @@ class SummarizerService:
             / 5
         )
 
+    def _dimension_display_name(self, key: str, feedback_lang: str) -> str:
+        labels = {
+            "AI Citability & Visibility": {"en": "AI Citability & Visibility", "zh": "AI 可见性"},
+            "Brand Authority Signals": {"en": "Brand Authority Signals", "zh": "品牌权威"},
+            "Content Quality & E-E-A-T": {"en": "Content Quality & E-E-A-T", "zh": "内容与 E-E-A-T"},
+            "Technical Foundations": {"en": "Technical Foundations", "zh": "技术基础"},
+            "Structured Data": {"en": "Structured Data", "zh": "结构化数据"},
+            "Platform Optimization": {"en": "Platform Optimization", "zh": "平台适配"},
+        }
+        return labels.get(key, {}).get(feedback_lang, key)
+
     def _visibility_dimension_views(self, visibility: VisibilityAuditResult) -> tuple[dict, dict]:
         """将 visibility 模块结果拆分为"AI 可见性"和"品牌权威"两个独立维度视图
 
@@ -214,10 +225,10 @@ class SummarizerService:
         ai_dimension, brand_dimension = self._visibility_dimension_views(visibility)
         # 构建 6 个维度视图（中文标签便于展示）
         dimensions = [
-            ("AI 可见性", ai_dimension),
-            ("品牌权威", brand_dimension),
+            ("AI Citability & Visibility", ai_dimension),
+            ("Brand Authority Signals", brand_dimension),
             (
-                "内容与 E-E-A-T",
+                "Content Quality & E-E-A-T",
                 {
                     "module": "content",
                     "score": content_eeat_score,
@@ -226,7 +237,7 @@ class SummarizerService:
                 },
             ),
             (
-                "技术基础",
+                "Technical Foundations",
                 {
                     "module": "technical",
                     "score": technical.technical_score,
@@ -235,7 +246,7 @@ class SummarizerService:
                 },
             ),
             (
-                "结构化数据",
+                "Structured Data",
                 {
                     "module": "schema",
                     "score": schema.structured_data_score,
@@ -244,7 +255,7 @@ class SummarizerService:
                 },
             ),
             (
-                "平台适配",
+                "Platform Optimization",
                 {
                     "module": "platform",
                     "score": platform.platform_optimization_score,
@@ -261,11 +272,12 @@ class SummarizerService:
         prioritized_action_plan: list[ActionPlanItem] = []
 
         for index, (label, payload) in enumerate(ordered_dimensions):
+            display_label = self._dimension_display_name(label, feedback_lang)
             # 提取每个维度的顶部问题（合并后最多 5 条）
             for issue in payload["issues"]:
                 if len(top_issues) >= 5:
                     break
-                formatted = f"{label}: {issue}"
+                formatted = f"{display_label}: {issue}"
                 if formatted not in top_issues:
                     top_issues.append(formatted)
             # 提取快速行动建议（最多 5 条）
@@ -281,14 +293,14 @@ class SummarizerService:
                         priority="high" if index == 0 else "medium" if index < 3 else "low",
                         module=payload["module"],
                         action=payload["recommendations"][0],
-                        rationale=f"{label} is one of the weakest scoring dimensions and is constraining the composite GEO score.",
+                        rationale=f"{display_label} is one of the weakest scoring dimensions and is constraining the composite GEO score.",
                     )
                 )
 
         # 生成文字摘要
         summary_text = (
             f"{discovery.domain or url} currently scores {composite_score}/100 for GEO readiness. "
-            f"The biggest gaps are in {ordered_dimensions[0][0]} and {ordered_dimensions[1][0]}."
+            f"The biggest gaps are in {self._dimension_display_name(ordered_dimensions[0][0], feedback_lang)} and {self._dimension_display_name(ordered_dimensions[1][0], feedback_lang)}."
         )
         if observation and observation.provided:
             summary_text += " Optional observation data was uploaded and is displayed separately without affecting the score."
@@ -303,7 +315,10 @@ class SummarizerService:
             composite_geo_score=composite_score,
             status=status,
             audit_mode=mode,
-            dimensions={label: payload for label, payload in dimensions},
+            dimensions={
+                label: {"display_name": self._dimension_display_name(label, feedback_lang), **payload}
+                for label, payload in dimensions
+            },
             weighted_scores=weighted_scores,
             summary=summary_text,
             top_issues=top_issues,

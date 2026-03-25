@@ -369,9 +369,9 @@ If you want page-level diagnostics, enable `full_audit` and set `max_pages`:
 Task mode and direct full-audit mode both support:
 
 - `feedback_lang: "en"`: default
-- `feedback_lang: "zh"`: issues, recommendations, summaries, and most user-facing text try to return in Simplified Chinese
+- `feedback_lang: "zh"`: issues, recommendations, summaries, dimension display names, metric explanations, and most user-facing values try to return in Simplified Chinese
 
-JSON keys remain in English.
+JSON keys remain in English. Only user-facing values are localized.
 
 When enabled, the response adds:
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.models.requests import UrlRequest
 from app.models.responses import success_response
 from app.services.discovery_service import DiscoveryService
+from app.utils.localization import localize_payload
 
 # 站点发现路由，挂载在 /api/v1 前缀下
 router = APIRouter(prefix="/api/v1", tags=["discovery"])
@@ -27,5 +28,5 @@ async def run_discovery(request: UrlRequest) -> dict:
     Returns:
         DiscoveryResult 的序列化字典，包含主页信息、爬虫配置、站点信号等
     """
-    result = await discovery_service.discover(request.url)
-    return success_response(result.model_dump())
+    result = await discovery_service.discover(request.url, full_audit=request.full_audit, max_pages=request.max_pages)
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))

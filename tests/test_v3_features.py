@@ -1,3 +1,5 @@
+import asyncio
+
 from app.models.audit import (
     ContentAuditResult,
     PageDiagnosticResult,
@@ -19,6 +21,7 @@ from app.models.discovery import (
 )
 from app.services.report_service import ReportService
 from app.services.cache_service import CacheService
+from app.services.summarizer_service import SummarizerService
 from app.utils.url_utils import get_scope_root, is_internal_url, is_likely_homepage_url
 from app.utils.localization import localize_payload
 
@@ -122,3 +125,54 @@ def test_report_renders_page_diagnostics_and_notices() -> None:
     )
     assert "## Page Diagnostics (Full Audit)" in markdown
     assert "Non-homepage input detected" in markdown
+
+
+def test_summarizer_uses_english_dimension_keys() -> None:
+    service = SummarizerService()
+    discovery = DiscoveryResult(
+        url="https://example.com/",
+        normalized_url="https://example.com/",
+        final_url="https://example.com/",
+        site_root_url="https://example.com",
+        scope_root_url="https://example.com/",
+        domain="example.com",
+        fetch=FetchMetadata(final_url="https://example.com/", status_code=200, headers={}, response_time_ms=120),
+        homepage=HomepageExtract(title="Example", lang="en"),
+        robots=RobotsResult(url="https://example.com/robots.txt", exists=True),
+        sitemap=SitemapResult(url="https://example.com/sitemap.xml", exists=True),
+        llms=LlmsResult(url="https://example.com/llms.txt", exists=False),
+        business_type="saas",
+        key_pages=KeyPages(),
+        schema_summary={},
+        site_signals=SiteSignals(),
+    )
+    summary = asyncio.run(
+        service.summarize(
+            url="https://example.com/",
+            discovery=discovery,
+            visibility=VisibilityAuditResult(score=60, status="fair", ai_visibility_score=60, brand_authority_score=60),
+            technical=TechnicalAuditResult(score=60, status="fair", technical_score=60),
+            content=ContentAuditResult(
+                score=60,
+                status="fair",
+                content_score=60,
+                experience_score=60,
+                expertise_score=60,
+                authoritativeness_score=60,
+                trustworthiness_score=60,
+            ),
+            schema=SchemaAuditResult(score=60, status="fair", structured_data_score=60),
+            platform=PlatformAuditResult(score=60, status="fair", platform_optimization_score=60, platform_scores={}),
+            feedback_lang="zh",
+        )
+    )
+    assert "AI Citability & Visibility" in summary.dimensions
+    assert summary.dimensions["AI Citability & Visibility"]["display_name"] == "AI 可见性"
+    assert summary.metric_definitions[0].name == "AI Citability & Visibility"
+
+    localized = localize_payload(summary.model_dump(), "zh")
+    assert "AI Citability & Visibility" in localized["dimensions"]
+    assert localized["dimensions"]["AI Citability & Visibility"]["display_name"] == "AI 可见性"
+    assert localized["metric_definitions"][0]["name"] == "AI 可见性"
+    assert localized["metric_definitions"][-1]["name"] == "观测层"
+    assert localized["metric_definitions"][0]["formula"] == "爬虫可达性 + 可引用结构 + llms 指引 + 基础实体存在"

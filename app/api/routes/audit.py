@@ -13,6 +13,7 @@ from app.services.schema_service import SchemaService
 from app.services.summarizer_service import SummarizerService
 from app.services.technical_service import TechnicalService
 from app.services.visibility_service import VisibilityService
+from app.utils.localization import localize_payload
 
 # 审计路由，挂载在 /api/v1 前缀下，包含所有 GEO 审计模块端点
 router = APIRouter(prefix="/api/v1", tags=["audit"])
@@ -50,8 +51,9 @@ async def audit_visibility(request: AuditModuleRequest) -> dict:
         request.discovery,
         mode=request.mode,
         llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
 
 @router.post("/audit/technical")
@@ -73,7 +75,7 @@ async def audit_technical(request: AuditModuleRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
 
 @router.post("/audit/content")
@@ -94,8 +96,9 @@ async def audit_content(request: AuditModuleRequest) -> dict:
         request.discovery,
         mode=request.mode,
         llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
 
 @router.post("/audit/schema")
@@ -117,7 +120,7 @@ async def audit_schema(request: AuditModuleRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
 
 @router.post("/audit/platform")
@@ -138,8 +141,9 @@ async def audit_platform(request: AuditModuleRequest) -> dict:
         request.discovery,
         mode=request.mode,
         llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
 
 @router.post("/audit/full")
@@ -165,7 +169,7 @@ async def audit_full(request: FullAuditRequest) -> dict:
         max_pages=request.max_pages,
         feedback_lang=request.feedback_lang,
     )
-    return success_response(result)
+    return success_response(localize_payload(result, request.feedback_lang))
 
 
 @router.post("/audit/summarize")
@@ -195,4 +199,4 @@ async def summarize_audit(request: SummarizeRequest) -> dict:
         llm_config=request.llm,
         feedback_lang=request.feedback_lang,
     )
-    return success_response(result.model_dump())
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
