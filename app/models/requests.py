@@ -17,6 +17,7 @@ from app.models.discovery import DiscoveryResult
 
 # 审计模式：standard（规则驱动）或 premium（LLM 增强）
 AuditMode = Literal["standard", "premium"]
+FeedbackLang = Literal["en", "zh"]
 # 目前仅支持 OpenRouter 作为 LLM 提供商
 LLMProvider = Literal["openrouter"]
 
@@ -41,6 +42,7 @@ class UrlRequest(BaseModel):
     observation: ObservationInput | None = None  # 可选观测层输入，不参与评分
     full_audit: bool = False
     max_pages: int = Field(default=12, ge=5, le=50)
+    feedback_lang: FeedbackLang = "en"
 
 
 class AuditModuleRequest(UrlRequest):

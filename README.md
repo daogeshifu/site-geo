@@ -263,7 +263,7 @@ All responses use a unified envelope:
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com", "mode": "standard", "full_audit": true, "max_pages": 12}'
+  -d '{"url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12}'
 ```
 
 Full `tasks/audit` example:
@@ -272,6 +272,7 @@ Full `tasks/audit` example:
 {
   "url": "https://www.ecoflow.com/de/",
   "mode": "premium",
+  "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 20,
   "force_refresh": false,
@@ -301,7 +302,7 @@ curl -L http://127.0.0.1:8023/api/v1/tasks/{task_id}/report -o report.md
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com", "mode": "standard", "full_audit": true, "max_pages": 12}'
+  -d '{"url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12}'
 ```
 
 Full `audit/full` example:
@@ -310,6 +311,7 @@ Full `audit/full` example:
 {
   "url": "https://www.ecoflow.com/de/",
   "mode": "standard",
+  "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12
 }
@@ -321,6 +323,7 @@ Pass an existing discovery result to skip re-crawling:
 {
   "url": "https://example.com",
   "mode": "standard",
+  "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12,
   "discovery": { "...": "existing discovery payload" }
@@ -355,10 +358,20 @@ If you want page-level diagnostics, enable `full_audit` and set `max_pages`:
 {
   "url": "https://example.com",
   "mode": "standard",
+  "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12
 }
 ```
+
+### Feedback Language
+
+Task mode and direct full-audit mode both support:
+
+- `feedback_lang: "en"`: default
+- `feedback_lang: "zh"`: issues, recommendations, summaries, and most user-facing text try to return in Simplified Chinese
+
+JSON keys remain in English.
 
 When enabled, the response adds:
 

@@ -186,6 +186,7 @@ class SummarizerService:
         observation: ObservationResult | None = None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        feedback_lang: str = "en",
     ) -> SummaryResult:
         """计算复合 GEO 评分并生成汇总报告
 
@@ -318,5 +319,13 @@ class SummarizerService:
             result.llm_model = llm_config.model
         # premium 模式：LLM 生成更丰富的执行摘要和行动计划
         if mode == "premium":
-            result = await self.llm_enrichment.enrich_summary(discovery, visibility, content, platform, result, llm_config)
+            result = await self.llm_enrichment.enrich_summary(
+                discovery,
+                visibility,
+                content,
+                platform,
+                result,
+                llm_config,
+                feedback_lang=feedback_lang,
+            )
         return result

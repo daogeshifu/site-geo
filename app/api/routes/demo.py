@@ -427,6 +427,7 @@ HTML = """<!doctype html>
       border: 1px solid var(--border); border-radius: 11px;
       padding: 11px 12px; background: #fff;
       font-size: 12.5px; line-height: 1.65;
+      color:black;
     }
     .report-list-item strong { color: var(--text); }
     .report-action-list {
@@ -796,6 +797,13 @@ HTML = """<!doctype html>
             </div>
           </div>
           <div class="field">
+            <label>反馈语言</label>
+            <select id="feedback-lang">
+              <option value="en">English</option>
+              <option value="zh">简体中文</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="force" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
               <input id="force" type="checkbox" />
               <span class="toggle-lbl">强制刷新缓存</span>
@@ -1081,6 +1089,7 @@ HTML = """<!doctype html>
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
             <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
             <div class="param-row"><span class="param-key">force_refresh</span><span class="param-type">boolean</span><span class="param-desc">true 则跳过 7 天缓存强制重新审计</span></div>
+            <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；选择 <code>zh</code> 时，问题、建议、摘要等尽量返回中文</span></div>
             <div class="param-row"><span class="param-key">full_audit</span><span class="param-type">boolean</span><span class="param-desc">可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></span></div>
             <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">仅 full audit 生效，范围 5-50，默认 12</span></div>
             <div class="param-row"><span class="param-key">observation</span><span class="param-type">object</span><span class="param-desc">可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</span></div>
@@ -1090,6 +1099,7 @@ HTML = """<!doctype html>
           <div class="code-snippet"><pre>{
   "url": "https://example.com",
   "mode": "premium",
+  "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12,
   "force_refresh": false,
@@ -1167,10 +1177,10 @@ HTML = """<!doctype html>
             <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/full</code><span class="param-desc" style="margin-left:4px">全量同步审计（含 summary，无缓存）</span></div>
           </div>
           <div class="code-snippet"><pre>// 单模块请求体（Body 字段相同）
-{ "url": "https://example.com", "mode": "standard", "full_audit": true, "max_pages": 12 }
+{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12 }
 
 // premium 模式下可附加 LLM 配置
-{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "full_audit": true, "max_pages": 20,
+{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20,
   "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" } }</pre></div>
         </div>
       </div>
@@ -1876,7 +1886,8 @@ function renderReport(task) {
       url: $('url').value.trim(),
       mode,
       force_refresh: $('force').checked,
-      full_audit: $('full-audit').checked
+      full_audit: $('full-audit').checked,
+      feedback_lang: $('feedback-lang').value
     };
     if ($('full-audit').checked) {
       body.max_pages = Number($('max-pages').value || 12);

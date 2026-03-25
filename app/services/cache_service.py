@@ -37,6 +37,7 @@ class CacheService:
         llm_config: LLMConfig | None = None,
         full_audit: bool = False,
         max_pages: int = 12,
+        feedback_lang: str = "en",
     ) -> tuple[str, str, str]:
         """生成缓存键，返回 (sha256_digest, normalized_url, domain)
 
@@ -54,7 +55,7 @@ class CacheService:
             else "none"
         )
         normalized_pages = max_pages if full_audit else 5
-        raw_key = f"{scope_key}|{mode}|{provider}|{model}|full={int(full_audit)}|pages={normalized_pages}"
+        raw_key = f"{scope_key}|{mode}|{provider}|{model}|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}"
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return digest, normalized_url, domain
 
@@ -84,6 +85,7 @@ class CacheService:
         normalized_url: str,
         domain: str,
         mode: str,
+        feedback_lang: str,
         full_audit: bool,
         max_pages: int,
         payload: dict[str, Any],
@@ -97,6 +99,7 @@ class CacheService:
             normalized_url=normalized_url,
             domain=domain,
             mode=mode,
+            feedback_lang=feedback_lang,
             full_audit=full_audit,
             max_pages=max_pages,
             # premium 模式记录 LLM 提供商和模型，便于缓存管理和调试

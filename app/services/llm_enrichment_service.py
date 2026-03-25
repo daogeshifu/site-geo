@@ -64,11 +64,17 @@ class LLMEnrichmentService:
         if note not in result.processing_notes:
             result.processing_notes.append(note)
 
+    def _language_instruction(self, feedback_lang: str) -> str:
+        if feedback_lang == "zh":
+            return " Write all user-facing text fields in Simplified Chinese, while keeping JSON keys in English."
+        return ""
+
     async def enrich_visibility(
         self,
         discovery: DiscoveryResult,
         result: VisibilityAuditResult,
         llm_config: LLMConfig | None,
+        feedback_lang: str = "en",
     ) -> VisibilityAuditResult:
         """LLM 增强 AI 可见性审计：评估品牌/实体信号和 AI 引用就绪度
 
@@ -77,6 +83,7 @@ class LLMEnrichmentService:
         system_prompt = (
             "You are a GEO audit reviewer. Analyze homepage brand/entity signals and AI citation readiness. "
             "Return JSON with keys: summary, score_adjustment, issues, strengths, recommendations, observations."
+            + self._language_instruction(feedback_lang)
         )
         payload = {
             "domain": discovery.domain,
@@ -119,6 +126,7 @@ class LLMEnrichmentService:
         discovery: DiscoveryResult,
         result: ContentAuditResult,
         llm_config: LLMConfig | None,
+        feedback_lang: str = "en",
     ) -> ContentAuditResult:
         """LLM 增强内容质量审计：评估 E-E-A-T 深度、专家视角和引用就绪度
 
@@ -128,6 +136,7 @@ class LLMEnrichmentService:
             "You are a senior GEO content strategist. Review the provided page excerpts and assess content quality, "
             "E-E-A-T, expert voice, and citation readiness. "
             "Return JSON with keys: summary, content_score_adjustment, eeat_adjustments, issues, strengths, recommendations, observations."
+            + self._language_instruction(feedback_lang)
         )
         payload = {
             "domain": discovery.domain,
@@ -174,6 +183,7 @@ class LLMEnrichmentService:
         discovery: DiscoveryResult,
         result: PlatformAuditResult,
         llm_config: LLMConfig | None,
+        feedback_lang: str = "en",
     ) -> PlatformAuditResult:
         """LLM 增强平台适配审计：对 5 大平台进行深度差距分析
 
@@ -183,6 +193,7 @@ class LLMEnrichmentService:
             "You are a GEO platform optimization strategist. Evaluate readiness for ChatGPT, Google AI Mode, "
             "Google AI Overviews, Perplexity, Gemini, and Grok. "
             "Return JSON with keys: summary, platform_adjustments, issues, strengths, recommendations."
+            + self._language_instruction(feedback_lang)
         )
         payload = {
             "domain": discovery.domain,
@@ -242,6 +253,7 @@ class LLMEnrichmentService:
         platform: PlatformAuditResult,
         result: SummaryResult,
         llm_config: LLMConfig | None,
+        feedback_lang: str = "en",
     ) -> SummaryResult:
         """LLM 增强汇总报告：生成更丰富的执行摘要和优先行动计划
 
@@ -250,6 +262,7 @@ class LLMEnrichmentService:
         system_prompt = (
             "You are a principal GEO consultant writing an executive summary. "
             "Return JSON with keys: executive_summary, top_issues, quick_wins, prioritized_action_plan."
+            + self._language_instruction(feedback_lang)
         )
         payload = {
             "domain": discovery.domain,

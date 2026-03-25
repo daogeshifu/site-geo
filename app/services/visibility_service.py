@@ -38,6 +38,7 @@ class VisibilityService(AuditBaseService):
         discovery=None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        feedback_lang: str = "en",
     ) -> VisibilityAuditResult:
         """执行 AI 可见性审计
 
@@ -154,7 +155,7 @@ class VisibilityService(AuditBaseService):
 
         # premium 模式：使用 LLM 微调评分并增加深度洞察
         if mode == "premium":
-            result = await self.llm_enrichment.enrich_visibility(resolved, result, llm_config)
+            result = await self.llm_enrichment.enrich_visibility(resolved, result, llm_config, feedback_lang=feedback_lang)
 
         # 置信度随覆盖页面数增加（最多 5 页），llms.txt 存在额外加 0.05
         result = self.finalize_audit_result(

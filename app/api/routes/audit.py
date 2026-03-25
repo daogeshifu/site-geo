@@ -163,6 +163,7 @@ async def audit_full(request: FullAuditRequest) -> dict:
         observation=request.observation,
         full_audit=request.full_audit,
         max_pages=request.max_pages,
+        feedback_lang=request.feedback_lang,
     )
     return success_response(result)
 
@@ -192,5 +193,6 @@ async def summarize_audit(request: SummarizeRequest) -> dict:
         observation=request.observation_result or observation_service.build(request.observation),
         mode=request.mode,
         llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
     )
     return success_response(result.model_dump())

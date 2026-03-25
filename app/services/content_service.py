@@ -93,6 +93,7 @@ class ContentService(AuditBaseService):
         discovery=None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        feedback_lang: str = "en",
     ) -> ContentAuditResult:
         """执行内容质量审计
 
@@ -296,7 +297,7 @@ class ContentService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         # premium 模式：LLM 评估 E-E-A-T 深度并微调各维度评分（±15 点上限）
         if mode == "premium":
-            result = await self.llm_enrichment.enrich_content(resolved, result, llm_config)
+            result = await self.llm_enrichment.enrich_content(resolved, result, llm_config, feedback_lang=feedback_lang)
         # 置信度随覆盖页面数增加（最多 4 个关键页）
         result = self.finalize_audit_result(
             result,

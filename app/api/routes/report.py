@@ -57,6 +57,7 @@ async def export_report(request: ReportExportRequest) -> dict:
         observation=request.observation_result or observation_service.build(request.observation),
         mode=request.mode,
         llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
     )
     if not summary.observation and request.observation_result:
         summary.observation = request.observation_result

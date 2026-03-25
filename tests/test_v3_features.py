@@ -20,6 +20,7 @@ from app.models.discovery import (
 from app.services.report_service import ReportService
 from app.services.cache_service import CacheService
 from app.utils.url_utils import get_scope_root, is_internal_url, is_likely_homepage_url
+from app.utils.localization import localize_payload
 
 
 def test_homepage_detection_accepts_locale_homepages() -> None:
@@ -47,6 +48,16 @@ def test_cache_key_changes_with_scope() -> None:
 
     assert de_path_key != fr_path_key
     assert de_path_key != de_subdomain_key
+
+
+def test_localize_payload_translates_known_messages_to_zh() -> None:
+    payload = {
+        "issues": ["robots.txt blocks one or more major AI crawlers."],
+        "recommendations": ["Add FAQ sections to commercial pages and high-intent landing pages."],
+    }
+    localized = localize_payload(payload, "zh")
+    assert localized["issues"][0] == "robots.txt 阻止了一个或多个主要 AI 爬虫。"
+    assert localized["recommendations"][0] == "在商业页和高意向落地页增加 FAQ 模块。"
 
 
 def test_report_renders_page_diagnostics_and_notices() -> None:

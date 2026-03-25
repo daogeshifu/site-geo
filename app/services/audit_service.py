@@ -98,6 +98,7 @@ class FullAuditService(AuditBaseService):
         observation=None,
         full_audit: bool = False,
         max_pages: int = 12,
+        feedback_lang: str = "en",
     ) -> dict[str, Any]:
         """执行完整 GEO 审计流程
 
@@ -127,11 +128,11 @@ class FullAuditService(AuditBaseService):
 
         # 5 个审计模块并行执行，共享已解析的 discovery
         visibility, technical, content, schema, platform = await asyncio.gather(
-            visibility_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
+            visibility_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
             technical_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
-            content_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
+            content_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
             schema_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
-            platform_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
+            platform_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
         )
 
         # 汇总：根据 5 个模块结果计算复合 GEO 评分
@@ -146,6 +147,7 @@ class FullAuditService(AuditBaseService):
             observation=self.observation_service.build(observation),
             mode=mode,
             llm_config=llm_config,
+            feedback_lang=feedback_lang,
         )
         page_diagnostics = page_diagnostics_service.build(resolved_discovery, max_pages=max_pages) if full_audit else []
 

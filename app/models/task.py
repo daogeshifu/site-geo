@@ -42,6 +42,7 @@ class AuditTask(BaseModel):
     cache_key: str         # SHA256 缓存键
     mode: str = "standard"
     llm: LLMConfig | None = None
+    feedback_lang: str = "en"
     observation: ObservationInput | None = None
     full_audit: bool = False
     max_pages: int = 12
@@ -67,6 +68,7 @@ class CachedAuditRecord(BaseModel):
     normalized_url: str
     domain: str
     mode: str
+    feedback_lang: str = "en"
     full_audit: bool = False
     max_pages: int = 12
     llm_provider: str | None = None

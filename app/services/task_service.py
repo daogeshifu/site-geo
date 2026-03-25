@@ -16,6 +16,7 @@ from app.services.schema_service import SchemaService
 from app.services.summarizer_service import SummarizerService
 from app.services.technical_service import TechnicalService
 from app.services.visibility_service import VisibilityService
+from app.utils.localization import localize_payload
 
 
 class TaskService:
@@ -85,6 +86,7 @@ class TaskService:
                 request.llm,
                 request.full_audit,
                 request.max_pages,
+                request.feedback_lang,
             )
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
@@ -101,6 +103,7 @@ class TaskService:
             cache_key=cache_key,
             mode=request.mode,
             llm=request.llm,
+            feedback_lang=request.feedback_lang,
             observation=request.observation,
             full_audit=request.full_audit,
             max_pages=request.max_pages,
@@ -193,11 +196,17 @@ class TaskService:
 
             # Step 2-6: 5 个审计模块并行执行
             module_coroutines = {
-                "visibility": self.visibility_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+                "visibility": self.visibility_service.audit(
+                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                ),
                 "technical": self.technical_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
-                "content": self.content_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+                "content": self.content_service.audit(
+                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                ),
                 "schema": self.schema_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
-                "platform": self.platform_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+                "platform": self.platform_service.audit(
+                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                ),
             }
 
             async def run_named(step_name: str, coroutine):
@@ -237,6 +246,7 @@ class TaskService:
                 observation=observation_result,
                 mode=task.mode,
                 llm_config=task.llm,
+                feedback_lang=task.feedback_lang,
             )
             summary_payload = summary.model_dump()
             await self._update_step(task, "summary", "completed", summary_payload)
@@ -255,6 +265,14 @@ class TaskService:
                 "observation": observation_result.model_dump(),
                 "summary": summary_payload,
             }
+            task.result = localize_payload(task.result, task.feedback_lang)
+            for step_name in self.STEP_ORDER:
+                if step_name == "summary":
+                    task.steps[step_name].data = task.result.get("summary")
+                elif step_name == "observation":
+                    task.steps[step_name].data = task.result.get("observation")
+                else:
+                    task.steps[step_name].data = task.result.get(step_name)
             task.llm_model_used = self._detect_llm_model_used(task.result)
             # 写入文件缓存，供后续相同请求直接命中
             if not getattr(task, "observation", None):
@@ -264,6 +282,7 @@ class TaskService:
                     normalized_url=task.normalized_url,
                     domain=task.domain,
                     mode=task.mode,
+                    feedback_lang=task.feedback_lang,
                     full_audit=task.full_audit,
                     max_pages=task.max_pages,
                     payload=task.result,

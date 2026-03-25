@@ -84,6 +84,7 @@ class PlatformService(AuditBaseService):
         discovery=None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        feedback_lang: str = "en",
     ) -> PlatformAuditResult:
         """执行平台适配审计
 
@@ -297,7 +298,7 @@ class PlatformService(AuditBaseService):
         self.set_execution_metadata(result, mode, llm_config)
         # premium 模式：LLM 针对各平台进行深度差距分析
         if mode == "premium":
-            result = await self.llm_enrichment.enrich_platform(resolved, result, llm_config)
+            result = await self.llm_enrichment.enrich_platform(resolved, result, llm_config, feedback_lang=feedback_lang)
         result = self.finalize_audit_result(
             result,
             module_key="platform",
