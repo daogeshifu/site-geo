@@ -128,7 +128,7 @@ uvicorn app.main:app --reload --port 8023
 ### Windows
 
 **Command Prompt (cmd)**
-
+ 
 ```cmd
 python -m venv .venv
 .venv\Scripts\activate.bat
