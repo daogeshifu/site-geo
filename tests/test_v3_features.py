@@ -63,6 +63,38 @@ def test_localize_payload_translates_known_messages_to_zh() -> None:
     assert localized["recommendations"][0] == "在商业页和高意向落地页增加 FAQ 模块。"
 
 
+def test_localize_payload_translates_schema_requirements_and_observation_text() -> None:
+    payload = {
+        "schema": {
+            "missing_schema_recommendations": [
+                "Add Organization schema with name, url, logo, contactPoint, and sameAs.",
+                "Add WebSite schema with SearchAction where relevant.",
+                "Model proprietary technologies or frameworks with DefinedTerm and stable @id values.",
+            ]
+        },
+        "observation": {
+            "summary": "Optional observation data is available and classified as advanced measurement maturity.",
+            "highlights": [
+                "Observed 123 AI-attributed sessions in the uploaded data.",
+                "Top observed AI source: ChatGPT (88 sessions).",
+            ],
+            "data_gaps": [
+                "GA4 AI traffic totals were not provided.",
+                "No citation observation samples were provided.",
+            ],
+        },
+    }
+    localized = localize_payload(payload, "zh")
+    assert localized["schema"]["missing_schema_recommendations"][0] == "添加 Organization Schema，并包含 name、url、logo、contactPoint 和 sameAs。"
+    assert localized["schema"]["missing_schema_recommendations"][1] == "在适用场景下添加带 SearchAction 的 WebSite Schema。"
+    assert localized["schema"]["missing_schema_recommendations"][2] == "使用 DefinedTerm 和稳定的 @id 来描述自有技术、方法论或框架。"
+    assert localized["observation"]["summary"] == "已提供可选 observation 数据，当前 measurement maturity 为 advanced。"
+    assert localized["observation"]["highlights"][0] == "上传数据中观测到 123 个 AI 归因 sessions。"
+    assert localized["observation"]["highlights"][1] == "观测到的首要 AI 来源：ChatGPT（88 个 sessions）。"
+    assert localized["observation"]["data_gaps"][0] == "未提供 GA4 AI 流量总量。"
+    assert localized["observation"]["data_gaps"][1] == "未提供引用观测样本。"
+
+
 def test_report_renders_page_diagnostics_and_notices() -> None:
     discovery = DiscoveryResult(
         url="https://example.com/products/widget",
