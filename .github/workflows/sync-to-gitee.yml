@@ -9,8 +9,6 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
       - name: Checkout repository
@@ -33,8 +31,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Show branches for debug
+        run: |
+          git branch -a
+          git remote -v
+
       - name: Push to Gitee
         run: |
           git remote add gitee git@gitee.com:adsuperman/site-geo.git
-          git push gitee HEAD:main --force
+          git push gitee main:main --force
           git push gitee --tags --force
