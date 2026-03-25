@@ -43,6 +43,8 @@ class AuditTask(BaseModel):
     mode: str = "standard"
     llm: LLMConfig | None = None
     observation: ObservationInput | None = None
+    full_audit: bool = False
+    max_pages: int = 12
     status: TaskStatus = "queued"         # 任务整体状态
     current_step: str = "queued"          # 当前正在执行的步骤名称
     progress_percent: int = 0             # 完成进度百分比（0-100）
@@ -65,6 +67,8 @@ class CachedAuditRecord(BaseModel):
     normalized_url: str
     domain: str
     mode: str
+    full_audit: bool = False
+    max_pages: int = 12
     llm_provider: str | None = None
     llm_model: str | None = None
     created_at: datetime

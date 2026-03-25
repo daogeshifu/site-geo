@@ -163,6 +163,23 @@ class ObservationResult(BaseModel):
     data_gaps: list[str] = Field(default_factory=list)
 
 
+class PageDiagnosticResult(BaseModel):
+    """逐页诊断结果，用于 full audit 模式"""
+
+    url: str
+    page_type: str = "page"
+    source: str = "core"
+    overall_score: int
+    status: str
+    citability_score: int
+    content_score: int
+    technical_score: int
+    schema_score: int
+    issue_count: int = 0
+    issues: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 class MetricDefinition(BaseModel):
     """汇总层指标说明卡片"""
 
@@ -180,7 +197,7 @@ class SummaryResult(BaseModel):
 
     composite_geo_score: int    # 最终 GEO 综合评分（0-100）
     status: str                 # critical/poor/fair/good/strong
-    scoring_version: str = "geo-audit-v2"
+    scoring_version: str = "geo-audit-v3"
     audit_mode: str = "standard"
     llm_enhanced: bool = False
     llm_provider: str | None = None
@@ -196,3 +213,4 @@ class SummaryResult(BaseModel):
     metric_definitions: list[MetricDefinition] = Field(default_factory=list)
     score_interpretation: list[str] = Field(default_factory=list)
     observation: ObservationResult | None = None
+    notices: list[str] = Field(default_factory=list)

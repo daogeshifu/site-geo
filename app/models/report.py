@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.requests import UrlRequest
 from app.models.discovery import DiscoveryResult
 from app.models.audit import (
     ContentAuditResult,
     ObservationResult,
+    PageDiagnosticResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -26,6 +27,7 @@ class ReportExportRequest(UrlRequest):
     platform: PlatformAuditResult
     summary: SummaryResult | None = None  # 可选：若不提供则自动计算
     observation_result: ObservationResult | None = None
+    page_diagnostics: list[PageDiagnosticResult] = Field(default_factory=list)
 
 
 class ReportExportResponse(BaseModel):

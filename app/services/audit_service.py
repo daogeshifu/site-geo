@@ -21,6 +21,9 @@ class AuditBaseService:
         self,
         url: str,
         discovery: DiscoveryResult | dict[str, Any] | None = None,
+        *,
+        full_audit: bool = False,
+        max_pages: int = 12,
     ) -> DiscoveryResult:
         """确保 DiscoveryResult 可用：
         - 若已是 DiscoveryResult 实例，直接返回
@@ -31,7 +34,7 @@ class AuditBaseService:
             return discovery
         if isinstance(discovery, dict):
             return DiscoveryResult.model_validate(discovery)
-        return await self.discovery_service.discover(url)
+        return await self.discovery_service.discover(url, full_audit=full_audit, max_pages=max_pages)
 
     def set_execution_metadata(
         self,
@@ -93,6 +96,8 @@ class FullAuditService(AuditBaseService):
         llm_config: LLMConfig | None = None,
         discovery: DiscoveryResult | dict[str, Any] | None = None,
         observation=None,
+        full_audit: bool = False,
+        max_pages: int = 12,
     ) -> dict[str, Any]:
         """执行完整 GEO 审计流程
 
@@ -103,19 +108,21 @@ class FullAuditService(AuditBaseService):
         """
         # 延迟导入避免循环依赖
         from app.services.content_service import ContentService
+        from app.services.page_diagnostics_service import PageDiagnosticsService
         from app.services.platform_service import PlatformService
         from app.services.schema_service import SchemaService
         from app.services.summarizer_service import SummarizerService
         from app.services.technical_service import TechnicalService
         from app.services.visibility_service import VisibilityService
 
-        resolved_discovery = await self.ensure_discovery(url, discovery)
+        resolved_discovery = await self.ensure_discovery(url, discovery, full_audit=full_audit, max_pages=max_pages)
         # 所有模块共享同一个 DiscoveryService 实例
         visibility_service = VisibilityService(self.discovery_service)
         technical_service = TechnicalService(self.discovery_service)
         content_service = ContentService(self.discovery_service)
         schema_service = SchemaService(self.discovery_service)
         platform_service = PlatformService(self.discovery_service)
+        page_diagnostics_service = PageDiagnosticsService()
         summarizer_service = SummarizerService()
 
         # 5 个审计模块并行执行，共享已解析的 discovery
@@ -140,6 +147,7 @@ class FullAuditService(AuditBaseService):
             mode=mode,
             llm_config=llm_config,
         )
+        page_diagnostics = page_diagnostics_service.build(resolved_discovery, max_pages=max_pages) if full_audit else []
 
         return {
             "url": url,
@@ -149,6 +157,7 @@ class FullAuditService(AuditBaseService):
             "content": content.model_dump(),
             "schema": schema.model_dump(),
             "platform": platform.model_dump(),
+            "page_diagnostics": [item.model_dump() for item in page_diagnostics],
             "observation": summary.observation.model_dump() if summary.observation else None,
             "summary": summary.model_dump(),
         }

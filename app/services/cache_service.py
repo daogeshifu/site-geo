@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from app.core.config import settings
 from app.models.requests import LLMConfig
 from app.models.task import CachedAuditRecord
-from app.utils.url_utils import normalize_url
+from app.utils.url_utils import normalize_url, scope_identifier
 
 
 class CacheService:
@@ -30,7 +30,14 @@ class CacheService:
         self.cache_dir.mkdir(parents=True, exist_ok=True)   # 自动创建缓存目录
         self.ttl_days = ttl_days or settings.cache_ttl_days
 
-    def build_cache_key(self, url: str, mode: str, llm_config: LLMConfig | None = None) -> tuple[str, str, str]:
+    def build_cache_key(
+        self,
+        url: str,
+        mode: str,
+        llm_config: LLMConfig | None = None,
+        full_audit: bool = False,
+        max_pages: int = 12,
+    ) -> tuple[str, str, str]:
         """生成缓存键，返回 (sha256_digest, normalized_url, domain)
 
         - standard 模式：provider=none, model=none（不区分 LLM 配置）
@@ -39,13 +46,15 @@ class CacheService:
         normalized_url = normalize_url(url)
         parsed = urlparse(normalized_url)
         domain = parsed.netloc.lower()
+        scope_key = scope_identifier(normalized_url)
         provider = llm_config.provider if llm_config and mode == "premium" else "none"
         model = (
             (llm_config.model if llm_config and llm_config.model else settings.default_openrouter_model)
             if mode == "premium"
             else "none"
         )
-        raw_key = f"{domain}|{mode}|{provider}|{model}"
+        normalized_pages = max_pages if full_audit else 5
+        raw_key = f"{scope_key}|{mode}|{provider}|{model}|full={int(full_audit)}|pages={normalized_pages}"
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return digest, normalized_url, domain
 
@@ -75,6 +84,8 @@ class CacheService:
         normalized_url: str,
         domain: str,
         mode: str,
+        full_audit: bool,
+        max_pages: int,
         payload: dict[str, Any],
         llm_config: LLMConfig | None = None,
     ) -> CachedAuditRecord:
@@ -86,6 +97,8 @@ class CacheService:
             normalized_url=normalized_url,
             domain=domain,
             mode=mode,
+            full_audit=full_audit,
+            max_pages=max_pages,
             # premium 模式记录 LLM 提供商和模型，便于缓存管理和调试
             llm_provider=llm_config.provider if llm_config and mode == "premium" else None,
             llm_model=llm_config.model if llm_config and mode == "premium" else None,

@@ -17,7 +17,7 @@
 
 ## What is GEO Audit?
 
-GEO Audit Service is an open-source audit engine built for the **AI search era**. Traditional SEO tools measure Google rankings. GEO Audit v2 measures how ready your site is to be cited, extracted, and trusted by **ChatGPT, Google AI Mode, Google AI Overviews, Perplexity, Gemini, and Grok**.
+GEO Audit Service is an open-source audit engine built for the **AI search era**. Traditional SEO tools measure Google rankings. GEO Audit v3 measures how ready your site is to be cited, extracted, and trusted by **ChatGPT, Google AI Mode, Google AI Overviews, Perplexity, Gemini, and Grok**.
 
 It builds a full **Site Snapshot** across key pages, then scores your site across 6 GEO dimensions while keeping external observation data optional and unscored:
 
@@ -38,11 +38,14 @@ Optional observation layer:
 
 ## Features
 
-- **GEO Audit v2** — separates scored readiness from optional observation metrics
-- **Site Snapshot** — crawls homepage, about, services, articles, and case studies in a single pass
+- **GEO Audit v3** — separates scored readiness from optional observation metrics and adds full-audit page diagnostics
+- **Site Snapshot v3** — crawls homepage, about, services, articles, and case studies in a single pass, then optionally expands to more internal pages
 - **5 Audit Modules** — visibility, technical, content, schema, platform
 - **6 Platform Views** — ChatGPT, Google AI Mode, Google AI Overviews, Perplexity, Gemini, and Grok
 - **Entity Graph Signals** — evaluates JSON-LD coverage, stable `@id`, `sameAs`, `DefinedTerm`, and relationship richness
+- **Full Audit Mode** — crawl up to `max_pages` internal pages and return `page_diagnostics` for each page
+- **Scope Notice** — if the input URL is not a homepage or language homepage, the result returns a bias warning instead of force-rewriting the URL
+- **Scoped Crawling** — discovery and full audit are restricted by exact `host` and locale path scope, so `www.ecoflow.com/de/` and `de.ecoflow.com/` are treated as different sites
 - **Async Task API** — submit jobs, poll status, export Markdown reports
 - **Discovery Reuse** — decouple crawling from scoring for batch/pipeline workflows
 - **Optional Observation Layer** — attach GA4 / source breakdown / citation observations without affecting score
@@ -260,7 +263,23 @@ All responses use a unified envelope:
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com", "mode": "standard"}'
+  -d '{"url": "https://example.com", "mode": "standard", "full_audit": true, "max_pages": 12}'
+```
+
+Full `tasks/audit` example:
+
+```json
+{
+  "url": "https://www.ecoflow.com/de/",
+  "mode": "premium",
+  "full_audit": true,
+  "max_pages": 20,
+  "force_refresh": false,
+  "llm": {
+    "provider": "openrouter",
+    "model": "openai/gpt-4.1"
+  }
+}
 ```
 
 **Poll for status**
@@ -282,7 +301,18 @@ curl -L http://127.0.0.1:8023/api/v1/tasks/{task_id}/report -o report.md
 ```bash
 curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com", "mode": "standard"}'
+  -d '{"url": "https://example.com", "mode": "standard", "full_audit": true, "max_pages": 12}'
+```
+
+Full `audit/full` example:
+
+```json
+{
+  "url": "https://www.ecoflow.com/de/",
+  "mode": "standard",
+  "full_audit": true,
+  "max_pages": 12
+}
 ```
 
 Pass an existing discovery result to skip re-crawling:
@@ -291,6 +321,8 @@ Pass an existing discovery result to skip re-crawling:
 {
   "url": "https://example.com",
   "mode": "standard",
+  "full_audit": true,
+  "max_pages": 12,
   "discovery": { "...": "existing discovery payload" }
 }
 ```
@@ -308,6 +340,49 @@ curl -X POST http://127.0.0.1:8023/api/v1/discovery \
 ```
 
 Response includes `page_profiles` and `site_snapshot_version` for all crawled pages.
+
+### Full Audit Mode
+
+Full audit is optional. Most users only need:
+
+```json
+{ "url": "https://example.com", "mode": "standard" }
+```
+
+If you want page-level diagnostics, enable `full_audit` and set `max_pages`:
+
+```json
+{
+  "url": "https://example.com",
+  "mode": "standard",
+  "full_audit": true,
+  "max_pages": 12
+}
+```
+
+When enabled, the response adds:
+
+- `discovery.full_audit_enabled`
+- `discovery.profiled_page_count`
+- `discovery.additional_page_profiles`
+- `discovery.scope_root_url`
+- `result.page_diagnostics[]`
+
+If the input URL is not a homepage or a language-homepage path such as `/en` or `/zh-cn`, the result also returns `discovery.input_scope_warning` and `summary.notices[]` to indicate that site-level scores may be biased.
+
+### Crawl Scope Rules
+
+Discovery and full audit do not crawl the whole registrable domain. They stay inside one crawl scope:
+
+- exact `host` must match
+- if the input starts with a locale prefix such as `/de/`, `/en/`, or `/zh-cn/`, crawling stays inside that prefix
+
+Examples:
+
+- `https://de.ecoflow.com/` only crawls `de.ecoflow.com`
+- `https://www.ecoflow.com/de/` only crawls `www.ecoflow.com/de/`
+- `https://www.ecoflow.com/de/` will not crawl `https://de.ecoflow.com/`
+- `https://www.ecoflow.com/de/` will not crawl `https://www.ecoflow.com/fr/`
 
 ### Optional Observation Input
 
@@ -350,12 +425,12 @@ This data is displayed in the report as an **Observation Layer** and does **not*
 └────────────────────┬────────────────────────┘
                      │
          ┌───────────▼───────────┐
-         │   DiscoveryService    │  ← Site Snapshot (v2)
+         │   DiscoveryService    │  ← Site Snapshot (v3)
          │  homepage / about /   │
          │  service / article /  │
-         │  case_study           │
+         │  case_study / extras  │
          └───────────┬───────────┘
-                     │  page_profiles[]
+                     │  page_profiles[] + optional page_diagnostics
          ┌───────────▼───────────────────────────┐
          │           Audit Modules               │
          │  visibility · technical · content     │
@@ -407,7 +482,7 @@ Citability outputs: `homepage_citability`, `best_page_citability`, `citation_pro
 
 ### Scoring — Structured Data & Entity Graph (10%)
 
-The structured-data module in v2 goes beyond simple Schema presence checks. It now considers:
+The structured-data module in v3 goes beyond simple Schema presence checks. It now considers:
 
 - JSON-LD baseline coverage
 - `Organization`, `WebSite`, `Service`, `Article`, `FAQPage`, `Product`, `DefinedTerm`

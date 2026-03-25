@@ -32,11 +32,18 @@ from app.utils.text_analyzer import (
     has_quantified_data,
     is_answer_first,
 )
-from app.utils.url_utils import normalize_url, registered_domain
+from app.utils.url_utils import (
+    get_scope_root,
+    get_site_root,
+    is_internal_url,
+    is_likely_homepage_url,
+    normalize_url,
+    registered_domain,
+)
 
 
 class DiscoveryService:
-    """站点快照服务（snapshot-v2）：负责抓取并聚合首页、关键页、协议文件和实体信号
+    """站点快照服务（snapshot-v3）：负责抓取并聚合首页、关键页、协议文件和实体信号
 
     工作流程：
     1. 抓取首页，并发获取 robots.txt / llms.txt / 外链数据
@@ -45,7 +52,13 @@ class DiscoveryService:
     4. 聚合全站 Schema 和实体信号，推断业务类型
     """
 
-    SNAPSHOT_VERSION = "snapshot-v2"
+    SNAPSHOT_VERSION = "snapshot-v3"
+    EXTRA_PAGE_PATTERNS = {
+        "product": ["product", "products", "item", "sku", "shop"],
+        "faq": ["faq", "help", "support"],
+        "documentation": ["docs", "documentation", "guide", "manual"],
+        "comparison": ["compare", "comparison", "vs"],
+    }
 
     def __init__(self) -> None:
         # 注入外链查询服务
@@ -133,6 +146,8 @@ class DiscoveryService:
         client: httpx.AsyncClient,
         page_type: str,
         page_url: str,
+        *,
+        scope_url: str,
     ) -> PageProfile | None:
         """异步抓取单个页面并构建 PageProfile，失败或 4xx 时返回 None"""
         try:
@@ -141,10 +156,32 @@ class DiscoveryService:
             return None
         if response.status_code >= 400:
             return None
-        parsed = parse_html(response.final_url, response.text)
+        parsed = parse_html(response.final_url, response.text, scope_url=scope_url)
         return self._build_page_profile(page_type=page_type, final_url=response.final_url, parsed=parsed)
 
-    async def discover(self, url: str) -> DiscoveryResult:
+    def _infer_additional_page_type(self, url: str) -> str:
+        lowered = url.lower()
+        for page_type, keywords in self.EXTRA_PAGE_PATTERNS.items():
+            if any(keyword in lowered for keyword in keywords):
+                return page_type
+        return "page"
+
+    def _full_audit_candidates(self, base_url: str, candidate_urls: list[str], existing_urls: set[str], max_pages: int) -> list[str]:
+        """筛选 full audit 模式下的额外页面候选"""
+        deduped: list[str] = []
+        for url in candidate_urls:
+            if not url or url in existing_urls:
+                continue
+            if not is_internal_url(base_url, url):
+                continue
+            lowered = url.lower()
+            if any(token in lowered for token in ["/tag/", "/author/", "/category/", "/page/", "utm_", "#"]):
+                continue
+            deduped.append(url)
+        ordered = sorted(dict.fromkeys(deduped), key=lambda item: (len(item), item))
+        return ordered[:max_pages]
+
+    async def discover(self, url: str, *, full_audit: bool = False, max_pages: int = 12) -> DiscoveryResult:
         """执行完整的站点快照发现流程
 
         步骤：
@@ -172,9 +209,12 @@ class DiscoveryService:
                     "failed to fetch homepage",
                     {"url": normalized_url, "status_code": homepage_response.status_code},
                 )
-            parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text)
+            scope_root_url = get_scope_root(homepage_response.final_url)
+            parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text, scope_url=scope_root_url)
 
             target_domain = registered_domain(homepage_response.final_url)
+            site_root_url = get_site_root(homepage_response.final_url)
+            input_is_likely_homepage = is_likely_homepage_url(homepage_response.final_url)
             # 并发获取 robots.txt、llms.txt 和外链数据
             robots_result, llms_result, backlinks_result = await asyncio.gather(
                 inspect_robots(homepage_response.final_url, client=client),
@@ -192,7 +232,8 @@ class DiscoveryService:
             candidate_urls = sitemap_result.discovered_urls + [
                 item["url"] for item in parsed_homepage["internal_links"]
             ]
-            key_pages = select_key_pages(candidate_urls)
+            scoped_candidate_urls = [item for item in candidate_urls if is_internal_url(scope_root_url, item)]
+            key_pages = select_key_pages(scoped_candidate_urls)
 
             # 首页 PageProfile 必定存在
             page_profiles: dict[str, PageProfile] = {
@@ -211,7 +252,7 @@ class DiscoveryService:
                 "case_study": key_pages.case_study,
             }
             coroutines = {
-                page_type: self._fetch_page_profile(client, page_type, page_url)
+                page_type: self._fetch_page_profile(client, page_type, page_url, scope_url=scope_root_url)
                 for page_type, page_url in snapshot_targets.items()
                 if page_url
             }
@@ -222,6 +263,32 @@ class DiscoveryService:
                     if isinstance(result, Exception) or result is None:
                         continue
                     page_profiles[page_type] = result
+
+            additional_page_profiles: list[PageProfile] = []
+            if full_audit:
+                existing_urls = {profile.final_url for profile in page_profiles.values()}
+                extra_needed = max(0, max_pages - len(page_profiles))
+                extra_candidates = self._full_audit_candidates(
+                    scope_root_url,
+                    scoped_candidate_urls,
+                    existing_urls,
+                    extra_needed,
+                )
+                if extra_candidates:
+                    extra_coroutines = {
+                        candidate: self._fetch_page_profile(
+                            client,
+                            self._infer_additional_page_type(candidate),
+                            candidate,
+                            scope_url=scope_root_url,
+                        )
+                        for candidate in extra_candidates
+                    }
+                    extra_results = await asyncio.gather(*extra_coroutines.values(), return_exceptions=True)
+                    for _, result in zip(extra_coroutines.keys(), extra_results):
+                        if isinstance(result, Exception) or result is None:
+                            continue
+                        additional_page_profiles.append(result)
 
         # 用实际 final_url 更新关键页索引（处理重定向）
         if page_profiles.get("about"):
@@ -234,18 +301,29 @@ class DiscoveryService:
             key_pages.case_study = page_profiles["case_study"].final_url
 
         # 聚合全站数据
-        schema_summary = self._aggregate_schema_summary(page_profiles)
-        site_signals = self._aggregate_site_signals(page_profiles)
+        combined_profiles = {**page_profiles}
+        for index, profile in enumerate(additional_page_profiles, start=1):
+            combined_profiles[f"additional_{index}"] = profile
+        schema_summary = self._aggregate_schema_summary(combined_profiles)
+        site_signals = self._aggregate_site_signals(combined_profiles)
         business_type = infer_business_type(
             parsed_homepage["title"],
             parsed_homepage["meta_description"],
             parsed_homepage["text_content"],
+        )
+        input_scope_warning = (
+            "Input URL does not look like a homepage. GEO site-level scores may be directionally useful but can be biased "
+            "because homepage-derived signals are being evaluated from a deeper page."
+            if not input_is_likely_homepage
+            else None
         )
 
         return DiscoveryResult(
             url=url,
             normalized_url=normalized_url,
             final_url=homepage_response.final_url,
+            site_root_url=site_root_url,
+            scope_root_url=scope_root_url,
             domain=target_domain,
             fetch=FetchMetadata(
                 final_url=homepage_response.final_url,
@@ -263,5 +341,11 @@ class DiscoveryService:
             site_signals=site_signals,
             backlinks=backlinks_result,
             page_profiles=page_profiles,
+            additional_page_profiles=additional_page_profiles,
+            input_is_likely_homepage=input_is_likely_homepage,
+            input_scope_warning=input_scope_warning,
+            full_audit_enabled=full_audit,
+            requested_max_pages=max_pages,
+            profiled_page_count=len(page_profiles) + len(additional_page_profiles),
             site_snapshot_version=self.SNAPSHOT_VERSION,
         )

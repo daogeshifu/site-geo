@@ -161,6 +161,8 @@ async def audit_full(request: FullAuditRequest) -> dict:
         llm_config=request.llm,
         discovery=request.discovery,
         observation=request.observation,
+        full_audit=request.full_audit,
+        max_pages=request.max_pages,
     )
     return success_response(result)
 

@@ -5,6 +5,7 @@ from typing import Any
 
 from app.models.audit import (
     ContentAuditResult,
+    PageDiagnosticResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -21,15 +22,17 @@ class ReportService:
     报告结构：
     1. 执行摘要（复合 GEO 分数 + 状态）
     2. 评分仪表盘（6 维加权分数表格）
-    3. AI 平台就绪度（5 平台评分表格）
+    3. AI 平台就绪度（6 平台评分表格）
     4. 关键问题（按模块分数排序的 CRITICAL/HIGH/MEDIUM 问题）
     5. 核心优势（去重后最多 10 条）
     6. E-E-A-T 评估（4 维表格）
     7. 技术审计概要（15 项检查结果）
-    8. 优先行动计划（快速行动 / 中期 / 战略行动）
-    9. 实施路线图（4 周 + 1-3 个月）
-    10. 预期分数提升（改善后估算）
-    11. 附录（站点基本信息）
+    8. Observation Layer（可选，不计分）
+    9. full audit 逐页诊断（可选）
+    10. 优先行动计划（快速行动 / 中期 / 战略行动）
+    11. 实施路线图（4 周 + 1-3 个月）
+    12. 预期分数提升（改善后估算）
+    13. 附录（站点基本信息）
     """
 
     def __init__(self) -> None:
@@ -52,12 +55,14 @@ class ReportService:
         schema_result: SchemaAuditResult,
         platform: PlatformAuditResult,
         summary: SummaryResult,
+        page_diagnostics: list[PageDiagnosticResult] | None = None,
     ) -> str:
         """渲染完整的 Markdown 报告，返回报告字符串"""
         date_str = datetime.now().strftime("%Y-%m-%d")
         business_label = discovery.business_type.replace("_", " ").title()
         composite = summary.composite_geo_score
         composite_status = summary.status.title()
+        notices = summary.notices or []
 
         # 评分仪表盘：6 维加权分数行
         weighted_rows = []
@@ -166,6 +171,11 @@ class ReportService:
             for item in summary.metric_definitions
         ]
         observation_section = self._observation_section(summary.observation)
+        page_diagnostic_rows = []
+        for item in page_diagnostics or []:
+            page_diagnostic_rows.append(
+                f"| {item.page_type} | {item.source} | {item.overall_score}/100 | {item.citability_score} | {item.content_score} | {item.technical_score} | {item.schema_score} | {item.issue_count} | {item.url} |"
+            )
 
         return "\n".join(
             [
@@ -186,6 +196,8 @@ class ReportService:
                 f"**Composite GEO Score: {composite} / 100** — {composite_status}",
                 "",
                 summary.summary,
+                "",
+                *([f"- {item}" for item in notices] if notices else []),
                 "",
                 "This export combines rule-based auditing with any available premium LLM enrichment. "
                 "It is designed to separate scored GEO readiness from optional observation metrics so teams can work from a URL alone, "
@@ -265,6 +277,20 @@ class ReportService:
                 "",
                 "---",
                 "",
+                *(
+                    [
+                        "## Page Diagnostics (Full Audit)",
+                        "",
+                        "| Page Type | Source | Overall | Citability | Content | Technical | Schema | Issues | URL |",
+                        "|---|---|---|---|---|---|---|---|---|",
+                        *page_diagnostic_rows,
+                        "",
+                        "---",
+                        "",
+                    ]
+                    if page_diagnostic_rows
+                    else []
+                ),
                 "## Prioritized Action Plan",
                 "",
                 "### Quick Wins (1-2 weeks)",
@@ -440,6 +466,8 @@ class ReportService:
             f"| Canonical Tags | {'Detected' if discovery.homepage.canonical else 'None detected'} |",
             f"| hreflang Tags | {'Detected' if discovery.homepage.hreflang else 'None detected'} |",
             f"| Security Headers | {technical.security_headers.get('score', 0)}/100 |",
+            f"| Full Audit Enabled | {'Yes' if discovery.full_audit_enabled else 'No'} |",
+            f"| Profiled Page Count | {discovery.profiled_page_count} |",
             f"| Key Pages | about={discovery.key_pages.about or '-'}, service={discovery.key_pages.service or '-'}, contact={discovery.key_pages.contact or '-'}, article={discovery.key_pages.article or '-'}, case_study={discovery.key_pages.case_study or '-'} |",
         ]
         return rows

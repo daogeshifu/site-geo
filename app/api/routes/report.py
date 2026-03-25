@@ -7,6 +7,7 @@ from app.core.exceptions import AppError
 from app.models.audit import (
     ContentAuditResult,
     ObservationResult,
+    PageDiagnosticResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -68,6 +69,7 @@ async def export_report(request: ReportExportRequest) -> dict:
         schema_result=request.schema_result,
         platform=request.platform,
         summary=summary,
+        page_diagnostics=request.page_diagnostics,
     )
     filename = report_service.build_filename(request.discovery)
     return success_response({"filename": filename, "markdown": markdown})
@@ -106,6 +108,7 @@ async def export_task_report(task_id: str) -> PlainTextResponse:
     platform = PlatformAuditResult.model_validate(task.result["platform"])
     summary = SummaryResult.model_validate(task.result["summary"])
     observation = ObservationResult.model_validate(task.result["observation"]) if task.result.get("observation") else None
+    page_diagnostics = [PageDiagnosticResult.model_validate(item) for item in task.result.get("page_diagnostics", [])]
     if observation and not summary.observation:
         summary.observation = observation
     markdown = report_service.render_markdown(
@@ -117,6 +120,7 @@ async def export_task_report(task_id: str) -> PlainTextResponse:
         schema_result=schema_result,
         platform=platform,
         summary=summary,
+        page_diagnostics=page_diagnostics,
     )
     filename = report_service.build_filename(discovery)
     # 设置 Content-Disposition 头触发浏览器下载行为

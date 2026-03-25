@@ -197,6 +197,8 @@ class DiscoveryResult(BaseModel):
     url: str              # 原始输入 URL
     normalized_url: str   # 规范化后的 URL（统一协议头、去片段等）
     final_url: str        # 跟随重定向后的最终 URL
+    site_root_url: str = ""  # 站点根 URL（scheme + host）
+    scope_root_url: str = ""  # 实际抓取作用域根，如 /de/
     domain: str           # 注册域名（如 example.com）
     fetch: FetchMetadata  # 首页请求元数据
     homepage: HomepageExtract          # 首页解析结果
@@ -209,4 +211,10 @@ class DiscoveryResult(BaseModel):
     site_signals: SiteSignals = Field(default_factory=SiteSignals)  # 全站实体信号汇总
     backlinks: BacklinkOverviewResult = Field(default_factory=BacklinkOverviewResult)
     page_profiles: dict[str, PageProfile] = Field(default_factory=dict)  # 各页面画像
-    site_snapshot_version: str = "snapshot-v2"  # 数据模型版本标识
+    additional_page_profiles: list[PageProfile] = Field(default_factory=list)  # full audit 模式下的额外页面
+    input_is_likely_homepage: bool = True
+    input_scope_warning: str | None = None
+    full_audit_enabled: bool = False
+    requested_max_pages: int = 12
+    profiled_page_count: int = 0
+    site_snapshot_version: str = "snapshot-v3"  # 数据模型版本标识

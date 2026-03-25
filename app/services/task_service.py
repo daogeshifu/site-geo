@@ -10,6 +10,7 @@ from app.services.cache_service import CacheService
 from app.services.content_service import ContentService
 from app.services.discovery_service import DiscoveryService
 from app.services.observation_service import ObservationService
+from app.services.page_diagnostics_service import PageDiagnosticsService
 from app.services.platform_service import PlatformService
 from app.services.schema_service import SchemaService
 from app.services.summarizer_service import SummarizerService
@@ -41,6 +42,7 @@ class TaskService:
         self.schema_service = SchemaService(self.discovery_service)
         self.platform_service = PlatformService(self.discovery_service)
         self.observation_service = ObservationService()
+        self.page_diagnostics_service = PageDiagnosticsService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
         self._lock = asyncio.Lock()             # 保护 tasks dict 的并发访问
@@ -81,6 +83,8 @@ class TaskService:
                 request.url,
                 request.mode,
                 request.llm,
+                request.full_audit,
+                request.max_pages,
             )
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
@@ -98,6 +102,8 @@ class TaskService:
             mode=request.mode,
             llm=request.llm,
             observation=request.observation,
+            full_audit=request.full_audit,
+            max_pages=request.max_pages,
             cached=bool(cached_record),
             force_refresh=request.force_refresh,
             created_at=now,
@@ -181,7 +187,7 @@ class TaskService:
         try:
             # Step 1: 站点快照
             await self._update_step(task, "discovery", "running")
-            discovery = await self.discovery_service.discover(task.url)
+            discovery = await self.discovery_service.discover(task.url, full_audit=task.full_audit, max_pages=task.max_pages)
             discovery_payload = discovery.model_dump()
             await self._update_step(task, "discovery", "completed", discovery_payload)
 
@@ -234,6 +240,7 @@ class TaskService:
             )
             summary_payload = summary.model_dump()
             await self._update_step(task, "summary", "completed", summary_payload)
+            page_diagnostics = self.page_diagnostics_service.build(discovery, max_pages=task.max_pages) if task.full_audit else []
 
             # 组装完整结果
             task.result = {
@@ -244,6 +251,7 @@ class TaskService:
                 "content": module_results["content"].model_dump(),
                 "schema": module_results["schema"].model_dump(),
                 "platform": module_results["platform"].model_dump(),
+                "page_diagnostics": [item.model_dump() for item in page_diagnostics],
                 "observation": observation_result.model_dump(),
                 "summary": summary_payload,
             }
@@ -256,6 +264,8 @@ class TaskService:
                     normalized_url=task.normalized_url,
                     domain=task.domain,
                     mode=task.mode,
+                    full_audit=task.full_audit,
+                    max_pages=task.max_pages,
                     payload=task.result,
                     llm_config=task.llm,
                 )

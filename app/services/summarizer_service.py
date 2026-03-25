@@ -166,7 +166,7 @@ class SummarizerService:
 
     def _score_interpretation(self, observation: ObservationResult | None) -> list[str]:
         interpretation = [
-            "GEO Audit v2 scores only readiness dimensions that can be derived from the site and supplied enrichment sources.",
+            "GEO Audit v3 scores only readiness dimensions that can be derived from the site and supplied enrichment sources.",
             "Optional observation metrics are displayed separately and never change the composite GEO score.",
             "Platform readiness is comparative guidance, not a direct measurement of live mention share or citation rank.",
         ]
@@ -291,6 +291,13 @@ class SummarizerService:
         )
         if observation and observation.provided:
             summary_text += " Optional observation data was uploaded and is displayed separately without affecting the score."
+        notices: list[str] = []
+        if discovery.input_scope_warning:
+            notices.append(f"Non-homepage input detected: {discovery.input_scope_warning}")
+        if discovery.full_audit_enabled:
+            notices.append(
+                f"Full audit mode sampled {discovery.profiled_page_count} pages and produced page-level diagnostics without changing the site-level scoring weights."
+            )
         result = SummaryResult(
             composite_geo_score=composite_score,
             status=status,
@@ -304,6 +311,7 @@ class SummarizerService:
             metric_definitions=self._metric_definitions(),
             score_interpretation=self._score_interpretation(observation),
             observation=observation,
+            notices=notices,
         )
         if llm_config:
             result.llm_provider = llm_config.provider

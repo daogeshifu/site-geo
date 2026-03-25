@@ -658,6 +658,11 @@ def _score_page_citability(page: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def assess_page_citability(page: PageProfile | dict[str, Any]) -> dict[str, Any]:
+    """对单个页面直接计算 citability，供逐页诊断复用"""
+    return _score_page_citability(_normalize_page_profile(page))
+
+
 def assess_citability(
     homepage: dict[str, Any],
     page_profiles: dict[str, PageProfile | dict[str, Any]] | None = None,

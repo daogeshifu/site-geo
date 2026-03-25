@@ -17,7 +17,7 @@ def _first_content(items: list[Any]) -> str | None:
     return None
 
 
-def parse_html(base_url: str, html: str) -> dict[str, Any]:
+def parse_html(base_url: str, html: str, *, scope_url: str | None = None) -> dict[str, Any]:
     """解析 HTML 页面，提取 SEO/GEO 审计所需的所有结构化信息
 
     Args:
@@ -63,7 +63,7 @@ def parse_html(base_url: str, html: str) -> dict[str, Any]:
         absolute_url = ensure_absolute_url(base_url, link["href"]).strip()
         text = link.get_text(" ", strip=True) or None
         item = {"url": absolute_url, "text": text}
-        if is_internal_url(base_url, absolute_url):
+        if is_internal_url(scope_url or base_url, absolute_url):
             if absolute_url not in seen_internal:
                 internal_links.append(item)
                 seen_internal.add(absolute_url)
