@@ -70,7 +70,7 @@ class ReportService:
         platform_rows = []
         for platform_name, detail in platform.platform_scores.items():
             platform_rows.append(
-                f"| {platform_name.replace('_', ' ').title()} | {detail.platform_score}/100 | {detail.primary_gap} |"
+                f"| {platform_name.replace('_', ' ').title()} | {detail.platform_score}/100 | {detail.optimization_focus or '-'} | {detail.primary_gap} |"
             )
 
         # 关键问题：按模块分数升序排序，取前 5 个模块，每个模块最多 4 条问题
@@ -161,6 +161,11 @@ class ReportService:
 
         projected_rows = self._projected_scores(summary)
         appendix_rows = self._appendix_rows(discovery, technical, schema_result)
+        metric_rows = [
+            f"| {item.name} | {item.scoring.title()} | {item.formula} | {item.data_source} |"
+            for item in summary.metric_definitions
+        ]
+        observation_section = self._observation_section(summary.observation)
 
         return "\n".join(
             [
@@ -172,6 +177,7 @@ class ReportService:
                 f"> Website: {discovery.final_url}",
                 f"> Business Type: {business_label}",
                 f"> Audit Mode: {summary.audit_mode}",
+                f"> Scoring Version: {summary.scoring_version}",
                 "",
                 "---",
                 "",
@@ -182,7 +188,8 @@ class ReportService:
                 summary.summary,
                 "",
                 "This export combines rule-based auditing with any available premium LLM enrichment. "
-                "It is designed to preserve every major dimension present in the reference GEO client report while mapping to the current API outputs.",
+                "It is designed to separate scored GEO readiness from optional observation metrics so teams can work from a URL alone, "
+                "while still attaching GA4 or citation evidence when available.",
                 "",
                 "---",
                 "",
@@ -193,14 +200,25 @@ class ReportService:
                 *weighted_rows,
                 f"| **COMPOSITE GEO SCORE** | **100%** | **{composite}/100** | **{sum(item['weighted_value'] for item in summary.weighted_scores.values())}** | **{self._status_badge(summary.status)}** |",
                 "",
+                "Score interpretation:",
+                *[f"- {item}" for item in summary.score_interpretation],
+                "",
                 "---",
                 "",
                 "## AI Platform Readiness",
                 "",
-                "| Platform | Score | Primary Gap |",
-                "|---|---|---|",
+                "| Platform | Score | Optimization Focus | Primary Gap |",
+                "|---|---|---|---|",
                 *platform_rows,
-                f"| **Average** | **{platform.platform_optimization_score}/100** | {summary.top_issues[0] if summary.top_issues else 'No major gap detected.'} |",
+                f"| **Average** | **{platform.platform_optimization_score}/100** | Multi-platform GEO readiness | {summary.top_issues[0] if summary.top_issues else 'No major gap detected.'} |",
+                "",
+                "---",
+                "",
+                "## Metric Definitions",
+                "",
+                "| Metric | Scoring | Formula | Data Source |",
+                "|---|---|---|---|",
+                *metric_rows,
                 "",
                 "---",
                 "",
@@ -238,6 +256,12 @@ class ReportService:
                 "| Check | Status | Severity |",
                 "|---|---|---|",
                 *[f"| {name} | {status} | {severity} |" for name, status, severity in technical_rows],
+                "",
+                "---",
+                "",
+                "## Observation Layer",
+                "",
+                *observation_section,
                 "",
                 "---",
                 "",
@@ -281,7 +305,7 @@ class ReportService:
                 "",
                 "---",
                 "",
-                f"*GEO Audit Service · GEO Score v1.0 · {discovery.domain or url} · {date_str}*",
+                f"*GEO Audit Service · {summary.scoring_version} · {discovery.domain or url} · {date_str}*",
             ]
         )
 
@@ -419,3 +443,35 @@ class ReportService:
             f"| Key Pages | about={discovery.key_pages.about or '-'}, service={discovery.key_pages.service or '-'}, contact={discovery.key_pages.contact or '-'}, article={discovery.key_pages.article or '-'}, case_study={discovery.key_pages.case_study or '-'} |",
         ]
         return rows
+
+    def _observation_section(self, observation) -> list[str]:
+        """构建可选观测层展示，不参与评分"""
+        if not observation:
+            return ["No observation result available."]
+        lines = [
+            f"**Observation Status:** {observation.status}",
+            f"**Measurement Maturity:** {observation.measurement_maturity}",
+            "",
+            observation.summary,
+            "",
+            "**Scoring policy:** This section is unscored and does not change the composite GEO score.",
+        ]
+        if observation.highlights:
+            lines.extend(["", "Highlights:"])
+            lines.extend([f"- {item}" for item in observation.highlights])
+        if observation.platform_breakdown:
+            lines.extend(
+                [
+                    "",
+                    "| Platform | Sessions | Users | Conversions | Conversion Rate |",
+                    "|---|---|---|---|---|",
+                    *[
+                        f"| {item.platform} | {item.sessions or '-'} | {item.users or '-'} | {item.conversions or '-'} | {item.conversion_rate if item.conversion_rate is not None else '-'} |"
+                        for item in observation.platform_breakdown
+                    ],
+                ]
+            )
+        if observation.data_gaps:
+            lines.extend(["", "Data gaps:"])
+            lines.extend([f"- {item}" for item in observation.data_gaps])
+        return lines

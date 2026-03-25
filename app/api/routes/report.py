@@ -6,6 +6,7 @@ from fastapi.responses import PlainTextResponse
 from app.core.exceptions import AppError
 from app.models.audit import (
     ContentAuditResult,
+    ObservationResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -15,6 +16,7 @@ from app.models.audit import (
 from app.models.discovery import DiscoveryResult
 from app.models.report import ReportExportRequest
 from app.models.responses import success_response
+from app.services.observation_service import ObservationService
 from app.services.report_service import ReportService
 from app.services.summarizer_service import SummarizerService
 from app.api.routes.tasks import task_service  # 复用 tasks 路由中的 task_service 单例
@@ -23,6 +25,7 @@ from app.api.routes.tasks import task_service  # 复用 tasks 路由中的 task_
 router = APIRouter(prefix="/api/v1", tags=["report"])
 report_service = ReportService()
 summarizer_service = SummarizerService()
+observation_service = ObservationService()
 
 
 @router.post("/report/export")
@@ -50,9 +53,12 @@ async def export_report(request: ReportExportRequest) -> dict:
         content=request.content,
         schema=request.schema_result,
         platform=request.platform,
+        observation=request.observation_result or observation_service.build(request.observation),
         mode=request.mode,
         llm_config=request.llm,
     )
+    if not summary.observation and request.observation_result:
+        summary.observation = request.observation_result
     markdown = report_service.render_markdown(
         url=request.url,
         discovery=request.discovery,
@@ -99,6 +105,9 @@ async def export_task_report(task_id: str) -> PlainTextResponse:
     schema_result = SchemaAuditResult.model_validate(task.result["schema"])
     platform = PlatformAuditResult.model_validate(task.result["platform"])
     summary = SummaryResult.model_validate(task.result["summary"])
+    observation = ObservationResult.model_validate(task.result["observation"]) if task.result.get("observation") else None
+    if observation and not summary.observation:
+        summary.observation = observation
     markdown = report_service.render_markdown(
         url=task.url,
         discovery=discovery,

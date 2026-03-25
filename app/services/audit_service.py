@@ -7,6 +7,7 @@ from typing import Any
 from app.models.discovery import DiscoveryResult
 from app.models.requests import LLMConfig
 from app.services.discovery_service import DiscoveryService
+from app.services.observation_service import ObservationService
 
 
 class AuditBaseService:
@@ -81,12 +82,17 @@ class AuditBaseService:
 class FullAuditService(AuditBaseService):
     """全量审计服务：并行执行 5 个审计模块并生成汇总报告"""
 
+    def __init__(self, discovery_service: DiscoveryService | None = None) -> None:
+        super().__init__(discovery_service)
+        self.observation_service = ObservationService()
+
     async def audit_full(
         self,
         url: str,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
         discovery: DiscoveryResult | dict[str, Any] | None = None,
+        observation=None,
     ) -> dict[str, Any]:
         """执行完整 GEO 审计流程
 
@@ -130,6 +136,7 @@ class FullAuditService(AuditBaseService):
             content=content,
             schema=schema,
             platform=platform,
+            observation=self.observation_service.build(observation),
             mode=mode,
             llm_config=llm_config,
         )
@@ -142,5 +149,6 @@ class FullAuditService(AuditBaseService):
             "content": content.model_dump(),
             "schema": schema.model_dump(),
             "platform": platform.model_dump(),
+            "observation": summary.observation.model_dump() if summary.observation else None,
             "summary": summary.model_dump(),
         }

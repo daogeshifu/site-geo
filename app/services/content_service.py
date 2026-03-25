@@ -15,7 +15,9 @@ from app.utils.fetcher import fetch_url
 from app.utils.html_parser import parse_html
 from app.utils.text_analyzer import (
     contains_faq,
+    estimate_information_density,
     evaluate_heading_quality,
+    evaluate_chunk_structure,
     has_author_signals,
     has_publish_date,
     has_quantified_data,
@@ -49,6 +51,8 @@ class ContentService(AuditBaseService):
         response = await fetch_url(page_url, client=client)
         parsed = parse_html(response.final_url, response.text)
         heading_quality = evaluate_heading_quality(parsed["headings"])
+        information_density = estimate_information_density(parsed["text_content"], parsed["headings"])
+        chunk_structure = evaluate_chunk_structure(parsed["text_content"], parsed["headings"])
         return ContentPageAnalysis(
             url=response.final_url,
             page_type=page_type,
@@ -60,6 +64,8 @@ class ContentService(AuditBaseService):
             has_quantified_data=has_quantified_data(parsed["text_content"]),
             answer_first=is_answer_first(parsed["text_content"]),
             heading_quality_score=heading_quality["score"],
+            information_density_score=information_density["score"],
+            chunk_structure_score=chunk_structure["score"],
             text_excerpt=parsed["text_excerpt"],
         )
 
@@ -76,6 +82,8 @@ class ContentService(AuditBaseService):
             has_quantified_data=profile.has_quantified_data,
             answer_first=profile.answer_first,
             heading_quality_score=profile.heading_quality_score,
+            information_density_score=profile.information_density_score,
+            chunk_structure_score=profile.chunk_structure_score,
             text_excerpt=profile.text_excerpt,
         )
 
@@ -148,18 +156,30 @@ class ContentService(AuditBaseService):
             if page_analyses
             else 0
         )
+        avg_information_density = (
+            sum(page.information_density_score for page in page_analyses.values()) / len(page_analyses)
+            if page_analyses
+            else 0
+        )
+        avg_chunk_structure = (
+            sum(page.chunk_structure_score for page in page_analyses.values()) / len(page_analyses)
+            if page_analyses
+            else 0
+        )
 
         # 内容综合评分（满分 100）
         content_score = self.scoring.clamp_score(
             # 服务页词数越多得分越高（≥400词满分，≥200词半分）
             (15 if service_page and service_page.word_count >= 400 else 7 if service_page and service_page.word_count >= 200 else 0)
             + (20 if article_page and article_page.word_count >= 800 else 10 if article_page and article_page.word_count >= 400 else 0)
-            + (10 if has_faq_any else 0)
+            + (8 if has_faq_any else 0)
             + (10 if has_author_any else 0)
-            + (10 if has_publish_any else 0)
-            + (10 if has_quant_any else 0)
-            + (15 * (avg_heading_quality / 100))
-            + (10 if has_answer_first_any else 0)
+            + (7 if has_publish_any else 0)
+            + (12 if has_quant_any else 0)
+            + (12 * (avg_heading_quality / 100))
+            + (10 * (avg_information_density / 100))
+            + (8 * (avg_chunk_structure / 100))
+            + (8 if has_answer_first_any else 0)
         )
 
         # E-E-A-T 四维评分
@@ -173,7 +193,8 @@ class ContentService(AuditBaseService):
             (35 if service_page and service_page.word_count >= 400 else 0)
             + (25 if article_page and article_page.word_count >= 800 else 0)
             + (20 if has_answer_first_any else 0)
-            + (20 * (avg_heading_quality / 100))
+            + (10 * (avg_heading_quality / 100))
+            + (10 * (avg_information_density / 100))
         )
         authoritativeness_score = self.scoring.clamp_score(
             (25 if about_page else 0)
@@ -227,10 +248,18 @@ class ContentService(AuditBaseService):
             strengths.append("Some content follows an answer-first structure.")
         else:
             recommendations.append("Lead pages with direct answers before deeper explanation.")
+        if avg_information_density < 55:
+            issues.append("Pages do not yet surface enough fact density for consistent AI extraction.")
+            recommendations.append("Add quantified claims, concrete specifications, and sourceable proof blocks.")
+        if avg_chunk_structure < 55:
+            issues.append("Content chunking is weaker than ideal for answer extraction and citation reuse.")
+            recommendations.append("Break long sections into tighter question-led blocks with clearer subheadings.")
 
         findings = {
             "evaluated_pages": len(page_analyses),
             "average_heading_quality": self.scoring.clamp_score(avg_heading_quality),
+            "average_information_density": self.scoring.clamp_score(avg_information_density),
+            "average_chunk_structure": self.scoring.clamp_score(avg_chunk_structure),
             "has_faq_any": has_faq_any,
             "has_author_any": has_author_any,
             "has_publish_date_any": has_publish_any,
@@ -246,6 +275,8 @@ class ContentService(AuditBaseService):
             "quantified_data_present": has_quant_any,
             "answer_first_present": has_answer_first_any,
             "average_heading_quality": self.scoring.clamp_score(avg_heading_quality),
+            "average_information_density": self.scoring.clamp_score(avg_information_density),
+            "average_chunk_structure": self.scoring.clamp_score(avg_chunk_structure),
         }
         result = ContentAuditResult(
             score=content_score,

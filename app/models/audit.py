@@ -57,6 +57,8 @@ class ContentPageAnalysis(BaseModel):
     has_quantified_data: bool = False
     answer_first: bool = False
     heading_quality_score: int = 0
+    information_density_score: int = 0
+    chunk_structure_score: int = 0
     text_excerpt: str = ""
 
 
@@ -88,6 +90,9 @@ class PlatformAuditDetail(BaseModel):
     platform_score: int              # 0-100 平台就绪度评分
     primary_gap: str                 # 主要差距描述
     key_recommendations: list[str] = Field(default_factory=list)  # 针对该平台的优化建议
+    optimization_focus: str | None = None
+    preferred_sources: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
 
 
 class PlatformAuditResult(BaseAuditResult):
@@ -107,11 +112,75 @@ class ActionPlanItem(BaseModel):
     rationale: str   # 行动理由（为何优先）
 
 
+class ObservationSourceMetric(BaseModel):
+    """可选观测层中的单个平台来源指标"""
+
+    platform: str
+    sessions: int | None = None
+    users: int | None = None
+    conversions: int | None = None
+    revenue: float | None = None
+    conversion_rate: float | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class CitationObservation(BaseModel):
+    """人工或系统记录的单条 AI 引用观测"""
+
+    platform: str
+    query: str | None = None
+    cited: bool = False
+    position: int | None = None
+    citation_url: str | None = None
+    notes: str | None = None
+
+
+class ObservationInput(BaseModel):
+    """可选观测层输入，不参与 GEO 评分"""
+
+    data_period: str | None = None
+    ga4_ai_sessions: int | None = None
+    ga4_ai_users: int | None = None
+    ga4_ai_conversions: int | None = None
+    ga4_ai_revenue: float | None = None
+    source_breakdown: list[ObservationSourceMetric] = Field(default_factory=list)
+    citation_observations: list[CitationObservation] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ObservationResult(BaseModel):
+    """可选观测层结果，仅用于展示和叙事，不计分"""
+
+    provided: bool = False
+    scored: bool = False
+    status: str = "not_provided"
+    measurement_maturity: str = "none"
+    summary: str = ""
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    platform_breakdown: list[ObservationSourceMetric] = Field(default_factory=list)
+    citation_observations: list[CitationObservation] = Field(default_factory=list)
+    highlights: list[str] = Field(default_factory=list)
+    data_gaps: list[str] = Field(default_factory=list)
+
+
+class MetricDefinition(BaseModel):
+    """汇总层指标说明卡片"""
+
+    name: str
+    category: str
+    scoring: str
+    formula: str
+    why_it_matters: str
+    data_source: str
+    platform_relevance: list[str] = Field(default_factory=list)
+
+
 class SummaryResult(BaseModel):
     """GEO 审计汇总结果，计算 6 个维度的加权复合分数"""
 
     composite_geo_score: int    # 最终 GEO 综合评分（0-100）
     status: str                 # critical/poor/fair/good/strong
+    scoring_version: str = "geo-audit-v2"
     audit_mode: str = "standard"
     llm_enhanced: bool = False
     llm_provider: str | None = None
@@ -124,3 +193,6 @@ class SummaryResult(BaseModel):
     top_issues: list[str] = Field(default_factory=list)            # 最关键问题（最多 5 条）
     quick_wins: list[str] = Field(default_factory=list)            # 快速优化建议（最多 5 条）
     prioritized_action_plan: list[ActionPlanItem] = Field(default_factory=list)  # 优先行动计划
+    metric_definitions: list[MetricDefinition] = Field(default_factory=list)
+    score_interpretation: list[str] = Field(default_factory=list)
+    observation: ObservationResult | None = None

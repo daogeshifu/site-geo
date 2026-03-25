@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from app.models.audit import (
     ContentAuditResult,
+    ObservationInput,
+    ObservationResult,
     PlatformAuditResult,
     SchemaAuditResult,
     TechnicalAuditResult,
@@ -36,6 +38,7 @@ class UrlRequest(BaseModel):
     url: str = Field(..., min_length=3)   # 待审计的网站 URL
     mode: AuditMode = "standard"          # 审计模式
     llm: LLMConfig | None = None          # 可选 LLM 配置（premium 模式专用）
+    observation: ObservationInput | None = None  # 可选观测层输入，不参与评分
 
 
 class AuditModuleRequest(UrlRequest):
@@ -59,3 +62,4 @@ class SummarizeRequest(UrlRequest):
     content: ContentAuditResult
     schema_result: SchemaAuditResult = Field(alias="schema")  # 字段别名适配 JSON 中的 "schema" 键
     platform: PlatformAuditResult
+    observation_result: ObservationResult | None = Field(default=None, alias="observationResult")

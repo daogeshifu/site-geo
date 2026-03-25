@@ -3,6 +3,8 @@ from __future__ import annotations
 from app.models.audit import (
     ActionPlanItem,
     ContentAuditResult,
+    MetricDefinition,
+    ObservationResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -104,6 +106,74 @@ class SummarizerService:
             },
         )
 
+    def _metric_definitions(self) -> list[MetricDefinition]:
+        return [
+            MetricDefinition(
+                name="AI Citability & Visibility",
+                category="Scored",
+                scoring="scored",
+                formula="Crawler access + citation structure + llms guidance + basic entity presence",
+                why_it_matters="Determines whether AI systems can reach, parse, and reuse the site as source material.",
+                data_source="robots.txt, llms.txt, homepage and key-page extraction",
+                platform_relevance=["ChatGPT", "Google AI Mode", "Google AI Overviews", "Perplexity", "Gemini", "Grok"],
+            ),
+            MetricDefinition(
+                name="Brand Authority Signals",
+                category="Scored",
+                scoring="scored",
+                formula="Backlink quality + brand mentions + entity consistency + business completeness",
+                why_it_matters="Helps generative engines trust the entity behind the content and prefer official or reinforced sources.",
+                data_source="On-site entity signals, structured data, Semrush backlink overview when available",
+                platform_relevance=["ChatGPT", "Perplexity", "Gemini", "Grok"],
+            ),
+            MetricDefinition(
+                name="Content Quality & E-E-A-T",
+                category="Scored",
+                scoring="scored",
+                formula="Content depth + E-E-A-T + fact density + chunk structure",
+                why_it_matters="Higher-density, better-structured pages reduce model reasoning cost and increase extraction quality.",
+                data_source="Service, article, about, and case-study pages",
+                platform_relevance=["Perplexity", "Google AI Mode", "Google AI Overviews", "ChatGPT"],
+            ),
+            MetricDefinition(
+                name="Structured Data & Entity Graph",
+                category="Scored",
+                scoring="scored",
+                formula="Schema coverage + sameAs + stable @id + relation richness + product/defined-term support",
+                why_it_matters="Entity-level machine readability supports disambiguation, brand ownership, and multi-hop reasoning.",
+                data_source="JSON-LD blocks across homepage and key pages",
+                platform_relevance=["Gemini", "Google AI Overviews", "Google AI Mode", "ChatGPT"],
+            ),
+            MetricDefinition(
+                name="Platform Optimization",
+                category="Scored",
+                scoring="scored",
+                formula="Weighted readiness across ChatGPT, Google AI Mode, AI Overviews, Perplexity, Gemini, and Grok",
+                why_it_matters="Different GEO channels reward different source patterns, content shapes, and trust signals.",
+                data_source="Cross-module signals remapped into platform-specific readiness",
+                platform_relevance=["ChatGPT", "Google AI Mode", "Google AI Overviews", "Perplexity", "Gemini", "Grok"],
+            ),
+            MetricDefinition(
+                name="Observation Layer",
+                category="Unscored",
+                scoring="unscored",
+                formula="Optional GA4 / log / citation observation metrics for contextual reporting only",
+                why_it_matters="Shows whether readiness work is translating into observed AI traffic or citation evidence.",
+                data_source="User-uploaded optional observation data",
+                platform_relevance=["ChatGPT", "Google AI Mode", "Google AI Overviews", "Perplexity", "Gemini", "Grok"],
+            ),
+        ]
+
+    def _score_interpretation(self, observation: ObservationResult | None) -> list[str]:
+        interpretation = [
+            "GEO Audit v2 scores only readiness dimensions that can be derived from the site and supplied enrichment sources.",
+            "Optional observation metrics are displayed separately and never change the composite GEO score.",
+            "Platform readiness is comparative guidance, not a direct measurement of live mention share or citation rank.",
+        ]
+        if observation and observation.provided:
+            interpretation.append("Observation data was uploaded and is included as contextual evidence alongside readiness scoring.")
+        return interpretation
+
     async def summarize(
         self,
         url: str,
@@ -113,6 +183,7 @@ class SummarizerService:
         content: ContentAuditResult,
         schema: SchemaAuditResult,
         platform: PlatformAuditResult,
+        observation: ObservationResult | None = None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
     ) -> SummaryResult:
@@ -218,6 +289,8 @@ class SummarizerService:
             f"{discovery.domain or url} currently scores {composite_score}/100 for GEO readiness. "
             f"The biggest gaps are in {ordered_dimensions[0][0]} and {ordered_dimensions[1][0]}."
         )
+        if observation and observation.provided:
+            summary_text += " Optional observation data was uploaded and is displayed separately without affecting the score."
         result = SummaryResult(
             composite_geo_score=composite_score,
             status=status,
@@ -228,6 +301,9 @@ class SummarizerService:
             top_issues=top_issues,
             quick_wins=quick_wins,
             prioritized_action_plan=prioritized_action_plan[:5],  # 最多 5 条优先行动
+            metric_definitions=self._metric_definitions(),
+            score_interpretation=self._score_interpretation(observation),
+            observation=observation,
         )
         if llm_config:
             result.llm_provider = llm_config.provider

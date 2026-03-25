@@ -14,21 +14,23 @@ from app.utils.heuristics import assess_citability, assess_llms_effectiveness
 class PlatformService(AuditBaseService):
     """平台适配审计模块（占 GEO 总分 10%）
 
-    评估 5 大 AI 搜索平台的就绪度，各平台权重：
-    - ChatGPT Web Search: 30%（重视爬虫访问 + llms.txt 引导）
-    - Google AI Overviews: 20%（重视结构化答案 + Schema）
-    - Perplexity: 20%（重视可引用性 + 品牌权威）
-    - Google Gemini: 15%（重视 Schema + 元数据）
-    - Bing Copilot: 15%（重视元数据 + 品牌信任）
+    评估 6 大 GEO 重点平台的就绪度，各平台权重：
+    - ChatGPT: 22%
+    - Google AI Mode: 18%
+    - Google AI Overviews: 18%
+    - Perplexity: 16%
+    - Gemini: 13%
+    - Grok: 13%
     """
 
     # 各平台在平台综合分中的权重
     PLATFORM_WEIGHTS = {
-        "chatgpt_web_search": 0.30,
-        "google_ai_overviews": 0.20,
-        "perplexity": 0.20,
-        "google_gemini": 0.15,
-        "bing_copilot": 0.15,
+        "chatgpt": 0.22,
+        "google_ai_mode": 0.18,
+        "google_ai_overviews": 0.18,
+        "perplexity": 0.16,
+        "gemini": 0.13,
+        "grok": 0.13,
     }
 
     def __init__(self, discovery_service=None) -> None:
@@ -37,12 +39,24 @@ class PlatformService(AuditBaseService):
         self.brand_authority = BrandAuthorityService()
         self.llm_enrichment = LLMEnrichmentService()
 
-    def _platform_detail(self, score: float, primary_gap: str, recommendations: list[str]) -> PlatformAuditDetail:
+    def _platform_detail(
+        self,
+        score: float,
+        primary_gap: str,
+        recommendations: list[str],
+        *,
+        optimization_focus: str,
+        preferred_sources: list[str],
+        evidence: list[str],
+    ) -> PlatformAuditDetail:
         """构建单平台审计详情，建议最多保留 3 条"""
         return PlatformAuditDetail(
             platform_score=self.scoring.clamp_score(score),
             primary_gap=primary_gap,
             key_recommendations=recommendations[:3],
+            optimization_focus=optimization_focus,
+            preferred_sources=preferred_sources,
+            evidence=evidence[:3],
         )
 
     def _metadata_signal(self, resolved) -> int:
@@ -94,12 +108,59 @@ class PlatformService(AuditBaseService):
         )
         metadata_signal = self._metadata_signal(resolved)
         schema_signal = self._schema_signal(resolved)
+        entity_relation_signal = self.scoring.clamp_score(
+            (40 if resolved.schema_summary.get("entity_id_count", 0) >= 2 else 0)
+            + (35 if resolved.schema_summary.get("relation_count", 0) >= 3 else 0)
+            + (25 if resolved.schema_summary.get("has_defined_term") else 0)
+        )
         # FAQPage schema 是否存在（满分 100 vs 基础分 30）
         faq_signal = 100 if resolved.schema_summary.get("has_faq_page") else 30
 
         # 各平台单独评分，权重分配体现平台特性
         platform_scores = {
-            # Google AI Overviews：最重视结构化答案和 FAQ/Schema 覆盖
+            "chatgpt": self._platform_detail(
+                score=ai_crawler_allowed_ratio * 28
+                + llms_quality["score"] * 0.27
+                + citability["score"] * 0.25
+                + brand["score"] * 0.20,
+                primary_gap="Crawler access, llms guidance, or high-intent answer blocks are still incomplete."
+                if ai_crawler_allowed_ratio < 1 or llms_quality["score"] < 60 or citability["score"] < 70
+                else "No major gap detected.",
+                recommendations=[
+                    "Allow major AI crawlers and keep llms.txt aligned with current offers.",
+                    "Lead priority pages with answer-first summaries and tightly scoped proof blocks.",
+                    "Strengthen official entity signals on homepage, about, and support pages.",
+                ],
+                optimization_focus="Official-site retrieval with strong machine guidance and concise answer blocks.",
+                preferred_sources=["Brand website", "Support docs", "Commerce pages", "Reddit"],
+                evidence=[
+                    f"AI crawler allowed ratio: {round(ai_crawler_allowed_ratio, 2)}.",
+                    f"llms.txt quality score: {llms_quality['score']}/100.",
+                    f"Citability score: {citability['score']}/100.",
+                ],
+            ),
+            "google_ai_mode": self._platform_detail(
+                score=citability["score"] * 0.26
+                + brand["score"] * 0.20
+                + metadata_signal * 0.16
+                + schema_signal * 0.18
+                + entity_relation_signal * 0.20,
+                primary_gap="Query fan-out readiness is limited by shallow content coverage or weak entity depth."
+                if citability["score"] < 70 or entity_relation_signal < 60
+                else "No major gap detected.",
+                recommendations=[
+                    "Expand topic clusters so sub-queries resolve to dedicated pages, FAQs, and support content.",
+                    "Strengthen product, service, and entity relationships in structured data.",
+                    "Create multi-format evidence across website, YouTube, and community surfaces.",
+                ],
+                optimization_focus="Breadth across related sub-queries plus strong entity and supporting-source alignment.",
+                preferred_sources=["YouTube", "Brand website", "UGC/community", "Commerce listings"],
+                evidence=[
+                    f"Entity relationship signal: {entity_relation_signal}/100.",
+                    f"Schema signal: {schema_signal}/100.",
+                    f"Metadata signal: {metadata_signal}/100.",
+                ],
+            ),
             "google_ai_overviews": self._platform_detail(
                 score=citability["score"] * 0.35 + schema_signal * 0.30 + faq_signal * 0.20 + metadata_signal * 0.15,
                 primary_gap="Weak structured answers and FAQ/schema coverage."
@@ -110,36 +171,38 @@ class PlatformService(AuditBaseService):
                     "Lead pages with concise answer-first summaries.",
                     "Expand headings so sections map cleanly to user questions.",
                 ],
-            ),
-            # ChatGPT Web Search：最重视爬虫访问权限和 llms.txt 引导
-            "chatgpt_web_search": self._platform_detail(
-                score=ai_crawler_allowed_ratio * 40
-                + llms_quality["score"] * 0.25
-                + citability["score"] * 0.20
-                + brand["score"] * 0.15,
-                primary_gap="Crawler access or llms.txt guidance is incomplete."
-                if ai_crawler_allowed_ratio < 1 or llms_quality["score"] < 60
-                else "No major gap detected.",
-                recommendations=[
-                    "Allow major AI crawlers in robots.txt.",
-                    "Publish llms.txt with site purpose, services, and machine-readable citation guidance.",
-                    "Strengthen entity and contact signals on the homepage.",
+                optimization_focus="Compact direct-answer content with highly extractable structure.",
+                preferred_sources=["Brand website", "Wikipedia", "Authoritative references", "Multimedia assets"],
+                evidence=[
+                    f"FAQ signal: {faq_signal}/100.",
+                    f"Schema signal: {schema_signal}/100.",
+                    f"Metadata signal: {metadata_signal}/100.",
                 ],
             ),
             # Perplexity：最重视可引用性和品牌权威
             "perplexity": self._platform_detail(
-                score=citability["score"] * 0.40 + brand["score"] * 0.25 + schema_signal * 0.20 + metadata_signal * 0.15,
-                primary_gap="Site needs more citable facts and entity context."
-                if citability["score"] < 70 or brand["score"] < 60
+                score=citability["score"] * 0.34
+                + brand["score"] * 0.24
+                + entity_relation_signal * 0.14
+                + schema_signal * 0.16
+                + metadata_signal * 0.12,
+                primary_gap="Site needs more cited evidence, neutral proof, and third-party reinforcement."
+                if citability["score"] < 70 or brand["score"] < 60 or entity_relation_signal < 50
                 else "No major gap detected.",
                 recommendations=[
                     "Add quantified proof points, case studies, and sourceable claims.",
-                    "Improve organization/contact signals to support citation confidence.",
-                    "Publish more insight-led content for long-tail retrieval.",
+                    "Pair official pages with neutral third-party proof and expert references.",
+                    "Publish insight-led content that answers comparison and evaluation queries.",
+                ],
+                optimization_focus="Evidence-led answers that feel verifiable rather than promotional.",
+                preferred_sources=["Reddit", "YouTube", "LinkedIn", "Tech media", "Brand website"],
+                evidence=[
+                    f"Citability score: {citability['score']}/100.",
+                    f"Brand authority score: {brand['score']}/100.",
+                    f"Entity relationship signal: {entity_relation_signal}/100.",
                 ],
             ),
-            # Google Gemini：最重视 Schema 覆盖和元数据完整度
-            "google_gemini": self._platform_detail(
+            "gemini": self._platform_detail(
                 score=schema_signal * 0.40 + metadata_signal * 0.20 + citability["score"] * 0.15 + brand["score"] * 0.25,
                 primary_gap="Entity schema and metadata are underdeveloped."
                 if schema_signal < 80 or metadata_signal < 80
@@ -149,17 +212,35 @@ class PlatformService(AuditBaseService):
                     "Tighten title, meta description, and canonical coverage.",
                     "Clarify business category and services on the homepage.",
                 ],
+                optimization_focus="Authoritative official content with precise metadata and entity clarity.",
+                preferred_sources=["Brand website", "Official support docs", "Wikipedia", "Medium"],
+                evidence=[
+                    f"Schema signal: {schema_signal}/100.",
+                    f"Metadata signal: {metadata_signal}/100.",
+                    f"Brand authority score: {brand['score']}/100.",
+                ],
             ),
-            # Bing Copilot：重视元数据和品牌信任信号
-            "bing_copilot": self._platform_detail(
-                score=metadata_signal * 0.30 + schema_signal * 0.20 + citability["score"] * 0.20 + brand["score"] * 0.30,
-                primary_gap="Metadata and brand trust signals need improvement."
-                if metadata_signal < 80 or brand["score"] < 60
+            "grok": self._platform_detail(
+                score=brand["score"] * 0.28
+                + citability["score"] * 0.22
+                + metadata_signal * 0.10
+                + schema_signal * 0.12
+                + entity_relation_signal * 0.12
+                + llms_quality["score"] * 0.16,
+                primary_gap="Brand signals are not yet amplified across timely, social, and discussion-led surfaces."
+                if brand["score"] < 60 or llms_quality["score"] < 60
                 else "No major gap detected.",
                 recommendations=[
-                    "Improve social proof, contact details, and about-page completeness.",
-                    "Ensure Open Graph and Twitter metadata are present.",
-                    "Use structured data to reinforce brand entity identity.",
+                    "Strengthen branded discussion signals and keep official descriptions consistent across channels.",
+                    "Publish timely, opinionated, and clearly sourced content that can be re-cited in social contexts.",
+                    "Keep entity references, product naming, and supporting evidence aligned across site properties.",
+                ],
+                optimization_focus="Socially amplified entity consistency with timely and easily repeatable evidence.",
+                preferred_sources=["Reddit", "YouTube", "X/Facebook", "Brand website", "Tech media"],
+                evidence=[
+                    f"Brand authority score: {brand['score']}/100.",
+                    f"llms.txt quality score: {llms_quality['score']}/100.",
+                    f"Entity relationship signal: {entity_relation_signal}/100.",
                 ],
             ),
         }
@@ -191,6 +272,7 @@ class PlatformService(AuditBaseService):
             "schema_signal": schema_signal,
             "metadata_signal": metadata_signal,
             "brand_authority_score": brand["score"],
+            "entity_relationship_signal": entity_relation_signal,
             "platform_weights": self.PLATFORM_WEIGHTS,
         }
         checks = {

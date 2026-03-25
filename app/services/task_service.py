@@ -9,6 +9,7 @@ from app.models.task import AuditTask, TaskAuditRequest, TaskStep
 from app.services.cache_service import CacheService
 from app.services.content_service import ContentService
 from app.services.discovery_service import DiscoveryService
+from app.services.observation_service import ObservationService
 from app.services.platform_service import PlatformService
 from app.services.schema_service import SchemaService
 from app.services.summarizer_service import SummarizerService
@@ -28,7 +29,7 @@ class TaskService:
     """
 
     # 任务步骤的执行顺序
-    STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "summary"]
+    STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
 
     def __init__(self) -> None:
         self.cache_service = CacheService()
@@ -39,6 +40,7 @@ class TaskService:
         self.content_service = ContentService(self.discovery_service)
         self.schema_service = SchemaService(self.discovery_service)
         self.platform_service = PlatformService(self.discovery_service)
+        self.observation_service = ObservationService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
         self._lock = asyncio.Lock()             # 保护 tasks dict 的并发访问
@@ -84,7 +86,7 @@ class TaskService:
             raise AppError(400, "invalid URL", str(exc)) from exc
 
         # force_refresh=True 时跳过缓存查询
-        cached_record = None if request.force_refresh else self.cache_service.get(cache_key)
+        cached_record = None if request.force_refresh or request.observation else self.cache_service.get(cache_key)
         task_id = uuid4().hex
         now = self._utcnow()
         task = AuditTask(
@@ -95,6 +97,7 @@ class TaskService:
             cache_key=cache_key,
             mode=request.mode,
             llm=request.llm,
+            observation=request.observation,
             cached=bool(cached_record),
             force_refresh=request.force_refresh,
             created_at=now,
@@ -111,6 +114,8 @@ class TaskService:
                 # summary 步骤的数据键名为 "summary"，其他模块用步骤名
                 if step_name == "summary":
                     task.steps[step_name].data = cached_record.payload.get("summary")
+                elif step_name == "observation":
+                    task.steps[step_name].data = cached_record.payload.get("observation")
                 else:
                     task.steps[step_name].data = cached_record.payload.get(step_name)
             task.status = "completed"
@@ -208,7 +213,12 @@ class TaskService:
                 module_results[step_name] = result
                 await self._update_step(task, step_name, "completed", payload)
 
-            # Step 7: 汇总计算复合 GEO 分数
+            # Step 7: 可选观测层（不计分）
+            await self._update_step(task, "observation", "running")
+            observation_result = self.observation_service.build(task.observation)
+            await self._update_step(task, "observation", "completed", observation_result.model_dump())
+
+            # Step 8: 汇总计算复合 GEO 分数
             await self._update_step(task, "summary", "running")
             summary = await self.summarizer_service.summarize(
                 url=task.url,
@@ -218,6 +228,7 @@ class TaskService:
                 content=module_results["content"],
                 schema=module_results["schema"],
                 platform=module_results["platform"],
+                observation=observation_result,
                 mode=task.mode,
                 llm_config=task.llm,
             )
@@ -233,19 +244,21 @@ class TaskService:
                 "content": module_results["content"].model_dump(),
                 "schema": module_results["schema"].model_dump(),
                 "platform": module_results["platform"].model_dump(),
+                "observation": observation_result.model_dump(),
                 "summary": summary_payload,
             }
             task.llm_model_used = self._detect_llm_model_used(task.result)
             # 写入文件缓存，供后续相同请求直接命中
-            self.cache_service.set(
-                task.cache_key,
-                url=task.url,
-                normalized_url=task.normalized_url,
-                domain=task.domain,
-                mode=task.mode,
-                payload=task.result,
-                llm_config=task.llm,
-            )
+            if not getattr(task, "observation", None):
+                self.cache_service.set(
+                    task.cache_key,
+                    url=task.url,
+                    normalized_url=task.normalized_url,
+                    domain=task.domain,
+                    mode=task.mode,
+                    payload=task.result,
+                    llm_config=task.llm,
+                )
             task.status = "completed"
             task.current_step = "completed"
             task.progress_percent = 100

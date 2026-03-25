@@ -667,7 +667,7 @@ def assess_citability(
     策略：
     - 主页默认填充缺失的辅助评分字段（information_density_score / chunk_structure_score 等）
     - 对所有页面（主页 + 关键页）独立评分
-    - 如存在比主页更高分的关键页，以 55% 主页 + 45% 最佳页面 加权合并总分
+    - 如存在比主页更高分的关键页，以 45% 主页 + 55% 最佳页面 加权合并总分
     - 仅主页时，总分直接等于主页评分
 
     Args:
@@ -700,8 +700,8 @@ def assess_citability(
     best_page_key, best_page = max(scored_pages.items(), key=lambda item: item[1]["score"])
     overall_score = homepage_citability["score"]
     if best_page_key != "homepage":
-        # 最佳关键页比主页更优时，按比例混合两者分数
-        overall_score = int(round(homepage_citability["score"] * 0.55 + best_page["score"] * 0.45))
+        # 最佳关键页比主页更优时，给予深度页更高权重，更符合 GEO 的引用现实
+        overall_score = int(round(homepage_citability["score"] * 0.45 + best_page["score"] * 0.55))
 
     return {
         "score": min(overall_score, 100),

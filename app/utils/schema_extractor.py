@@ -4,7 +4,30 @@ import json
 from typing import Any
 
 
-def _walk_schema(data: Any, types: set[str], same_as: set[str]) -> None:
+RELATION_KEYS = {
+    "brand",
+    "manufacturer",
+    "haspart",
+    "offer",
+    "offers",
+    "about",
+    "mentions",
+    "sameas",
+    "memberof",
+    "subjectof",
+    "knowsabout",
+    "contactpoint",
+    "mainentity",
+}
+
+
+def _walk_schema(
+    data: Any,
+    types: set[str],
+    same_as: set[str],
+    entity_ids: set[str],
+    relation_count: list[int],
+) -> None:
     """递归遍历 JSON-LD 数据，收集所有 @type 和 sameAs 值
 
     处理：
@@ -15,7 +38,7 @@ def _walk_schema(data: Any, types: set[str], same_as: set[str]) -> None:
     """
     if isinstance(data, list):
         for item in data:
-            _walk_schema(item, types, same_as)
+            _walk_schema(item, types, same_as, entity_ids, relation_count)
         return
 
     if isinstance(data, dict):
@@ -35,14 +58,20 @@ def _walk_schema(data: Any, types: set[str], same_as: set[str]) -> None:
         elif isinstance(raw_same_as, str):
             same_as.add(raw_same_as)
 
+        raw_id = data.get("@id")
+        if isinstance(raw_id, str) and raw_id:
+            entity_ids.add(raw_id)
+
         # 处理 @graph（Schema.org 中常用的图形化结构）
         if "@graph" in data:
-            _walk_schema(data["@graph"], types, same_as)
+            _walk_schema(data["@graph"], types, same_as, entity_ids, relation_count)
 
         # 递归遍历所有嵌套的 dict/list 值
-        for value in data.values():
+        for key, value in data.items():
+            if key.lower() in RELATION_KEYS and isinstance(value, (dict, list, str)):
+                relation_count[0] += 1
             if isinstance(value, (dict, list)):
-                _walk_schema(value, types, same_as)
+                _walk_schema(value, types, same_as, entity_ids, relation_count)
 
 
 def extract_schema_summary(json_ld_blocks: list[str]) -> dict[str, Any]:
@@ -65,13 +94,15 @@ def extract_schema_summary(json_ld_blocks: list[str]) -> dict[str, Any]:
     """
     types: set[str] = set()
     same_as: set[str] = set()
+    entity_ids: set[str] = set()
+    relation_count = [0]
 
     for block in json_ld_blocks:
         try:
             payload = json.loads(block)
         except json.JSONDecodeError:
             continue  # 跳过无法解析的块
-        _walk_schema(payload, types, same_as)
+        _walk_schema(payload, types, same_as, entity_ids, relation_count)
 
     # 使用小写集合进行类型匹配（不区分大小写）
     lowered = {item.lower() for item in types}
@@ -84,5 +115,10 @@ def extract_schema_summary(json_ld_blocks: list[str]) -> dict[str, Any]:
         "has_faq_page": "faqpage" in lowered,
         "has_service": "service" in lowered,
         "has_website": "website" in lowered,
+        "has_product": "product" in lowered,
+        "has_defined_term": "definedterm" in lowered,
+        "has_offer": "offer" in lowered,
+        "entity_id_count": len(entity_ids),
+        "relation_count": relation_count[0],
         "same_as": sorted(same_as),
     }

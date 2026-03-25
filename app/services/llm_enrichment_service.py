@@ -180,8 +180,8 @@ class LLMEnrichmentService:
         LLM 可对每个平台分数进行 ±10 点调整
         """
         system_prompt = (
-            "You are a GEO platform optimization strategist. Evaluate readiness for Google AI Overviews, ChatGPT Web Search, "
-            "Perplexity, Google Gemini, and Bing Copilot. "
+            "You are a GEO platform optimization strategist. Evaluate readiness for ChatGPT, Google AI Mode, "
+            "Google AI Overviews, Perplexity, Gemini, and Grok. "
             "Return JSON with keys: summary, platform_adjustments, issues, strengths, recommendations."
         )
         payload = {
@@ -211,11 +211,12 @@ class LLMEnrichmentService:
 
         # 重新计算综合平台分
         platform_weights = {
-            "chatgpt_web_search": 0.30,
-            "google_ai_overviews": 0.20,
-            "perplexity": 0.20,
-            "google_gemini": 0.15,
-            "bing_copilot": 0.15,
+            "chatgpt": 0.22,
+            "google_ai_mode": 0.18,
+            "google_ai_overviews": 0.18,
+            "perplexity": 0.16,
+            "gemini": 0.13,
+            "grok": 0.13,
         }
         result.platform_optimization_score = self.scoring.clamp_score(
             sum(

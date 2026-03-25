@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.audit import ObservationInput
 from app.models.requests import LLMConfig, UrlRequest
 
 # 任务状态枚举
@@ -17,10 +18,11 @@ class TaskAuditRequest(UrlRequest):
     """异步审计任务创建请求"""
 
     force_refresh: bool = False  # 是否强制跳过缓存重新执行
+    observation: ObservationInput | None = None
 
 
 class TaskStep(BaseModel):
-    """单个审计步骤的状态跟踪（共 7 步：discovery + 5 模块 + summary）"""
+    """单个审计步骤的状态跟踪（共 8 步：discovery + 5 模块 + observation + summary）"""
 
     name: str                               # 步骤名称
     status: StepStatus = "pending"          # 当前状态
@@ -40,6 +42,7 @@ class AuditTask(BaseModel):
     cache_key: str         # SHA256 缓存键
     mode: str = "standard"
     llm: LLMConfig | None = None
+    observation: ObservationInput | None = None
     status: TaskStatus = "queued"         # 任务整体状态
     current_step: str = "queued"          # 当前正在执行的步骤名称
     progress_percent: int = 0             # 完成进度百分比（0-100）

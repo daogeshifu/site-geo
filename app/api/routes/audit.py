@@ -7,6 +7,7 @@ from app.models.responses import success_response
 from app.services.audit_service import FullAuditService
 from app.services.content_service import ContentService
 from app.services.discovery_service import DiscoveryService
+from app.services.observation_service import ObservationService
 from app.services.platform_service import PlatformService
 from app.services.schema_service import SchemaService
 from app.services.summarizer_service import SummarizerService
@@ -28,6 +29,7 @@ platform_service = PlatformService(shared_discovery_service)
 full_audit_service = FullAuditService(shared_discovery_service)
 # Summarizer 不依赖 Discovery，独立实例化
 summarizer_service = SummarizerService()
+observation_service = ObservationService()
 
 
 @router.post("/audit/visibility")
@@ -158,6 +160,7 @@ async def audit_full(request: FullAuditRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
         discovery=request.discovery,
+        observation=request.observation,
     )
     return success_response(result)
 
@@ -184,6 +187,7 @@ async def summarize_audit(request: SummarizeRequest) -> dict:
         content=request.content,
         schema=request.schema_result,
         platform=request.platform,
+        observation=request.observation_result or observation_service.build(request.observation),
         mode=request.mode,
         llm_config=request.llm,
     )

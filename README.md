@@ -17,9 +17,9 @@
 
 ## What is GEO Audit?
 
-GEO Audit Service is an open-source audit engine built for the **AI search era**. Traditional SEO tools measure Google rankings — GEO Audit measures how likely **ChatGPT, Perplexity, Google AI Overviews, and Gemini** are to cite your site.
+GEO Audit Service is an open-source audit engine built for the **AI search era**. Traditional SEO tools measure Google rankings. GEO Audit v2 measures how ready your site is to be cited, extracted, and trusted by **ChatGPT, Google AI Mode, Google AI Overviews, Perplexity, Gemini, and Grok**.
 
-It builds a full **Site Snapshot** across key pages, then scores your site across 6 GEO dimensions:
+It builds a full **Site Snapshot** across key pages, then scores your site across 6 GEO dimensions while keeping external observation data optional and unscored:
 
 | Dimension | Weight | What it measures |
 |---|---|---|
@@ -27,17 +27,25 @@ It builds a full **Site Snapshot** across key pages, then scores your site acros
 | Brand Authority Signals | 20% | Backlinks, entity consistency, brand mentions |
 | Content Quality & E-E-A-T | 20% | Experience, Expertise, Authoritativeness, Trust |
 | Technical Foundations | 15% | HTTPS, SSR, Core Web Vitals, security headers |
-| Structured Data | 10% | JSON-LD coverage and schema quality |
-| Platform Optimization | 10% | Per-platform readiness (ChatGPT, Perplexity, etc.) |
+| Structured Data | 10% | JSON-LD coverage, entity graph quality, and relationship richness |
+| Platform Optimization | 10% | Per-platform readiness across 6 GEO channels |
+
+Optional observation layer:
+
+- **Observation Layer (unscored)** — upload GA4, logs, or manual citation observations for reporting only; no upload is required, and the GEO score is unchanged when it is missing
 
 ---
 
 ## Features
 
+- **GEO Audit v2** — separates scored readiness from optional observation metrics
 - **Site Snapshot** — crawls homepage, about, services, articles, and case studies in a single pass
 - **5 Audit Modules** — visibility, technical, content, schema, platform
+- **6 Platform Views** — ChatGPT, Google AI Mode, Google AI Overviews, Perplexity, Gemini, and Grok
+- **Entity Graph Signals** — evaluates JSON-LD coverage, stable `@id`, `sameAs`, `DefinedTerm`, and relationship richness
 - **Async Task API** — submit jobs, poll status, export Markdown reports
 - **Discovery Reuse** — decouple crawling from scoring for batch/pipeline workflows
+- **Optional Observation Layer** — attach GA4 / source breakdown / citation observations without affecting score
 - **AI Enhancement** — optional LLM-powered analysis for visibility, content, platform, and summary
 - **Semrush Integration** — plug in backlink authority signals via the Semrush API
 - **Docker ready** — single `docker run` to production
@@ -300,6 +308,36 @@ curl -X POST http://127.0.0.1:8023/api/v1/discovery \
 
 Response includes `page_profiles` and `site_snapshot_version` for all crawled pages.
 
+### Optional Observation Input
+
+Observation data is optional. Most users only need:
+
+```json
+{ "url": "https://example.com" }
+```
+
+If you have measurement data, you can attach it to `tasks/audit`, `audit/full`, or `audit/summarize`:
+
+```json
+{
+  "url": "https://example.com",
+  "observation": {
+    "data_period": "2026-Q1",
+    "ga4_ai_sessions": 240,
+    "ga4_ai_conversions": 12,
+    "source_breakdown": [
+      { "platform": "chatgpt", "sessions": 110, "conversions": 7 },
+      { "platform": "perplexity", "sessions": 45, "conversions": 2 }
+    ],
+    "citation_observations": [
+      { "platform": "chatgpt", "query": "best geo audit tools", "cited": true, "position": 2 }
+    ]
+  }
+}
+```
+
+This data is displayed in the report as an **Observation Layer** and does **not** change the composite GEO score.
+
 ---
 
 ## Architecture
@@ -323,6 +361,12 @@ Response includes `page_profiles` and `site_snapshot_version` for all crawled pa
          │  schema · platform                    │
          └───────────┬───────────────────────────┘
                      │  module results + metadata
+         ┌───────────▼───────────┐
+         │ Observation Layer     │  ← Optional, unscored
+         │ GA4 / logs / manual   │
+         │ citation evidence     │
+         └───────────┬───────────┘
+                     │  contextual metrics only
          ┌───────────▼───────────┐
          │    Summary Engine     │  ← 6 GEO dimensions
          │    + AI Enhancement   │    (premium mode)
@@ -353,11 +397,32 @@ Citability outputs: `homepage_citability`, `best_page_citability`, `citation_pro
 
 | Platform | Weight |
 |---|---|
-| ChatGPT Web Search | 30% |
-| Google AI Overviews | 20% |
-| Perplexity | 20% |
-| Google Gemini | 15% |
-| Bing Copilot | 15% |
+| ChatGPT | 22% |
+| Google AI Mode | 18% |
+| Google AI Overviews | 18% |
+| Perplexity | 16% |
+| Gemini | 13% |
+| Grok | 13% |
+
+### Scoring — Structured Data & Entity Graph (10%)
+
+The structured-data module in v2 goes beyond simple Schema presence checks. It now considers:
+
+- JSON-LD baseline coverage
+- `Organization`, `WebSite`, `Service`, `Article`, `FAQPage`, `Product`, `DefinedTerm`
+- `sameAs` coverage
+- stable entity `@id`
+- relationship richness such as `brand`, `manufacturer`, `hasPart`, `offers`, `about`, `contactPoint`
+
+### Observation Layer (Unscored)
+
+When provided, the observation layer can display:
+
+- GA4 AI-attributed sessions / conversions / revenue
+- source-platform traffic breakdown
+- manual or system-recorded citation observations
+
+It is **never included** in the GEO composite score.
 
 ---
 

@@ -6,6 +6,7 @@ from app.models.requests import UrlRequest
 from app.models.discovery import DiscoveryResult
 from app.models.audit import (
     ContentAuditResult,
+    ObservationResult,
     PlatformAuditResult,
     SchemaAuditResult,
     SummaryResult,
@@ -24,6 +25,7 @@ class ReportExportRequest(UrlRequest):
     schema_result: SchemaAuditResult
     platform: PlatformAuditResult
     summary: SummaryResult | None = None  # 可选：若不提供则自动计算
+    observation_result: ObservationResult | None = None
 
 
 class ReportExportResponse(BaseModel):

@@ -13,14 +13,17 @@ class SchemaService(AuditBaseService):
     """结构化数据审计模块（占 GEO 总分 10%）
 
     评分构成（满分 100）：
-    - json_ld_present: 20分（是否存在任何 JSON-LD）
-    - organization: 20分（Organization schema）
-    - local_business: 10分（LocalBusiness schema）
-    - article: 15分（Article/NewsArticle schema）
-    - faq_page: 10分（FAQPage schema）
-    - service: 10分（Service schema）
+    - json_ld_present: 12分（是否存在任何 JSON-LD）
+    - organization: 14分（Organization schema）
     - website: 10分（WebSite schema）
-    - same_as: 5分（至少一个 sameAs 引用）
+    - service: 10分（Service schema）
+    - article: 10分（Article/NewsArticle schema）
+    - faq_page: 8分（FAQPage schema）
+    - product: 10分（Product schema）
+    - defined_term: 8分（DefinedTerm schema）
+    - same_as: 8分（至少一个 sameAs 引用）
+    - entity_ids: 5分（至少 2 个稳定 @id）
+    - relation_signals: 5分（关系谓词丰富度）
     """
 
     def __init__(self, discovery_service=None) -> None:
@@ -57,19 +60,26 @@ class SchemaService(AuditBaseService):
             "faq_page": summary["has_faq_page"],
             "service": summary["has_service"],
             "website": summary["has_website"],
+            "product": summary["has_product"],
+            "defined_term": summary["has_defined_term"],
             "same_as_count": len(summary["same_as"]),
+            "entity_id_count": summary["entity_id_count"],
+            "relation_count": summary["relation_count"],
         }
 
         # 计算结构化数据分数
         structured_data_score = self.scoring.clamp_score(
-            (20 if checks["json_ld_present"] else 0)
-            + (20 if checks["organization"] else 0)
-            + (10 if checks["local_business"] else 0)
-            + (15 if checks["article"] else 0)
-            + (10 if checks["faq_page"] else 0)
-            + (10 if checks["service"] else 0)
+            (12 if checks["json_ld_present"] else 0)
+            + (14 if checks["organization"] else 0)
             + (10 if checks["website"] else 0)
-            + (5 if checks["same_as_count"] > 0 else 0)
+            + (10 if checks["service"] else 0)
+            + (10 if checks["article"] else 0)
+            + (8 if checks["faq_page"] else 0)
+            + (10 if checks["product"] else 0)
+            + (8 if checks["defined_term"] else 0)
+            + (8 if checks["same_as_count"] > 0 else 0)
+            + (5 if checks["entity_id_count"] >= 2 else 0)
+            + (5 if checks["relation_count"] >= 3 else 0)
         )
         status = self.scoring.status_from_score(structured_data_score)
 
@@ -92,6 +102,8 @@ class SchemaService(AuditBaseService):
             "faq_page": "Add FAQPage schema to pages with FAQ sections.",
             "service": "Add Service schema to commercial pages.",
             "website": "Add WebSite schema with SearchAction where relevant.",
+            "product": "Add Product schema to product or solution detail pages where applicable.",
+            "defined_term": "Model proprietary technologies or frameworks with DefinedTerm and stable @id values.",
         }
 
         for key, suggestion in schema_requirements.items():
@@ -107,11 +119,27 @@ class SchemaService(AuditBaseService):
         else:
             strengths.append("Structured data exposes sameAs entity references.")
 
+        if checks["entity_id_count"] < 2:
+            issues.append("Structured data lacks stable @id usage across brand and commercial entities.")
+            missing_schema_recommendations.append("Add stable @id identifiers to Organization, WebSite, Product, and other core nodes.")
+        else:
+            strengths.append("Structured data uses stable @id values across multiple entities.")
+
+        if checks["relation_count"] < 3:
+            issues.append("Entity relationships are too sparse for strong machine reasoning.")
+            missing_schema_recommendations.append(
+                "Add richer entity relationships such as brand, manufacturer, hasPart, offers, about, and contactPoint."
+            )
+        else:
+            strengths.append("Structured data exposes a usable baseline of entity relationships.")
+
         # 取前 5 条缺失 Schema 建议
         recommendations.extend(missing_schema_recommendations[:5])
         findings = {
             "schema_type_count": len(summary["types"]),
             "same_as_count": len(summary["same_as"]),
+            "entity_id_count": summary["entity_id_count"],
+            "relation_count": summary["relation_count"],
         }
         result = SchemaAuditResult(
             score=structured_data_score,
