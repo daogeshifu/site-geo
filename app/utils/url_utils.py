@@ -44,6 +44,48 @@ def normalize_url(url: str) -> str:
     return urlunparse(normalized)
 
 
+def entry_url_candidates(url: str) -> list[str]:
+    """为站点入口抓取生成候选 URL 列表
+
+    目标是尽量贴近浏览器常见行为：
+    - 先尝试用户原始输入归一化后的地址
+    - 再尝试同 scheme 的 `www.` 变体
+    - 若仍失败，再尝试切换到另一种 scheme（http/https）
+    - 最后尝试另一种 scheme 下的 `www.` 变体
+
+    示例：
+    - `idtcpack.com` ->
+      `https://idtcpack.com/`, `https://www.idtcpack.com/`, `http://idtcpack.com/`, `http://www.idtcpack.com/`
+    """
+    normalized = normalize_url(url)
+    parsed = urlparse(normalized)
+    alternate_scheme = "http" if parsed.scheme == "https" else "https"
+    hosts = [parsed.netloc.lower()]
+    if parsed.netloc and not parsed.netloc.lower().startswith("www."):
+        hosts.append(f"www.{parsed.netloc.lower()}")
+
+    candidates: list[str] = []
+    for scheme in (parsed.scheme.lower(), alternate_scheme):
+        for host in hosts:
+            candidate = parsed._replace(scheme=scheme, netloc=host, fragment="")
+            candidates.append(urlunparse(candidate))
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    preferred_order = [
+        (parsed.scheme.lower(), hosts[0]),
+        *((parsed.scheme.lower(), host) for host in hosts[1:]),
+        (alternate_scheme, hosts[0]),
+        *((alternate_scheme, host) for host in hosts[1:]),
+    ]
+    for scheme, host in preferred_order:
+        candidate = urlunparse(parsed._replace(scheme=scheme, netloc=host, fragment=""))
+        if candidate not in seen:
+            ordered.append(candidate)
+            seen.add(candidate)
+    return ordered
+
+
 def get_site_root(url: str) -> str:
     """提取站点根 URL（scheme + netloc），如 https://example.com"""
     parsed = urlparse(normalize_url(url))

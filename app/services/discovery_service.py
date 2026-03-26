@@ -33,6 +33,7 @@ from app.utils.text_analyzer import (
     is_answer_first,
 )
 from app.utils.url_utils import (
+    entry_url_candidates,
     get_scope_root,
     get_site_root,
     is_internal_url,
@@ -181,6 +182,37 @@ class DiscoveryService:
         ordered = sorted(dict.fromkeys(deduped), key=lambda item: (len(item), item))
         return ordered[:max_pages]
 
+    async def _fetch_entry_response(self, client: httpx.AsyncClient, url: str):
+        """抓取入口页面，支持常见域名/协议变体回退
+
+        优先按用户输入抓取；失败时再尝试：
+        - 同 scheme 的 `www.` 变体
+        - 另一种 scheme
+        - 另一种 scheme 下的 `www.` 变体
+        """
+        attempts: list[dict] = []
+        last_error: AppError | None = None
+        for candidate in entry_url_candidates(url):
+            try:
+                response = await fetch_url(candidate, client=client)
+            except AppError as exc:
+                last_error = exc
+                attempts.append({"url": candidate, "error": str(exc.errors or exc.message)})
+                continue
+            if response.status_code < 400:
+                return response
+            attempts.append({"url": candidate, "status_code": response.status_code})
+
+        raise AppError(
+            502,
+            "failed to fetch homepage",
+            {
+                "url": normalize_url(url),
+                "attempts": attempts,
+                "last_error": str(last_error.errors or last_error.message) if last_error else None,
+            },
+        )
+
     async def discover(self, url: str, *, full_audit: bool = False, max_pages: int = 12) -> DiscoveryResult:
         """执行完整的站点快照发现流程
 
@@ -202,13 +234,7 @@ class DiscoveryService:
             headers={"User-Agent": settings.default_user_agent},
         ) as client:
             # 抓取首页
-            homepage_response = await fetch_url(normalized_url, client=client)
-            if homepage_response.status_code >= 400:
-                raise AppError(
-                    502,
-                    "failed to fetch homepage",
-                    {"url": normalized_url, "status_code": homepage_response.status_code},
-                )
+            homepage_response = await self._fetch_entry_response(client, normalized_url)
             scope_root_url = get_scope_root(homepage_response.final_url)
             parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text, scope_url=scope_root_url)
 

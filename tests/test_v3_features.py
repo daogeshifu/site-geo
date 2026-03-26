@@ -1,5 +1,6 @@
 import asyncio
 
+from app.core.exceptions import AppError
 from app.models.audit import (
     ContentAuditResult,
     PageDiagnosticResult,
@@ -21,8 +22,10 @@ from app.models.discovery import (
 )
 from app.services.report_service import ReportService
 from app.services.cache_service import CacheService
+from app.services.discovery_service import DiscoveryService
 from app.services.summarizer_service import SummarizerService
-from app.utils.url_utils import get_scope_root, is_internal_url, is_likely_homepage_url
+from app.utils.fetcher import FetchedResponse
+from app.utils.url_utils import entry_url_candidates, get_scope_root, is_internal_url, is_likely_homepage_url
 from app.utils.localization import localize_payload
 
 
@@ -41,6 +44,21 @@ def test_scope_boundaries_respect_host_and_locale_prefix() -> None:
     assert is_internal_url("https://www.ecoflow.com/de/", "https://www.ecoflow.com/de/products/delta-2")
     assert not is_internal_url("https://www.ecoflow.com/de/", "https://www.ecoflow.com/fr/products/delta-2")
     assert not is_internal_url("https://www.ecoflow.com/de/", "https://de.ecoflow.com/products/delta-2")
+
+
+def test_entry_url_candidates_cover_www_and_http_variants() -> None:
+    assert entry_url_candidates("idtcpack.com") == [
+        "https://idtcpack.com/",
+        "https://www.idtcpack.com/",
+        "http://idtcpack.com/",
+        "http://www.idtcpack.com/",
+    ]
+    assert entry_url_candidates("https://idtcpack.com") == [
+        "https://idtcpack.com/",
+        "https://www.idtcpack.com/",
+        "http://idtcpack.com/",
+        "http://www.idtcpack.com/",
+    ]
 
 
 def test_cache_key_changes_with_scope() -> None:
@@ -93,6 +111,31 @@ def test_localize_payload_translates_schema_requirements_and_observation_text() 
     assert localized["observation"]["highlights"][1] == "观测到的首要 AI 来源：ChatGPT（88 个 sessions）。"
     assert localized["observation"]["data_gaps"][0] == "未提供 GA4 AI 流量总量。"
     assert localized["observation"]["data_gaps"][1] == "未提供引用观测样本。"
+
+
+def test_discovery_entry_fetch_falls_back_to_www_variant(monkeypatch) -> None:
+    service = DiscoveryService()
+    attempted_urls: list[str] = []
+
+    async def fake_fetch_url(url: str, client=None, method: str = "GET") -> FetchedResponse:
+        attempted_urls.append(url)
+        if url == "https://idtcpack.com/":
+            raise AppError(502, "fetch failed", "tls mismatch")
+        if url == "https://www.idtcpack.com/":
+            return FetchedResponse(
+                final_url="https://www.idtcpack.com/",
+                status_code=200,
+                headers={},
+                text="<html></html>",
+                response_time_ms=42,
+            )
+        raise AssertionError(f"Unexpected candidate URL: {url}")
+
+    monkeypatch.setattr("app.services.discovery_service.fetch_url", fake_fetch_url)
+
+    response = asyncio.run(service._fetch_entry_response(client=None, url="https://idtcpack.com"))
+    assert response.final_url == "https://www.idtcpack.com/"
+    assert attempted_urls == ["https://idtcpack.com/", "https://www.idtcpack.com/"]
 
 
 def test_report_renders_page_diagnostics_and_notices() -> None:
