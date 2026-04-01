@@ -58,17 +58,24 @@ class PageDiagnosticsService:
             + (12 if profile.has_author else 0)
             + (10 if profile.has_publish_date else 0)
             + (15 if profile.has_quantified_data else 0)
+            + (10 if profile.has_reference_section else 0)
+            + (6 if profile.has_inline_citations else 0)
+            + (6 if profile.has_tldr else 0)
             + (12 if profile.answer_first else 0)
             + profile.information_density_score * 0.06
             + profile.chunk_structure_score * 0.05
+            + profile.descriptive_internal_link_ratio * 6
+            + profile.descriptive_external_link_ratio * 4
         )
 
     def _technical_score(self, profile: PageProfile) -> int:
+        h1_count = sum(1 for heading in profile.headings if heading.level == "h1")
         return self.scoring.clamp_score(
             (20 if profile.title else 0)
             + (15 if profile.meta_description else 0)
             + (15 if profile.canonical else 0)
             + (10 if profile.lang else 0)
+            + (10 if h1_count == 1 else 0)
             + (20 if len(profile.headings) >= 3 else 10 if profile.headings else 0)
             + (20 if profile.word_count >= 250 else 10 if profile.word_count >= 100 else 0)
         )
@@ -76,13 +83,17 @@ class PageDiagnosticsService:
     def _schema_score(self, profile: PageProfile) -> int:
         summary = profile.json_ld_summary or {}
         return self.scoring.clamp_score(
-            (20 if summary.get("json_ld_present") else 0)
+            (18 if summary.get("json_ld_present") else 0)
             + (15 if summary.get("has_organization") else 0)
             + (15 if summary.get("has_service") else 0)
             + (10 if summary.get("has_article") else 0)
             + (10 if summary.get("has_faq_page") else 0)
             + (10 if summary.get("has_product") else 0)
-            + (10 if summary.get("has_defined_term") else 0)
+            + (6 if summary.get("has_defined_term") else 0)
+            + (6 if summary.get("has_breadcrumb_list") else 0)
+            + (5 if summary.get("has_date_published") else 0)
+            + (5 if summary.get("has_date_modified") else 0)
+            + (5 if summary.get("visible_alignment_score", 0) >= 60 else 0)
             + (10 if len(summary.get("same_as", [])) > 0 else 0)
         )
 
@@ -102,12 +113,18 @@ class PageDiagnosticsService:
         if content_score < 60:
             issues.append("Content depth and fact density are weaker than ideal for GEO reuse.")
             recommendations.append("Add concrete claims, specifications, FAQs, and sourced proof to the page.")
+        if not profile.has_reference_section and profile.has_quantified_data:
+            issues.append("Claims appear without a visible references or sources section.")
+            recommendations.append("Add a references section or source list near factual and comparative claims.")
         if technical_score < 60:
             issues.append("Page-level metadata or structure is incomplete.")
             recommendations.append("Improve title, meta description, canonical tags, language declaration, and heading coverage.")
         if schema_score < 50:
             issues.append("Structured data on this page is too thin.")
             recommendations.append("Add page-relevant JSON-LD such as Service, Product, FAQPage, Article, or DefinedTerm.")
+        elif (profile.json_ld_summary or {}).get("visible_alignment_score", 0) < 60:
+            issues.append("Schema content is present but not tightly aligned with visible page copy.")
+            recommendations.append("Keep schema names, descriptions, FAQs, and dates synchronized with visible on-page content.")
         if not profile.has_author and profile.page_type in {"article", "documentation"}:
             issues.append("Editorial page lacks an author signal.")
             recommendations.append("Expose named authors or reviewers for editorial and knowledge pages.")

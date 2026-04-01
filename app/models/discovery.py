@@ -168,10 +168,18 @@ class PageProfile(BaseModel):
     has_author: bool = False          # 是否有作者信息
     has_publish_date: bool = False    # 是否有发布日期
     has_quantified_data: bool = False  # 是否包含量化数据（%、$、数字等）
+    has_reference_section: bool = False  # 是否存在参考资料/引用来源区块
+    has_inline_citations: bool = False   # 是否出现内联引用模式
+    has_tldr: bool = False               # 是否有 TL;DR / summary 模块
+    has_update_log: bool = False         # 是否公开更新记录或修订说明
     answer_first: bool = False        # 是否先答后述（AI 引用友好结构）
     heading_quality_score: int = 0    # 标题层级质量评分（0-100）
     information_density_score: int = 0  # 信息密度评分（词汇多样性+数量）
     chunk_structure_score: int = 0    # 内容分块结构评分
+    internal_link_count: int = 0
+    external_link_count: int = 0
+    descriptive_internal_link_ratio: float = 0.0
+    descriptive_external_link_ratio: float = 0.0
     json_ld_summary: dict[str, Any] = Field(default_factory=dict)  # 本页 schema 汇总
     json_ld_blocks: list[str] = Field(default_factory=list)
     entity_signals: SiteSignals = Field(default_factory=SiteSignals)  # 本页实体信号

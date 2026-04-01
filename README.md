@@ -62,7 +62,9 @@ GEO Audit 关注的是另一层问题：
 - `title / meta_description / canonical / lang`
 - `headings / word_count`
 - `has_faq / has_author / has_publish_date`
-- `has_quantified_data / answer_first`
+- `has_quantified_data / answer_first / has_tldr / has_update_log`
+- `has_reference_section / has_inline_citations`
+- `internal_link_count / external_link_count / descriptive_link_ratios`
 - `heading_quality_score / information_density_score / chunk_structure_score`
 - `json_ld_summary / entity_signals`
 
@@ -80,9 +82,9 @@ GEO Audit 关注的是另一层问题：
 |---|---:|---|
 | AI 可见性 | 25% | AI crawler 放行、citability、llms 指引、基础实体存在 |
 | 品牌权威 | 20% | 外链质量、品牌提及、实体一致性、企业信息完整度 |
-| 内容与 E-E-A-T | 20% | 内容深度、作者、日期、FAQ、数据点、结构质量 |
-| 技术基础 | 15% | HTTPS、SSR、性能、Sitemap、安全头、图片与元数据 |
-| 结构化数据 | 10% | JSON-LD、Organization、Article、Service、sameAs 等 |
+| 内容与 E-E-A-T | 20% | 内容深度、作者、日期、FAQ、数据点、证据引用、链接语义、结构质量 |
+| 技术基础 | 15% | HTTPS、SSR、性能、Sitemap、安全头、图片、唯一 H1 与 freshness headers |
+| 结构化数据 | 10% | JSON-LD、Organization、Article、Service、sameAs、机器日期、可见内容一致性 |
 | 平台适配 | 10% | 面向 ChatGPT、Google AI、Perplexity、Gemini、Grok 的 readiness |
 
 ### 4. Full Audit 扩展诊断
@@ -134,6 +136,16 @@ GEO Audit 关注的是另一层问题：
 
 `technical` 和 `schema` 仍保持规则驱动，优先保证确定性。
 
+### 8. 研究导向补强
+
+在保持现有诊断层与表达层结构不变的前提下，v3 额外补充了几类更贴近论文观点的规则信号：
+
+- `机器可读新鲜度`：响应头中的 `ETag / Last-Modified`，以及 Schema 中的 `datePublished / dateModified`
+- `语义化 HTML`：唯一 `H1` 与标题层级质量联合判断
+- `Schema 一致性`：JSON-LD 文本与页面可见内容的一致性评分
+- `证据与引用`：参考资料区、内联引用、TL;DR、更新记录
+- `RAG 友好链接`：内部/外部链接数量与描述性锚文本比例
+
 ---
 
 ## GEO Audit v3 的设计重点
@@ -155,6 +167,38 @@ GEO Audit 关注的是另一层问题：
 - `LOW`
 - `MEDIUM`
 - `HIGH`
+
+### 从“基础结构化数据”升级为“机器可读一致性”
+
+结构化数据不再只检查 `@type` 是否存在，还会额外关注：
+
+- `BreadcrumbList`
+- `datePublished / dateModified`
+- `visible_alignment_score`
+
+也就是：
+
+- 机器是否能读到发布时间或更新时间
+- Schema 中的名称、描述、FAQ 和主张是否和页面可见内容一致
+
+这是一次必要的评分公式调整，但没有改变原有返回结构，只是补强了 `schema.checks / findings / recommendations` 的语义。
+
+### 从“基础内容深度”升级为“证据与检索上下文”
+
+内容层除了词数、FAQ、作者、日期、量化数据之外，还会补看：
+
+- `has_reference_section`
+- `has_inline_citations`
+- `has_tldr`
+- `has_update_log`
+- `descriptive_internal_link_ratio`
+- `descriptive_external_link_ratio`
+
+这些信号用于更贴近论文中的：
+
+- `Evidence & Citations`
+- `RAG-friendly internal/external linking`
+- `UX / microcontent / answer-first`
 
 ### 从“品牌存在”升级为“品牌权威”
 

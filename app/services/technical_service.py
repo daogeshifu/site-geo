@@ -15,9 +15,10 @@ class TechnicalService(AuditBaseService):
 
     检查项（共 15 项，总权重 100 分）：
     - HTTPS(8)、SSR(10)、meta_description(5)、canonical(5)、lang(4)
-    - viewport(4)、sitemap(8)、robots_sitemap_directive(4)
+    - unique_h1(4)、sitemap(8)、robots_sitemap_directive(4)
     - open_graph(5)、twitter_card(3)、hreflang(4)
-    - security_headers(16)、image_optimization(8)、render_blocking(8)、performance(8)
+    - security_headers(16)、image_optimization(4)、render_blocking(8)、performance(8)
+    - revalidation_headers(4)
     """
 
     def __init__(self, discovery_service=None) -> None:
@@ -70,6 +71,7 @@ class TechnicalService(AuditBaseService):
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(url, discovery)
         homepage = resolved.homepage
+        homepage_profile = resolved.page_profiles.get("homepage")
 
         # 各子项检查
         security_headers = evaluate_security_headers(resolved.fetch.headers)
@@ -80,6 +82,18 @@ class TechnicalService(AuditBaseService):
         )
         image_score, image_details = self._image_optimization_score(homepage.model_dump()["images"])
         performance_score = self._performance_score(resolved.fetch.response_time_ms)
+        h1_count = sum(1 for heading in homepage.headings if heading.level == "h1")
+        unique_h1 = h1_count == 1
+        revalidation_headers = {
+            "etag": bool(resolved.fetch.headers.get("etag")),
+            "last_modified": bool(resolved.fetch.headers.get("last-modified")),
+        }
+        freshness_signal_score = self.scoring.clamp_score(
+            (45 if revalidation_headers["etag"] else 0)
+            + (25 if revalidation_headers["last_modified"] else 0)
+            + (15 if homepage_profile and homepage_profile.has_publish_date else 0)
+            + (15 if homepage_profile and homepage_profile.has_update_log else 0)
+        )
 
         # 各项检查点的权重定义（总和约等于 100）
         weights = {
@@ -88,16 +102,17 @@ class TechnicalService(AuditBaseService):
             "meta_description": 5,
             "canonical": 5,
             "lang": 4,
-            "viewport": 4,
+            "unique_h1": 4,
             "sitemap": 8,
             "robots_sitemap_directive": 4,
             "open_graph": 5,
             "twitter_card": 3,
             "hreflang": 4,
             "security_headers": 16,   # 最高权重：安全响应头
-            "image_optimization": 8,
+            "image_optimization": 4,
             "render_blocking": 8,
             "performance": 8,
+            "revalidation_headers": 4,
         }
 
         checks = {
@@ -107,6 +122,8 @@ class TechnicalService(AuditBaseService):
             "canonical": bool(homepage.canonical),
             "lang": bool(homepage.lang),
             "viewport": bool(homepage.viewport),
+            "unique_h1": unique_h1,
+            "h1_count": h1_count,
             "sitemap": resolved.sitemap.exists,
             "robots_sitemap_directive": resolved.robots.has_sitemap_directive,
             "open_graph": bool(homepage.open_graph),
@@ -116,6 +133,8 @@ class TechnicalService(AuditBaseService):
             "image_optimization": image_details,
             "render_blocking": render_blocking_risk,
             "performance": performance_score,
+            "revalidation_headers": revalidation_headers,
+            "freshness_signal_score": freshness_signal_score,
         }
 
         # 加权求和计算技术分数
@@ -125,7 +144,7 @@ class TechnicalService(AuditBaseService):
             + weights["meta_description"] * int(checks["meta_description"])
             + weights["canonical"] * int(checks["canonical"])
             + weights["lang"] * int(checks["lang"])
-            + weights["viewport"] * int(checks["viewport"])
+            + weights["unique_h1"] * int(checks["unique_h1"])
             + weights["sitemap"] * int(checks["sitemap"])
             + weights["robots_sitemap_directive"] * int(checks["robots_sitemap_directive"])
             + weights["open_graph"] * int(checks["open_graph"])
@@ -135,6 +154,9 @@ class TechnicalService(AuditBaseService):
             + weights["image_optimization"] * (image_score / 100)
             + weights["render_blocking"] * (render_blocking_risk["score"] / 100)
             + weights["performance"] * (performance_score["score"] / 100)
+            + weights["revalidation_headers"] * int(
+                revalidation_headers["etag"] or revalidation_headers["last_modified"]
+            )
         )
         status = self.scoring.status_from_score(technical_score)
 
@@ -161,6 +183,9 @@ class TechnicalService(AuditBaseService):
         if not checks["canonical"]:
             issues.append("Homepage is missing a canonical tag.")
             recommendations.append("Expose self-referencing canonical tags on primary pages.")
+        if not checks["unique_h1"]:
+            issues.append("Homepage semantic structure should expose exactly one H1.")
+            recommendations.append("Keep a single descriptive H1 and nest supporting sections under logical H2/H3 headings.")
         if render_blocking_risk["risk_level"] != "low":
             issues.append("Homepage has medium or high render-blocking risk.")
             recommendations.append("Defer non-critical JavaScript and reduce synchronous CSS/JS payloads.")
@@ -178,6 +203,11 @@ class TechnicalService(AuditBaseService):
             recommendations.append("Add lazy loading and width/height attributes to primary images.")
         else:
             strengths.append("Image delivery patterns show baseline optimization.")
+        if not (revalidation_headers["etag"] or revalidation_headers["last_modified"]):
+            issues.append("Response headers do not expose ETag or Last-Modified freshness signals.")
+            recommendations.append("Add ETag and/or Last-Modified headers so crawlers can revalidate content efficiently.")
+        elif freshness_signal_score >= 60:
+            strengths.append("Technical freshness signals support efficient crawler revalidation.")
 
         findings = {
             "response_time_ms": resolved.fetch.response_time_ms,
@@ -186,6 +216,8 @@ class TechnicalService(AuditBaseService):
             "performance_classification": performance_score["classification"],
             "render_blocking_risk": render_blocking_risk["risk_level"],
             "image_optimization": image_details,
+            "h1_count": h1_count,
+            "freshness_signal_score": freshness_signal_score,
         }
         result = TechnicalAuditResult(
             score=technical_score,

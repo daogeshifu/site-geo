@@ -55,10 +55,18 @@ class ContentPageAnalysis(BaseModel):
     has_author: bool = False
     has_publish_date: bool = False
     has_quantified_data: bool = False
+    has_reference_section: bool = False
+    has_inline_citations: bool = False
+    has_tldr: bool = False
+    has_update_log: bool = False
     answer_first: bool = False
     heading_quality_score: int = 0
     information_density_score: int = 0
     chunk_structure_score: int = 0
+    internal_link_count: int = 0
+    external_link_count: int = 0
+    descriptive_internal_link_ratio: float = 0.0
+    descriptive_external_link_ratio: float = 0.0
     text_excerpt: str = ""
 
 

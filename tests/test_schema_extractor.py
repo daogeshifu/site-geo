@@ -19,6 +19,20 @@ def test_extract_schema_summary_treats_corporation_as_organization() -> None:
     assert "Corporation" in summary["types"]
 
 
+def test_extract_schema_summary_captures_machine_dates_and_visible_alignment() -> None:
+    summary = extract_schema_summary(
+        [
+            '{"@context":"https://schema.org","@type":"Article","headline":"Battery backup overview","datePublished":"2025-01-10","dateModified":"2025-02-11","description":"Battery backup overview"}'
+        ],
+        visible_text="Battery backup overview. Last updated 2025-02-11.",
+    )
+
+    assert summary["has_article"] is True
+    assert summary["has_date_published"] is True
+    assert summary["has_date_modified"] is True
+    assert summary["visible_alignment_score"] >= 60
+
+
 def test_extract_schema_summary_normalizes_type_urls_and_ignores_invalid_blocks() -> None:
     summary = extract_schema_summary(
         [
@@ -51,4 +65,4 @@ def test_page_diagnostics_schema_score_rewards_organization_subtypes() -> None:
         entity_signals=SiteSignals(),
     )
 
-    assert service._schema_score(profile) == 55
+    assert service._schema_score(profile) == 53

@@ -14,13 +14,18 @@ from app.services.scoring_service import ScoringService
 from app.utils.fetcher import fetch_url
 from app.utils.html_parser import parse_html
 from app.utils.text_analyzer import (
+    assess_link_context,
     contains_faq,
     estimate_information_density,
     evaluate_heading_quality,
     evaluate_chunk_structure,
+    has_inline_citations,
     has_author_signals,
     has_publish_date,
     has_quantified_data,
+    has_reference_section,
+    has_tldr_summary,
+    has_update_log,
     is_answer_first,
 )
 
@@ -53,6 +58,7 @@ class ContentService(AuditBaseService):
         heading_quality = evaluate_heading_quality(parsed["headings"])
         information_density = estimate_information_density(parsed["text_content"], parsed["headings"])
         chunk_structure = evaluate_chunk_structure(parsed["text_content"], parsed["headings"])
+        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"])
         return ContentPageAnalysis(
             url=response.final_url,
             page_type=page_type,
@@ -62,10 +68,18 @@ class ContentService(AuditBaseService):
             has_author=has_author_signals(parsed["text_content"]),
             has_publish_date=has_publish_date(parsed["text_content"]),
             has_quantified_data=has_quantified_data(parsed["text_content"]),
+            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"]),
+            has_inline_citations=has_inline_citations(parsed["text_content"]),
+            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"]),
+            has_update_log=has_update_log(parsed["text_content"], parsed["headings"]),
             answer_first=is_answer_first(parsed["text_content"]),
             heading_quality_score=heading_quality["score"],
             information_density_score=information_density["score"],
             chunk_structure_score=chunk_structure["score"],
+            internal_link_count=link_context["internal_link_count"],
+            external_link_count=link_context["external_link_count"],
+            descriptive_internal_link_ratio=link_context["descriptive_internal_link_ratio"],
+            descriptive_external_link_ratio=link_context["descriptive_external_link_ratio"],
             text_excerpt=parsed["text_excerpt"],
         )
 
@@ -80,10 +94,18 @@ class ContentService(AuditBaseService):
             has_author=profile.has_author,
             has_publish_date=profile.has_publish_date,
             has_quantified_data=profile.has_quantified_data,
+            has_reference_section=profile.has_reference_section,
+            has_inline_citations=profile.has_inline_citations,
+            has_tldr=profile.has_tldr,
+            has_update_log=profile.has_update_log,
             answer_first=profile.answer_first,
             heading_quality_score=profile.heading_quality_score,
             information_density_score=profile.information_density_score,
             chunk_structure_score=profile.chunk_structure_score,
+            internal_link_count=profile.internal_link_count,
+            external_link_count=profile.external_link_count,
+            descriptive_internal_link_ratio=profile.descriptive_internal_link_ratio,
+            descriptive_external_link_ratio=profile.descriptive_external_link_ratio,
             text_excerpt=profile.text_excerpt,
         )
 
@@ -151,6 +173,10 @@ class ContentService(AuditBaseService):
         has_author_any = any(page.has_author for page in page_analyses.values())
         has_publish_any = any(page.has_publish_date for page in page_analyses.values())
         has_quant_any = any(page.has_quantified_data for page in page_analyses.values())
+        has_reference_any = any(page.has_reference_section for page in page_analyses.values())
+        has_inline_citation_any = any(page.has_inline_citations for page in page_analyses.values())
+        has_tldr_any = any(page.has_tldr for page in page_analyses.values())
+        has_update_log_any = any(page.has_update_log for page in page_analyses.values())
         has_answer_first_any = any(page.answer_first for page in page_analyses.values())
         avg_heading_quality = (
             sum(page.heading_quality_score for page in page_analyses.values()) / len(page_analyses)
@@ -167,6 +193,23 @@ class ContentService(AuditBaseService):
             if page_analyses
             else 0
         )
+        avg_link_context_score = (
+            sum(
+                min(
+                    100,
+                    int(
+                        round(
+                            page.descriptive_internal_link_ratio * 55
+                            + page.descriptive_external_link_ratio * 45
+                        )
+                    ),
+                )
+                for page in page_analyses.values()
+            )
+            / len(page_analyses)
+            if page_analyses
+            else 0
+        )
 
         # 内容综合评分（满分 100）
         content_score = self.scoring.clamp_score(
@@ -177,9 +220,13 @@ class ContentService(AuditBaseService):
             + (10 if has_author_any else 0)
             + (7 if has_publish_any else 0)
             + (12 if has_quant_any else 0)
+            + (6 if has_reference_any else 0)
+            + (4 if has_inline_citation_any else 0)
+            + (4 if has_tldr_any else 0)
             + (12 * (avg_heading_quality / 100))
             + (10 * (avg_information_density / 100))
             + (8 * (avg_chunk_structure / 100))
+            + (6 * (avg_link_context_score / 100))
             + (8 if has_answer_first_any else 0)
         )
 
@@ -203,6 +250,7 @@ class ContentService(AuditBaseService):
             + (20 if resolved.site_signals.awards_detected else 0)    # 奖项强化权威
             + (15 if resolved.site_signals.certifications_detected else 0)
             + (20 if resolved.site_signals.same_as_detected else 0)   # sameAs 引用验证实体
+            + (10 if has_reference_any else 0)
         )
         trustworthiness_score = self.scoring.clamp_score(
             (25 if resolved.key_pages.contact else 0)   # 联系页是可信度基础
@@ -211,6 +259,8 @@ class ContentService(AuditBaseService):
             + (15 if resolved.site_signals.address_detected else 0)
             + (15 if has_publish_any else 0)
             + (15 if has_author_any else 0)
+            + (10 if has_inline_citation_any else 0)
+            + (5 if has_update_log_any else 0)
         )
         status = self.scoring.status_from_score(content_score)
 
@@ -245,6 +295,14 @@ class ContentService(AuditBaseService):
         if not has_publish_any:
             issues.append("Publication dates are missing from evaluated content.")
             recommendations.append("Expose publish/update timestamps on editorial content.")
+        if not has_reference_any:
+            issues.append("Evaluated pages do not expose a clear references or sources section.")
+            recommendations.append("Add a references section or source list to pages making factual or comparative claims.")
+        if not has_inline_citation_any:
+            issues.append("Important claims are not supported by visible inline citation signals.")
+            recommendations.append("Support factual claims with inline citations, source labels, or linked evidence.")
+        if not has_tldr_any:
+            recommendations.append("Add TL;DR or key takeaways blocks to improve answer-first extraction.")
         if has_answer_first_any:
             strengths.append("Some content follows an answer-first structure.")
         else:
@@ -255,16 +313,24 @@ class ContentService(AuditBaseService):
         if avg_chunk_structure < 55:
             issues.append("Content chunking is weaker than ideal for answer extraction and citation reuse.")
             recommendations.append("Break long sections into tighter question-led blocks with clearer subheadings.")
+        if avg_link_context_score < 55:
+            issues.append("Internal and external link anchors are not yet descriptive enough for strong retrieval context.")
+            recommendations.append("Use descriptive anchor text that names the target topic, source, or evidence being linked.")
 
         findings = {
             "evaluated_pages": len(page_analyses),
             "average_heading_quality": self.scoring.clamp_score(avg_heading_quality),
             "average_information_density": self.scoring.clamp_score(avg_information_density),
             "average_chunk_structure": self.scoring.clamp_score(avg_chunk_structure),
+            "average_link_context_score": self.scoring.clamp_score(avg_link_context_score),
             "has_faq_any": has_faq_any,
             "has_author_any": has_author_any,
             "has_publish_date_any": has_publish_any,
             "has_quantified_data_any": has_quant_any,
+            "has_reference_section_any": has_reference_any,
+            "has_inline_citations_any": has_inline_citation_any,
+            "has_tldr_any": has_tldr_any,
+            "has_update_log_any": has_update_log_any,
             "has_answer_first_any": has_answer_first_any,
         }
         checks = {
@@ -274,10 +340,15 @@ class ContentService(AuditBaseService):
             "author_present": has_author_any,
             "publish_date_present": has_publish_any,
             "quantified_data_present": has_quant_any,
+            "reference_section_present": has_reference_any,
+            "inline_citations_present": has_inline_citation_any,
+            "tldr_present": has_tldr_any,
+            "update_log_present": has_update_log_any,
             "answer_first_present": has_answer_first_any,
             "average_heading_quality": self.scoring.clamp_score(avg_heading_quality),
             "average_information_density": self.scoring.clamp_score(avg_information_density),
             "average_chunk_structure": self.scoring.clamp_score(avg_chunk_structure),
+            "average_link_context_score": self.scoring.clamp_score(avg_link_context_score),
         }
         result = ContentAuditResult(
             score=content_score,

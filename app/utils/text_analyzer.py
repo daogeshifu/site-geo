@@ -16,10 +16,35 @@ DATE_PATTERNS = [
 ]
 # 量化数据正则模式：百分比、美元、大数字、货币单位
 QUANT_PATTERNS = [r"\b\d+(\.\d+)?%\b", r"\$\d[\d,]*(?:\.\d+)?", r"\b\d{2,}\b", r"\bUSD\b", r"\bRMB\b"]
+REFERENCE_PATTERNS = ["references", "sources", "bibliography", "works cited", "citations", "参考资料", "参考文献", "资料来源"]
+SUMMARY_PATTERNS = ["tl;dr", "summary", "key takeaways", "in brief", "quick answer", "overview", "摘要", "要点", "结论"]
+UPDATE_PATTERNS = ["last updated", "updated on", "updated:", "revision history", "changelog", "最近更新", "更新记录", "修订"]
+INLINE_CITATION_PATTERNS = [
+    r"\[\d{1,3}\]",
+    r"\([A-Z][A-Za-z]+(?:\s+et al\.)?,\s*\d{4}\)",
+    r"\bsource:\b",
+    r"\baccording to\b",
+]
+GENERIC_ANCHOR_TEXTS = {
+    "click here",
+    "learn more",
+    "read more",
+    "more",
+    "details",
+    "here",
+    "this link",
+    "view more",
+    "see more",
+    "了解更多",
+    "点击这里",
+    "更多",
+    "详情",
+    "查看",
+}
 
 
 def estimate_word_count(text: str) -> int:
-    """统计文本中的单词数（使用 \b\w+\b 正则）"""
+    """统计文本中的单词数（使用 `\\b\\w+\\b` 正则）"""
     return len(re.findall(r"\b\w+\b", text or ""))
 
 
@@ -48,6 +73,71 @@ def has_quantified_data(text: str) -> bool:
     """
     lowered = text or ""
     return any(re.search(pattern, lowered, re.I) for pattern in QUANT_PATTERNS)
+
+
+def has_reference_section(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+    """检测页面是否存在参考资料/引用来源区块。"""
+    haystack = f"{text} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
+    return any(pattern in haystack for pattern in REFERENCE_PATTERNS)
+
+
+def has_inline_citations(text: str) -> bool:
+    """检测正文是否出现内联引用信号。"""
+    lowered = text or ""
+    return any(re.search(pattern, lowered, re.I) for pattern in INLINE_CITATION_PATTERNS)
+
+
+def has_tldr_summary(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+    """检测页面是否包含 TL;DR / summary / key takeaways 一类结论前置模块。"""
+    haystack = f"{text[:1200]} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
+    return any(pattern in haystack for pattern in SUMMARY_PATTERNS)
+
+
+def has_update_log(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+    """检测页面是否公开暴露了更新说明或修订历史。"""
+    haystack = f"{text[:1600]} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
+    return any(pattern in haystack for pattern in UPDATE_PATTERNS)
+
+
+def assess_link_context(internal_links: list[dict[str, Any]], external_links: list[dict[str, Any]]) -> dict[str, Any]:
+    """评估站内/站外链接锚文本是否足够描述性，便于 RAG 检索建立上下文。"""
+
+    def _summary(links: list[dict[str, Any]]) -> tuple[int, float]:
+        labels = [str(item.get("text") or "").strip() for item in links if isinstance(item, dict)]
+        labels = [label for label in labels if label]
+        if not labels:
+            return 0, 0.0
+
+        descriptive = 0
+        for label in labels:
+            normalized = re.sub(r"\s+", " ", label.lower()).strip()
+            word_count = len(re.findall(r"\b\w+\b", normalized))
+            if normalized in GENERIC_ANCHOR_TEXTS:
+                continue
+            if word_count >= 2 or len(normalized) >= 12:
+                descriptive += 1
+        return len(labels), descriptive / len(labels)
+
+    internal_count, internal_ratio = _summary(internal_links)
+    external_count, external_ratio = _summary(external_links)
+    score = min(
+        100,
+        int(
+            round(
+                internal_ratio * 45
+                + external_ratio * 35
+                + min(internal_count, 8) * 2
+                + min(external_count, 4) * 1
+            )
+        ),
+    )
+    return {
+        "score": score,
+        "internal_link_count": len(internal_links),
+        "external_link_count": len(external_links),
+        "descriptive_internal_link_ratio": round(internal_ratio, 2),
+        "descriptive_external_link_ratio": round(external_ratio, 2),
+    }
 
 
 def is_answer_first(text: str) -> bool:

@@ -23,13 +23,18 @@ from app.utils.robots_parser import inspect_robots
 from app.utils.schema_extractor import extract_schema_summary
 from app.utils.sitemap_parser import inspect_sitemap
 from app.utils.text_analyzer import (
+    assess_link_context,
     contains_faq,
     estimate_information_density,
     evaluate_chunk_structure,
     evaluate_heading_quality,
+    has_inline_citations,
     has_author_signals,
     has_publish_date,
     has_quantified_data,
+    has_reference_section,
+    has_tldr_summary,
+    has_update_log,
     is_answer_first,
 )
 from app.utils.url_utils import (
@@ -76,7 +81,7 @@ class DiscoveryService:
 
         综合 Schema 摘要、实体信号、标题质量、信息密度和分块结构评估
         """
-        schema_summary = extract_schema_summary(parsed["json_ld_blocks"])
+        schema_summary = extract_schema_summary(parsed["json_ld_blocks"], visible_text=parsed["text_content"])
         entity_signals = detect_site_signals(
             text=parsed["text_content"],
             schema_summary=schema_summary,
@@ -86,6 +91,7 @@ class DiscoveryService:
         heading_quality = evaluate_heading_quality(parsed["headings"])
         information_density = estimate_information_density(parsed["text_content"], parsed["headings"])
         chunk_structure = evaluate_chunk_structure(parsed["text_content"], parsed["headings"])
+        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"])
         return PageProfile(
             page_type=page_type,
             final_url=final_url,
@@ -99,10 +105,18 @@ class DiscoveryService:
             has_author=has_author_signals(parsed["text_content"]),
             has_publish_date=has_publish_date(parsed["text_content"]),
             has_quantified_data=has_quantified_data(parsed["text_content"]),
+            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"]),
+            has_inline_citations=has_inline_citations(parsed["text_content"]),
+            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"]),
+            has_update_log=has_update_log(parsed["text_content"], parsed["headings"]),
             answer_first=is_answer_first(parsed["text_content"]),
             heading_quality_score=heading_quality["score"],
             information_density_score=information_density["score"],
             chunk_structure_score=chunk_structure["score"],
+            internal_link_count=link_context["internal_link_count"],
+            external_link_count=link_context["external_link_count"],
+            descriptive_internal_link_ratio=link_context["descriptive_internal_link_ratio"],
+            descriptive_external_link_ratio=link_context["descriptive_external_link_ratio"],
             json_ld_summary=schema_summary,
             json_ld_blocks=parsed["json_ld_blocks"],
             entity_signals=entity_signals,
@@ -112,9 +126,36 @@ class DiscoveryService:
     def _aggregate_schema_summary(self, page_profiles: dict[str, PageProfile]) -> dict:
         """合并所有页面的 JSON-LD 块，生成全站 Schema 摘要"""
         blocks: list[str] = []
+        page_summaries: list[dict] = []
         for profile in page_profiles.values():
             blocks.extend(profile.json_ld_blocks)
-        return extract_schema_summary(blocks)
+            if profile.json_ld_summary:
+                page_summaries.append(profile.json_ld_summary)
+
+        aggregated = extract_schema_summary(blocks)
+        if page_summaries:
+            aggregated["has_date_published"] = aggregated["has_date_published"] or any(
+                item.get("has_date_published") for item in page_summaries
+            )
+            aggregated["has_date_modified"] = aggregated["has_date_modified"] or any(
+                item.get("has_date_modified") for item in page_summaries
+            )
+            aggregated["has_breadcrumb_list"] = aggregated["has_breadcrumb_list"] or any(
+                item.get("has_breadcrumb_list") for item in page_summaries
+            )
+            aggregated["avg_visible_alignment_score"] = int(
+                round(
+                    sum(int(item.get("visible_alignment_score", 0)) for item in page_summaries)
+                    / max(len(page_summaries), 1)
+                )
+            )
+            aggregated["pages_with_machine_dates"] = sum(
+                1 for item in page_summaries if item.get("has_date_published") or item.get("has_date_modified")
+            )
+        else:
+            aggregated["avg_visible_alignment_score"] = 0
+            aggregated["pages_with_machine_dates"] = 0
+        return aggregated
 
     def _aggregate_site_signals(self, page_profiles: dict[str, PageProfile]) -> SiteSignals:
         """跨页面聚合实体信号：任意一页检测到即标记为 True，取最大品牌提及次数"""
