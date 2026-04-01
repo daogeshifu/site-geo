@@ -20,6 +20,53 @@ RELATION_KEYS = {
     "mainentity",
 }
 
+ORGANIZATION_LIKE_TYPES = {
+    "organization",
+    "airline",
+    "consortium",
+    "corporation",
+    "educationalorganization",
+    "fundingagency",
+    "governmentorganization",
+    "localbusiness",
+    "medicalorganization",
+    "ngo",
+    "newsmediaorganization",
+    "onlinestore",
+    "performinggroup",
+    "sportsorganization",
+    "store",
+    "travelagency",
+}
+
+ARTICLE_LIKE_TYPES = {
+    "article",
+    "blogposting",
+    "newsarticle",
+    "report",
+    "scholarlyarticle",
+    "socialmediaposting",
+    "techarticle",
+}
+
+PRODUCT_LIKE_TYPES = {
+    "product",
+    "productmodel",
+    "individualproduct",
+    "someproducts",
+}
+
+
+def _normalize_type_name(raw_type: str) -> str:
+    """将 @type 统一归一化为短类型名，兼容完整 URL 和命名空间写法。"""
+    value = raw_type.strip()
+    if not value:
+        return ""
+    for separator in ("/", "#", ":"):
+        if separator in value:
+            value = value.rsplit(separator, 1)[-1]
+    return value.strip()
+
 
 def _walk_schema(
     data: Any,
@@ -47,9 +94,13 @@ def _walk_schema(
         if isinstance(raw_type, list):
             for item in raw_type:
                 if isinstance(item, str):
-                    types.add(item)
+                    normalized = _normalize_type_name(item)
+                    if normalized:
+                        types.add(normalized)
         elif isinstance(raw_type, str):
-            types.add(raw_type)
+            normalized = _normalize_type_name(raw_type)
+            if normalized:
+                types.add(normalized)
 
         # 处理 sameAs（支持单值和数组）
         raw_same_as = data.get("sameAs")
@@ -96,26 +147,28 @@ def extract_schema_summary(json_ld_blocks: list[str]) -> dict[str, Any]:
     same_as: set[str] = set()
     entity_ids: set[str] = set()
     relation_count = [0]
+    valid_block_count = 0
 
     for block in json_ld_blocks:
         try:
             payload = json.loads(block)
         except json.JSONDecodeError:
             continue  # 跳过无法解析的块
+        valid_block_count += 1
         _walk_schema(payload, types, same_as, entity_ids, relation_count)
 
     # 使用小写集合进行类型匹配（不区分大小写）
     lowered = {item.lower() for item in types}
     return {
-        "json_ld_present": bool(json_ld_blocks),
+        "json_ld_present": valid_block_count > 0,
         "types": sorted(types),
-        "has_organization": "organization" in lowered,
+        "has_organization": bool(ORGANIZATION_LIKE_TYPES & lowered),
         "has_local_business": "localbusiness" in lowered,
-        "has_article": bool({"article", "newsarticle"} & lowered),  # Article 或 NewsArticle
+        "has_article": bool(ARTICLE_LIKE_TYPES & lowered),
         "has_faq_page": "faqpage" in lowered,
         "has_service": "service" in lowered,
         "has_website": "website" in lowered,
-        "has_product": "product" in lowered,
+        "has_product": bool(PRODUCT_LIKE_TYPES & lowered),
         "has_defined_term": "definedterm" in lowered,
         "has_offer": "offer" in lowered,
         "entity_id_count": len(entity_ids),

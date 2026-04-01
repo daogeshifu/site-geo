@@ -192,6 +192,15 @@ class MetricDefinition(BaseModel):
     platform_relevance: list[str] = Field(default_factory=list)
 
 
+class AIPerceptionResult(BaseModel):
+    """AI 对站点认知的启发式画像，不参与 GEO 评分"""
+
+    positive_percentage: int
+    neutral_percentage: int
+    controversial_percentage: int
+    cognition_keywords: list[str] = Field(default_factory=list)
+
+
 class SummaryResult(BaseModel):
     """GEO 审计汇总结果，计算 6 个维度的加权复合分数"""
 
@@ -212,5 +221,6 @@ class SummaryResult(BaseModel):
     prioritized_action_plan: list[ActionPlanItem] = Field(default_factory=list)  # 优先行动计划
     metric_definitions: list[MetricDefinition] = Field(default_factory=list)
     score_interpretation: list[str] = Field(default_factory=list)
+    ai_perception: AIPerceptionResult | None = None
     observation: ObservationResult | None = None
     notices: list[str] = Field(default_factory=list)

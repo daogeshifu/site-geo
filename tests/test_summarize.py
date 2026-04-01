@@ -173,3 +173,8 @@ def test_summarize_endpoint_returns_composite_score() -> None:
     assert body["success"] is True
     assert body["data"]["composite_geo_score"] > 0
     assert body["data"]["status"] in {"critical", "poor", "fair", "good", "strong"}
+    assert body["data"]["ai_perception"]["positive_percentage"] >= 0
+    assert body["data"]["ai_perception"]["neutral_percentage"] >= 0
+    assert body["data"]["ai_perception"]["controversial_percentage"] >= 0
+    assert body["data"]["ai_perception"]["positive_percentage"] + body["data"]["ai_perception"]["neutral_percentage"] + body["data"]["ai_perception"]["controversial_percentage"] == 100
+    assert len(body["data"]["ai_perception"]["cognition_keywords"]) == 4

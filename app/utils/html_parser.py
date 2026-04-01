@@ -103,11 +103,11 @@ def parse_html(base_url: str, html: str, *, scope_url: str | None = None) -> dic
     ]
 
     # JSON-LD 结构化数据块（完整字符串，供 Schema 解析器使用）
-    json_ld_blocks = [
-        block.string.strip()
-        for block in soup.find_all("script", attrs={"type": "application/ld+json"})
-        if block.string and block.string.strip()
-    ]
+    json_ld_blocks = []
+    for block in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        content = block.get_text(" ", strip=True)
+        if content:
+            json_ld_blocks.append(content)
 
     # Open Graph 社交元数据（og: 前缀）
     open_graph: dict[str, str] = {}

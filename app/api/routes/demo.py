@@ -1116,7 +1116,7 @@ HTML = """<!doctype html>
         </div>
         <div class="api-step-body">
           <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}</div>
-          <div class="api-desc">每隔 1–2 秒轮询一次。<code>status</code> 为 <code>"completed"</code> 或 <code>"failed"</code> 时停止。<code>steps</code> 字段实时反映各模块状态（pending / running / completed / failed）。</div>
+          <div class="api-desc">每隔 1–2 秒轮询一次。<code>status</code> 为 <code>"completed"</code> 或 <code>"failed"</code> 时停止。<code>steps</code> 字段实时反映各模块状态（pending / running / completed / failed）。完成后，<code>summary.ai_perception</code> 还会返回 AI 对站点的认知百分比分布和 4 个认知标签。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">status</span><span class="param-type">string</span><span class="param-desc">queued → running → completed | failed</span></div>
             <div class="param-row"><span class="param-key">progress_percent</span><span class="param-type">int</span><span class="param-desc">0–100，按完成步骤数计算</span></div>
@@ -1143,7 +1143,16 @@ HTML = """<!doctype html>
       "discovery":  { "scope_root_url": "https://www.ecoflow.com/de/", ... },
       "page_diagnostics": [ { "page_type": "product", "overall_score": 71, ... } ],
       "observation":{ "provided": false, "scored": false, ... },
-      "summary":    { "score": 70, "summary": "...", ... }
+      "summary":    {
+        "composite_geo_score": 70,
+        "summary": "...",
+        "ai_perception": {
+          "positive_percentage": 58,
+          "neutral_percentage": 29,
+          "controversial_percentage": 13,
+          "cognition_keywords": ["Thought Leader", "Well-structured", "Evidence-led", "Trustworthy"]
+        }
+      }
     }
   }
 }</pre></div>
@@ -1566,6 +1575,12 @@ function renderReport(task) {
     observationLabel: 'Observation',
     inputScope: 'Input Scope',
     fullAudit: 'Full Audit',
+    aiPerceptionTitle: tx(lang, 'AI 认知快照', 'AI Perception Snapshot'),
+    aiPerceptionSubtitle: tx(lang, '根据站点信号估算 AI 对该站点的认知倾向，不参与评分', 'Estimated AI-side perception based on site signals. This does not affect scoring.'),
+    positiveLabel: tx(lang, '正面', 'Positive'),
+    neutralLabel: tx(lang, '中性', 'Neutral'),
+    controversialLabel: tx(lang, '争议', 'Controversial'),
+    cognitionKeywordsLabel: tx(lang, '认知标签', 'Perception Keywords'),
     scoredDimensionsTitle: tx(lang, '6 个汇总维度评估', '6 Scored Dimensions'),
     scoredDimensionsSubtitle: tx(lang, '原始分满分 100，按权重折算进入综合分', 'Raw scores are out of 100 and are weighted into the composite score'),
     keyIssuesTitle: tx(lang, '关键问题', 'Key Issues'),
@@ -1605,6 +1620,7 @@ function renderReport(task) {
   const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
   const actions = normalizeActions(result, lang).slice(0, 5);
   const weighted = summary.weighted_scores || {};
+  const aiPerception = summary.ai_perception || {};
   const platformScores = platform.platform_scores || {};
   const observation = result.observation || summary.observation || {};
   const metricDefinitions = summary.metric_definitions || [];
@@ -1729,6 +1745,39 @@ function renderReport(task) {
     ${observationGaps.length ? `<div class="report-list" style="margin-top:12px">${formatList(observationGaps, labels.noDataGaps)}</div>` : ''}
   `;
 
+  const aiPerceptionHtml = `
+    <div class="report-grid-2">
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(labels.positiveLabel)}</span>
+          <span class="report-dim-pill">%</span>
+        </div>
+        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.positive_percentage ?? 0))}</span></div>
+      </div>
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(labels.neutralLabel)}</span>
+          <span class="report-dim-pill">%</span>
+        </div>
+        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.neutral_percentage ?? 0))}</span></div>
+      </div>
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(labels.controversialLabel)}</span>
+          <span class="report-dim-pill">%</span>
+        </div>
+        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.controversial_percentage ?? 0))}</span></div>
+      </div>
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(labels.cognitionKeywordsLabel)}</span>
+          <span class="report-dim-pill">${escapeHtml(String((aiPerception.cognition_keywords || []).length || 0))}</span>
+        </div>
+        <div class="report-list">${formatList(aiPerception.cognition_keywords || [], tx(lang, '暂无认知标签。', 'No perception keywords.'))}</div>
+      </div>
+    </div>
+  `;
+
   const noticesHtml = notices.length
     ? `<div class="report-list" style="margin-top:14px">${formatList(notices, labels.noNotices, 8)}</div>`
     : '';
@@ -1851,6 +1900,14 @@ function renderReport(task) {
       <div class="report-section-body">
         <div class="report-dim-grid">${dimensionHtml}</div>
       </div>
+    </section>
+
+    <section class="report-section">
+      <div class="report-section-hdr">
+        <h4>${escapeHtml(labels.aiPerceptionTitle)}</h4>
+        <span>${escapeHtml(labels.aiPerceptionSubtitle)}</span>
+      </div>
+      <div class="report-section-body">${aiPerceptionHtml}</div>
     </section>
 
     <div class="report-grid-2">

@@ -99,7 +99,23 @@ GEO Audit 关注的是另一层问题：
 - schema
 - overall score
 
-### 5. Discovery Reuse
+### 5. AI 认知快照
+
+`summary` 现在会额外返回一组不计分的站点级 AI 认知画像：
+
+- `ai_perception.positive_percentage`
+- `ai_perception.neutral_percentage`
+- `ai_perception.controversial_percentage`
+- `ai_perception.cognition_keywords`
+
+用于描述 AI 可能如何“理解”该站点，例如更像：
+
+- 行业先知
+- 反应迅速
+- 证据充分
+- 结构清晰
+
+### 6. Discovery Reuse
 
 `audit_full` 支持直接复用传入的 `discovery`，避免重复抓取，方便：
 
@@ -107,7 +123,7 @@ GEO Audit 关注的是另一层问题：
 - 管道式处理
 - 外部编排系统
 
-### 6. 会员 AI 增强
+### 7. 会员 AI 增强
 
 `premium` 模式下可对以下模块做语义增强：
 
@@ -294,6 +310,29 @@ curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
 curl http://127.0.0.1:8023/api/v1/tasks/{task_id}
 ```
 
+完成后的 `result.summary` 会包含：
+
+```json
+{
+  "composite_geo_score": 70,
+  "status": "good",
+  "summary": "...",
+  "ai_perception": {
+    "positive_percentage": 58,
+    "neutral_percentage": 29,
+    "controversial_percentage": 13,
+    "cognition_keywords": ["Thought Leader", "Well-structured", "Evidence-led", "Trustworthy"]
+  }
+}
+```
+
+说明：
+
+- `ai_perception` 不参与综合分计算
+- 三个百分比相加恒为 `100`
+- `cognition_keywords` 固定返回 4 个词
+- `feedback_lang="zh"` 时，这些词会尽量中文化；JSON key 保持英文
+
 导出报告：
 
 ```bash
@@ -307,6 +346,8 @@ curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","mode":"standard"}'
 ```
+
+同步完整审计返回中同样包含 `summary.ai_perception`。
 
 ### 单独调用 discovery
 

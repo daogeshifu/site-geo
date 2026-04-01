@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.models.audit import (
     ActionPlanItem,
+    AIPerceptionResult,
     ContentAuditResult,
     MetricDefinition,
     ObservationResult,
@@ -56,6 +57,152 @@ class SummarizerService:
             "Platform Optimization": {"en": "Platform Optimization", "zh": "平台适配"},
         }
         return labels.get(key, {}).get(feedback_lang, key)
+
+    def _normalize_percentages(self, values: dict[str, float]) -> dict[str, int]:
+        total = sum(max(value, 0) for value in values.values()) or 1
+        raw = {key: (max(value, 0) / total) * 100 for key, value in values.items()}
+        rounded = {key: int(raw_value) for key, raw_value in raw.items()}
+        remainder = 100 - sum(rounded.values())
+        if remainder:
+            order = sorted(raw.items(), key=lambda item: item[1] - int(item[1]), reverse=True)
+            for key, _ in order[:remainder]:
+                rounded[key] += 1
+        return rounded
+
+    def _ai_perception_keywords(
+        self,
+        *,
+        discovery: DiscoveryResult,
+        visibility: VisibilityAuditResult,
+        technical: TechnicalAuditResult,
+        content: ContentAuditResult,
+        schema: SchemaAuditResult,
+        platform: PlatformAuditResult,
+        feedback_lang: str,
+    ) -> list[str]:
+        llms_quality = visibility.findings.get("llms_quality", {}).get("score", 0)
+        citability = visibility.findings.get("citability", {}).get("score", 0)
+        has_defined_term = schema.checks.get("defined_term", False)
+        has_publish_dates = content.findings.get("has_publish_date_any", False)
+        has_quantified = content.findings.get("has_quantified_data_any", False)
+
+        candidates = [
+            (
+                visibility.brand_authority_score >= 75 and discovery.site_signals.same_as_detected,
+                {"zh": "官方权威", "en": "Authoritative"},
+            ),
+            (
+                schema.structured_data_score >= 70 and technical.technical_score >= 70,
+                {"zh": "结构清晰", "en": "Well-structured"},
+            ),
+            (
+                content.expertise_score >= 72 and (discovery.key_pages.article or has_defined_term),
+                {"zh": "行业先知", "en": "Thought Leader"},
+            ),
+            (
+                llms_quality >= 70 and has_publish_dates,
+                {"zh": "反应迅速", "en": "Fast-moving"},
+            ),
+            (
+                content.experience_score >= 65 and has_quantified,
+                {"zh": "证据充分", "en": "Evidence-led"},
+            ),
+            (
+                content.trustworthiness_score >= 70 and discovery.site_signals.company_name_detected and discovery.site_signals.phone_detected,
+                {"zh": "值得信赖", "en": "Trustworthy"},
+            ),
+            (
+                citability >= 70 and platform.platform_optimization_score >= 70,
+                {"zh": "表达直接", "en": "Answer-first"},
+            ),
+            (
+                discovery.key_pages.service is not None and (schema.checks.get("service") or schema.checks.get("product")),
+                {"zh": "产品导向", "en": "Product-led"},
+            ),
+        ]
+        keywords = [labels[feedback_lang] for matched, labels in candidates if matched]
+        fallbacks = [
+            {"zh": "信号偏弱", "en": "Low-signal"},
+            {"zh": "实体模糊", "en": "Entity-blurry"},
+            {"zh": "佐证不足", "en": "Proof-light"},
+            {"zh": "结构待强化", "en": "Structure-light"},
+        ]
+        for labels in fallbacks:
+            if len(keywords) >= 4:
+                break
+            keywords.append(labels[feedback_lang])
+        return keywords[:4]
+
+    def _ai_perception_snapshot(
+        self,
+        *,
+        discovery: DiscoveryResult,
+        visibility: VisibilityAuditResult,
+        technical: TechnicalAuditResult,
+        content: ContentAuditResult,
+        schema: SchemaAuditResult,
+        platform: PlatformAuditResult,
+        feedback_lang: str,
+    ) -> AIPerceptionResult:
+        citability = visibility.findings.get("citability", {}).get("score", 0)
+        basic_presence = visibility.findings.get("basic_brand_presence", {}).get("score", 0)
+        entity_components = visibility.checks.get("brand_authority_components", {}).get("entity_consistency", {})
+        controversy_penalty = 0
+        if entity_components.get("same_domain_sitemap") is False:
+            controversy_penalty += 12
+        if not discovery.site_signals.company_name_detected:
+            controversy_penalty += 10
+        if not discovery.site_signals.same_as_detected:
+            controversy_penalty += 8
+        if not discovery.llms.exists:
+            controversy_penalty += 4
+
+        positive_raw = (
+            visibility.ai_visibility_score * 0.22
+            + visibility.brand_authority_score * 0.22
+            + content.expertise_score * 0.12
+            + content.authoritativeness_score * 0.12
+            + content.trustworthiness_score * 0.12
+            + technical.technical_score * 0.08
+            + schema.structured_data_score * 0.06
+            + platform.platform_optimization_score * 0.06
+        )
+        neutral_raw = (
+            (100 - citability) * 0.18
+            + (100 - basic_presence) * 0.24
+            + (100 - schema.structured_data_score) * 0.18
+            + (100 - content.content_score) * 0.20
+            + (100 - visibility.brand_authority_score) * 0.20
+        )
+        controversial_raw = (
+            (100 - content.trustworthiness_score) * 0.28
+            + (100 - visibility.brand_authority_score) * 0.22
+            + (100 - technical.technical_score) * 0.12
+            + (100 - schema.structured_data_score) * 0.16
+            + (100 - content.authoritativeness_score) * 0.10
+            + controversy_penalty
+        )
+        percentages = self._normalize_percentages(
+            {
+                "positive": max(positive_raw, 12),
+                "neutral": max(neutral_raw, 10),
+                "controversial": max(controversial_raw, 8),
+            }
+        )
+        return AIPerceptionResult(
+            positive_percentage=percentages["positive"],
+            neutral_percentage=percentages["neutral"],
+            controversial_percentage=percentages["controversial"],
+            cognition_keywords=self._ai_perception_keywords(
+                discovery=discovery,
+                visibility=visibility,
+                technical=technical,
+                content=content,
+                schema=schema,
+                platform=platform,
+                feedback_lang=feedback_lang,
+            ),
+        )
 
     def _visibility_dimension_views(self, visibility: VisibilityAuditResult) -> tuple[dict, dict]:
         """将 visibility 模块结果拆分为"AI 可见性"和"品牌权威"两个独立维度视图
@@ -221,6 +368,15 @@ class SummarizerService:
         }
         composite_score, weighted_scores = self.scoring.weighted_composite(weighted_inputs)
         status = self.scoring.status_from_score(composite_score)
+        ai_perception = self._ai_perception_snapshot(
+            discovery=discovery,
+            visibility=visibility,
+            technical=technical,
+            content=content,
+            schema=schema,
+            platform=platform,
+            feedback_lang=feedback_lang,
+        )
 
         ai_dimension, brand_dimension = self._visibility_dimension_views(visibility)
         # 构建 6 个维度视图（中文标签便于展示）
@@ -326,6 +482,7 @@ class SummarizerService:
             prioritized_action_plan=prioritized_action_plan[:5],  # 最多 5 条优先行动
             metric_definitions=self._metric_definitions(),
             score_interpretation=self._score_interpretation(observation),
+            ai_perception=ai_perception,
             observation=observation,
             notices=notices,
         )
