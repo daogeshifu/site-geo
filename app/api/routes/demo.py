@@ -1810,7 +1810,7 @@ function renderReport(task) {
           <br />
           ${escapeHtml(item.url || '-')}
           <br />
-          ${escapeHtml(tx(lang, '问题数', 'Issue count'))} ${escapeHtml(String(item.issue_count ?? (item.issues || []).length || 0))}
+          ${escapeHtml(tx(lang, '问题数', 'Issue count'))} ${escapeHtml(String(item.issue_count ?? ((item.issues || []).length || 0)))}
           <div class="report-list" style="margin-top:8px">
             <div class="report-list-item"><strong>${escapeHtml(labels.pageIssueDetailsTitle)}</strong></div>
             ${formatDetailMap(item.issue_details, labels.pageDetailEmpty, lang)}
