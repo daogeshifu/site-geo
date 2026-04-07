@@ -35,7 +35,11 @@ class PageDiagnosticsService:
             + schema_score * 0.15
         )
         status = self.scoring.status_from_score(overall_score)
-        issues, recommendations = self._issues_and_recommendations(profile, citability, content_score, technical_score, schema_score)
+        issue_details, recommendation_details = self._issues_and_recommendations(
+            profile, citability, content_score, technical_score, schema_score
+        )
+        issues = self._flatten_detail_map(issue_details)
+        recommendations = self._flatten_detail_map(recommendation_details)
         return PageDiagnosticResult(
             url=profile.final_url,
             page_type=profile.page_type or key,
@@ -47,9 +51,34 @@ class PageDiagnosticsService:
             technical_score=technical_score,
             schema_score=schema_score,
             issue_count=len(issues),
-            issues=issues[:5],
-            recommendations=recommendations[:5],
+            issues=issues,
+            recommendations=recommendations,
+            issue_details=issue_details,
+            recommendation_details=recommendation_details,
         )
+
+    def _flatten_detail_map(self, detail_map: dict[str, list[str]]) -> list[str]:
+        ordered: list[str] = []
+        for values in detail_map.values():
+            for item in values:
+                if item not in ordered:
+                    ordered.append(item)
+        return ordered
+
+    def _append_issue(
+        self,
+        issue_details: dict[str, list[str]],
+        recommendation_details: dict[str, list[str]],
+        category: str,
+        issue: str,
+        recommendation: str | None = None,
+    ) -> None:
+        issue_details.setdefault(category, [])
+        recommendation_details.setdefault(category, [])
+        if issue not in issue_details[category]:
+            issue_details[category].append(issue)
+        if recommendation and recommendation not in recommendation_details[category]:
+            recommendation_details[category].append(recommendation)
 
     def _content_score(self, profile: PageProfile) -> int:
         return self.scoring.clamp_score(
@@ -104,28 +133,115 @@ class PageDiagnosticsService:
         content_score: int,
         technical_score: int,
         schema_score: int,
-    ) -> tuple[list[str], list[str]]:
-        issues: list[str] = []
-        recommendations: list[str] = []
+    ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        issue_details: dict[str, list[str]] = {}
+        recommendation_details: dict[str, list[str]] = {}
         if citability["score"] < 60:
-            issues.append("Page is not yet citation-ready enough for consistent AI extraction.")
-            recommendations.append("Restructure the page with answer-first sections, stronger headings, and tighter proof blocks.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "citability",
+                "Page is not yet citation-ready enough for consistent AI extraction.",
+                "Restructure the page with answer-first sections, stronger headings, and tighter proof blocks.",
+            )
         if content_score < 60:
-            issues.append("Content depth and fact density are weaker than ideal for GEO reuse.")
-            recommendations.append("Add concrete claims, specifications, FAQs, and sourced proof to the page.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "content",
+                "Content depth and fact density are weaker than ideal for GEO reuse.",
+                "Add concrete claims, specifications, FAQs, and sourced proof to the page.",
+            )
         if not profile.has_reference_section and profile.has_quantified_data:
-            issues.append("Claims appear without a visible references or sources section.")
-            recommendations.append("Add a references section or source list near factual and comparative claims.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "evidence",
+                "Claims appear without a visible references or sources section.",
+                "Add a references section or source list near factual and comparative claims.",
+            )
+        if not profile.has_inline_citations and profile.has_reference_section:
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "evidence",
+                "Page has source sections but lacks inline citation cues near important claims.",
+                "Support key facts with inline citations, source labels, or explicit linked proof near the claim.",
+            )
+        if profile.descriptive_internal_link_ratio < 0.5 or profile.descriptive_external_link_ratio < 0.5:
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "linking",
+                "Link anchors are not descriptive enough to provide strong retrieval context.",
+                "Use anchor text that names the linked topic, evidence source, or destination intent more explicitly.",
+            )
         if technical_score < 60:
-            issues.append("Page-level metadata or structure is incomplete.")
-            recommendations.append("Improve title, meta description, canonical tags, language declaration, and heading coverage.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "technical",
+                "Page-level metadata or structure is incomplete.",
+                "Improve title, meta description, canonical tags, language declaration, and heading coverage.",
+            )
+        h1_count = sum(1 for heading in profile.headings if heading.level == "h1")
+        if h1_count != 1:
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "semantic_html",
+                "Page should expose exactly one H1 for stronger semantic structure.",
+                "Keep a single descriptive H1 and nest supporting content under logical H2 and H3 sections.",
+            )
         if schema_score < 50:
-            issues.append("Structured data on this page is too thin.")
-            recommendations.append("Add page-relevant JSON-LD such as Service, Product, FAQPage, Article, or DefinedTerm.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "schema",
+                "Structured data on this page is too thin.",
+                "Add page-relevant JSON-LD such as Service, Product, FAQPage, Article, or DefinedTerm.",
+            )
         elif (profile.json_ld_summary or {}).get("visible_alignment_score", 0) < 60:
-            issues.append("Schema content is present but not tightly aligned with visible page copy.")
-            recommendations.append("Keep schema names, descriptions, FAQs, and dates synchronized with visible on-page content.")
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "schema",
+                "Schema content is present but not tightly aligned with visible page copy.",
+                "Keep schema names, descriptions, FAQs, and dates synchronized with visible on-page content.",
+            )
+        schema_summary = profile.json_ld_summary or {}
+        if schema_summary.get("json_ld_present") and not (
+            schema_summary.get("has_date_published") or schema_summary.get("has_date_modified")
+        ):
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "freshness",
+                "Structured data is present but does not expose machine-readable publish or update dates.",
+                "Add datePublished and/or dateModified in the page's JSON-LD where relevant.",
+            )
         if not profile.has_author and profile.page_type in {"article", "documentation"}:
-            issues.append("Editorial page lacks an author signal.")
-            recommendations.append("Expose named authors or reviewers for editorial and knowledge pages.")
-        return issues, recommendations
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "trust",
+                "Editorial page lacks an author signal.",
+                "Expose named authors or reviewers for editorial and knowledge pages.",
+            )
+        if not profile.has_publish_date and profile.page_type in {"article", "documentation"}:
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "freshness",
+                "Editorial page lacks a visible publish or update timestamp.",
+                "Expose visible publish and update timestamps on editorial and knowledge pages.",
+            )
+        if not profile.has_tldr and citability["score"] < 75:
+            self._append_issue(
+                issue_details,
+                recommendation_details,
+                "ux",
+                "Page lacks a concise answer-first summary block.",
+                "Add a TL;DR or key takeaways block near the top of the page.",
+            )
+        return issue_details, recommendation_details

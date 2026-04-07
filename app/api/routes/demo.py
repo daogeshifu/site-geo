@@ -1472,6 +1472,18 @@ function formatList(items, fallback, limit = 5) {
   return list.map((item, idx) => `<div class="report-list-item"><strong>${idx + 1}.</strong> ${escapeHtml(item)}</div>`).join('');
 }
 
+function formatDetailMap(detailMap, fallback, lang = 'zh') {
+  const entries = Object.entries(detailMap || {}).filter(([, items]) => Array.isArray(items) && items.length);
+  if (!entries.length) return `<div class="report-list-item">${escapeHtml(fallback)}</div>`;
+  return entries.map(([category, items]) => `
+    <div class="report-list-item">
+      <strong>${escapeHtml(category)}</strong>
+      <br />
+      ${items.map((item, idx) => `${idx + 1}. ${escapeHtml(item)}`).join('<br />')}
+    </div>
+  `).join('');
+}
+
   function normalizeActions(result, lang = 'zh') {
     const llmPlan = result?.summary?.llm_insights?.prioritized_action_plan;
     if (Array.isArray(llmPlan) && llmPlan.length) {
@@ -1606,6 +1618,9 @@ function renderReport(task) {
     pageFaqYes: tx(lang, '有', 'Yes'),
     pageFaqNo: tx(lang, '无', 'No'),
     pageIssueEmpty: tx(lang, '暂无关键问题', 'No key issues'),
+    pageIssueDetailsTitle: tx(lang, '问题清单', 'Issue List'),
+    pageRecommendationDetailsTitle: tx(lang, '修复建议', 'Recommendations'),
+    pageDetailEmpty: tx(lang, '暂无明细', 'No details'),
     waitReport: tx(lang, '等待平台结果', 'Waiting for platform results'),
     unavailable: tx(lang, '暂无', 'N/A'),
     missingGap: tx(lang, '暂无缺口描述', 'No gap description'),
@@ -1795,7 +1810,15 @@ function renderReport(task) {
           <br />
           ${escapeHtml(item.url || '-')}
           <br />
-          ${(item.issues || []).length ? escapeHtml((item.issues || []).slice(0, 2).join(' | ')) : labels.pageIssueEmpty}
+          ${escapeHtml(tx(lang, '问题数', 'Issue count'))} ${escapeHtml(String(item.issue_count ?? (item.issues || []).length || 0))}
+          <div class="report-list" style="margin-top:8px">
+            <div class="report-list-item"><strong>${escapeHtml(labels.pageIssueDetailsTitle)}</strong></div>
+            ${formatDetailMap(item.issue_details, labels.pageDetailEmpty, lang)}
+          </div>
+          <div class="report-list" style="margin-top:8px">
+            <div class="report-list-item"><strong>${escapeHtml(labels.pageRecommendationDetailsTitle)}</strong></div>
+            ${formatDetailMap(item.recommendation_details, labels.pageDetailEmpty, lang)}
+          </div>
         </div>
       `).join('')}</div>`
     : `<div class="report-list-item">${escapeHtml(labels.fullAuditMissing)}</div>`;

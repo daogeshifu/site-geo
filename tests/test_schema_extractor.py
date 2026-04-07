@@ -66,3 +66,36 @@ def test_page_diagnostics_schema_score_rewards_organization_subtypes() -> None:
     )
 
     assert service._schema_score(profile) == 53
+
+
+def test_page_diagnostics_returns_full_issue_lists_with_category_details() -> None:
+    service = PageDiagnosticsService()
+    profile = PageProfile(
+        page_type="article",
+        final_url="https://example.com/research",
+        word_count=120,
+        headings=[],
+        has_quantified_data=True,
+        has_reference_section=False,
+        has_inline_citations=False,
+        has_tldr=False,
+        has_publish_date=False,
+        has_author=False,
+        descriptive_internal_link_ratio=0.0,
+        descriptive_external_link_ratio=0.0,
+        title=None,
+        meta_description=None,
+        canonical=None,
+        html_lang=None,
+        json_ld_summary={"json_ld_present": True, "visible_alignment_score": 0},
+        entity_signals=SiteSignals(),
+    )
+
+    result = service._diagnose_page("article", profile, source="core")
+
+    assert result.issue_count == len(result.issues)
+    assert len(result.issues) > 5
+    assert "evidence" in result.issue_details
+    assert "schema" in result.issue_details
+    assert "freshness" in result.issue_details
+    assert "citability" in result.recommendation_details

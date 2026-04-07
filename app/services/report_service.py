@@ -172,10 +172,27 @@ class ReportService:
         ]
         observation_section = self._observation_section(summary.observation)
         page_diagnostic_rows = []
+        page_diagnostic_details: list[str] = []
         for item in page_diagnostics or []:
             page_diagnostic_rows.append(
                 f"| {item.page_type} | {item.source} | {item.overall_score}/100 | {item.citability_score} | {item.content_score} | {item.technical_score} | {item.schema_score} | {item.issue_count} | {item.url} |"
             )
+            if item.issues:
+                page_diagnostic_details.extend(
+                    [
+                        f"### {item.page_type.title()} · {item.url}",
+                        "",
+                        f"- Overall: {item.overall_score}/100 ({item.status})",
+                        f"- Issue count: {item.issue_count}",
+                        "",
+                        "Issues by category:",
+                        *self._page_issue_detail_lines(item.issue_details),
+                        "",
+                        "Recommended fixes by category:",
+                        *self._page_issue_detail_lines(item.recommendation_details),
+                        "",
+                    ]
+                )
 
         return "\n".join(
             [
@@ -285,6 +302,16 @@ class ReportService:
                         "|---|---|---|---|---|---|---|---|---|",
                         *page_diagnostic_rows,
                         "",
+                        *(
+                            [
+                                "### Full Page Issue Lists",
+                                "",
+                                *page_diagnostic_details,
+                            ]
+                            if page_diagnostic_details
+                            else []
+                        ),
+                        "",
                         "---",
                         "",
                     ]
@@ -367,6 +394,17 @@ class ReportService:
             )
             / 4
         )
+
+    def _page_issue_detail_lines(self, detail_map: dict[str, list[str]]) -> list[str]:
+        if not detail_map:
+            return ["- None recorded."]
+        lines: list[str] = []
+        for category, items in detail_map.items():
+            if not items:
+                continue
+            lines.append(f"- {category}:")
+            lines.extend([f"  - {item}" for item in items])
+        return lines or ["- None recorded."]
 
     def _dimension_comment(self, score: int, dimension: str) -> str:
         """根据分数生成维度评价文字：≥75 强/≥50 中/否则弱"""

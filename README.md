@@ -100,6 +100,12 @@ GEO Audit 关注的是另一层问题：
 - technical
 - schema
 - overall score
+- full issue list
+- categorized issue details
+
+说明：
+- `page_diagnostics` 仍然基于 full audit 抓取到的画像页集合返回，不等于站点全部 URL。
+- 但对于进入画像集合的每个页面，现在会返回完整 `issues` / `recommendations`，并按 `citability / content / evidence / linking / technical / semantic_html / schema / freshness / trust / ux` 分类展开。
 
 ### 5. AI 认知快照
 

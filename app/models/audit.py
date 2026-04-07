@@ -186,6 +186,8 @@ class PageDiagnosticResult(BaseModel):
     issue_count: int = 0
     issues: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    issue_details: dict[str, list[str]] = Field(default_factory=dict)
+    recommendation_details: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class MetricDefinition(BaseModel):
