@@ -434,29 +434,176 @@ HTML = """<!doctype html>
       display: flex; flex-direction: column; gap: 10px;
     }
     .report-action {
-      display: grid; grid-template-columns: 86px 1fr 84px; gap: 12px;
+      display: grid; grid-template-columns: 110px minmax(0, 1fr) 220px; gap: 14px;
       align-items: start;
       border: 1px solid var(--border); border-radius: 12px;
       background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
-      padding: 12px;
+      padding: 14px;
     }
     .report-action-priority {
       border-radius: 10px; padding: 8px 10px; text-align: center;
       font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
       background: var(--bg); color: var(--muted);
+      align-self: start;
     }
     .report-action-priority.high, .report-action-priority.critical { background: rgba(239,68,68,0.1); color: #dc2626; }
     .report-action-priority.medium { background: rgba(245,158,11,0.12); color: #d97706; }
     .report-action-priority.low { background: rgba(16,185,129,0.1); color: #059669; }
-    .report-action-main h5 { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-    .report-action-main p { font-size: 12px; color: var(--muted); line-height: 1.65; }
+    .report-action-main { min-width: 0; }
+    .report-action-main h5 { font-size: 14px; font-weight: 700; margin-bottom: 6px; line-height: 1.45; }
+    .report-action-main p { font-size: 12px; color: var(--muted); line-height: 1.7; }
     .report-action-impact {
-      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-      color: var(--muted); text-align: right;
+      border: 1px solid rgba(16,185,129,0.16);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(16,185,129,0.06) 0%, rgba(16,185,129,0.02) 100%);
+      padding: 11px 12px;
+      min-width: 0;
+    }
+    .report-action-impact-label {
+      font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted); margin-bottom: 7px;
     }
     .report-action-impact span {
-      display: inline-block; margin-top: 6px; padding: 5px 9px; border-radius: 999px;
-      background: var(--accent-dim); color: var(--accent);
+      display: block;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #047857;
+      font-weight: 700;
+      word-break: break-word;
+    }
+    .page-diagnostic-card {
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+      padding: 14px;
+    }
+    .page-diagnostic-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .page-diagnostic-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      margin-bottom: 8px;
+    }
+    .page-diagnostic-title strong {
+      font-size: 14px;
+    }
+    .page-diagnostic-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: #eef2f7;
+      color: #475569;
+    }
+    .page-diagnostic-badge.score {
+      background: var(--accent-dim);
+      color: #047857;
+    }
+    .page-diagnostic-url {
+      display: block;
+      padding: 9px 11px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #dbe4ee;
+      color: #0f172a;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      word-break: break-all;
+    }
+    .page-diagnostic-url-label {
+      display: inline-block;
+      margin-bottom: 6px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .page-diagnostic-metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 360px;
+    }
+    .page-diagnostic-metric {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 8px;
+      text-align: center;
+    }
+    .page-diagnostic-metric .label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .page-diagnostic-metric .value {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .page-diagnostic-panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .page-diagnostic-panel {
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: #fff;
+      padding: 12px;
+    }
+    .page-diagnostic-panel h6 {
+      margin-bottom: 10px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .detail-group {
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 8px;
+    }
+    .detail-group:last-child {
+      margin-bottom: 0;
+    }
+    .detail-group-title {
+      display: inline-flex;
+      margin-bottom: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .detail-group-item {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.65;
+      margin-top: 4px;
     }
     .report-platform-grid {
       display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px;
@@ -723,6 +870,9 @@ HTML = """<!doctype html>
       .report-grid-2 { grid-template-columns: 1fr; }
       .report-platform-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .report-evidence-grid { grid-template-columns: 1fr; }
+      .page-diagnostic-head { flex-direction: column; }
+      .page-diagnostic-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); min-width: 0; width: 100%; }
+      .page-diagnostic-panels { grid-template-columns: 1fr; }
       .dim-grid { grid-template-columns: repeat(2, 1fr); }
       .biz-grid { grid-template-columns: 1fr 1fr; }
     }
@@ -731,7 +881,8 @@ HTML = """<!doctype html>
       .report-dim-grid { grid-template-columns: 1fr; }
       .report-platform-grid { grid-template-columns: 1fr; }
       .report-action { grid-template-columns: 1fr; }
-      .report-action-impact { text-align: left; }
+      .report-action-impact { width: 100%; }
+      .page-diagnostic-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .dim-grid { grid-template-columns: 1fr; }
       .biz-grid { grid-template-columns: 1fr; }
     }
@@ -1474,12 +1625,11 @@ function formatList(items, fallback, limit = 5) {
 
 function formatDetailMap(detailMap, fallback, lang = 'zh') {
   const entries = Object.entries(detailMap || {}).filter(([, items]) => Array.isArray(items) && items.length);
-  if (!entries.length) return `<div class="report-list-item">${escapeHtml(fallback)}</div>`;
+  if (!entries.length) return `<div class="detail-group"><div class="detail-group-item">${escapeHtml(fallback)}</div></div>`;
   return entries.map(([category, items]) => `
-    <div class="report-list-item">
-      <strong>${escapeHtml(category)}</strong>
-      <br />
-      ${items.map((item, idx) => `${idx + 1}. ${escapeHtml(item)}`).join('<br />')}
+    <div class="detail-group">
+      <div class="detail-group-title">${escapeHtml(category)}</div>
+      ${items.map((item, idx) => `<div class="detail-group-item">${idx + 1}. ${escapeHtml(item)}</div>`).join('')}
     </div>
   `).join('');
 }
@@ -1799,25 +1949,35 @@ function renderReport(task) {
 
   const pageDiagnosticsHtml = pageDiagnostics.length
     ? `<div class="report-list">${pageDiagnostics.slice(0, 12).map((item, index) => `
-        <div class="report-list-item">
-          <strong>${index + 1}. ${escapeHtml(item.page_type || 'page')}</strong>
-          · ${escapeHtml(item.source || 'core')}
-          · ${escapeHtml(tx(lang, '总分', 'Overall'))} ${escapeHtml(String(item.overall_score ?? 0))}
-          · Citability ${escapeHtml(String(item.citability_score ?? 0))}
-          · Content ${escapeHtml(String(item.content_score ?? 0))}
-          · Technical ${escapeHtml(String(item.technical_score ?? 0))}
-          · Schema ${escapeHtml(String(item.schema_score ?? 0))}
-          <br />
-          ${escapeHtml(item.url || '-')}
-          <br />
-          ${escapeHtml(tx(lang, '问题数', 'Issue count'))} ${escapeHtml(String(item.issue_count ?? ((item.issues || []).length || 0)))}
-          <div class="report-list" style="margin-top:8px">
-            <div class="report-list-item"><strong>${escapeHtml(labels.pageIssueDetailsTitle)}</strong></div>
-            ${formatDetailMap(item.issue_details, labels.pageDetailEmpty, lang)}
+        <div class="page-diagnostic-card">
+          <div class="page-diagnostic-head">
+            <div style="min-width:0; flex:1;">
+              <div class="page-diagnostic-title">
+                <strong>${index + 1}. ${escapeHtml(item.page_type || 'page')}</strong>
+                <span class="page-diagnostic-badge">${escapeHtml(item.source || 'core')}</span>
+                <span class="page-diagnostic-badge score">${escapeHtml(tx(lang, '总分', 'Overall'))} ${escapeHtml(String(item.overall_score ?? 0))}</span>
+                <span class="page-diagnostic-badge">${escapeHtml(tx(lang, '问题数', 'Issue count'))} ${escapeHtml(String(item.issue_count ?? ((item.issues || []).length || 0)))}</span>
+              </div>
+              <div class="page-diagnostic-url-label">${escapeHtml(tx(lang, '页面 URL', 'Page URL'))}</div>
+              <div class="page-diagnostic-url">${escapeHtml(item.url || '-')}</div>
+            </div>
+            <div class="page-diagnostic-metrics">
+              <div class="page-diagnostic-metric"><span class="label">Citability</span><span class="value">${escapeHtml(String(item.citability_score ?? 0))}</span></div>
+              <div class="page-diagnostic-metric"><span class="label">Content</span><span class="value">${escapeHtml(String(item.content_score ?? 0))}</span></div>
+              <div class="page-diagnostic-metric"><span class="label">Technical</span><span class="value">${escapeHtml(String(item.technical_score ?? 0))}</span></div>
+              <div class="page-diagnostic-metric"><span class="label">Schema</span><span class="value">${escapeHtml(String(item.schema_score ?? 0))}</span></div>
+              <div class="page-diagnostic-metric"><span class="label">${escapeHtml(tx(lang, '状态', 'Status'))}</span><span class="value">${escapeHtml(formatStatus(item.status, lang))}</span></div>
+            </div>
           </div>
-          <div class="report-list" style="margin-top:8px">
-            <div class="report-list-item"><strong>${escapeHtml(labels.pageRecommendationDetailsTitle)}</strong></div>
-            ${formatDetailMap(item.recommendation_details, labels.pageDetailEmpty, lang)}
+          <div class="page-diagnostic-panels">
+            <div class="page-diagnostic-panel">
+              <h6>${escapeHtml(labels.pageIssueDetailsTitle)}</h6>
+              ${formatDetailMap(item.issue_details, labels.pageDetailEmpty, lang)}
+            </div>
+            <div class="page-diagnostic-panel">
+              <h6>${escapeHtml(labels.pageRecommendationDetailsTitle)}</h6>
+              ${formatDetailMap(item.recommendation_details, labels.pageDetailEmpty, lang)}
+            </div>
           </div>
         </div>
       `).join('')}</div>`
@@ -1831,7 +1991,10 @@ function renderReport(task) {
             <h5>${escapeHtml(item.action)}</h5>
             <p>${escapeHtml(item.description || tx(lang, '暂无说明', 'No description'))}</p>
           </div>
-          <div class="report-action-impact">${escapeHtml(labels.impact)}<span>${escapeHtml(item.impact || 'High')}</span></div>
+          <div class="report-action-impact">
+            <div class="report-action-impact-label">${escapeHtml(labels.impact)}</div>
+            <span>${escapeHtml(item.impact || 'High')}</span>
+          </div>
         </div>
       `).join('')
     : `<div class="report-list-item">${escapeHtml(labels.noActionPlan)}</div>`;
