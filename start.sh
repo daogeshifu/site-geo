@@ -8,20 +8,67 @@ DEFAULT_HOST="${HOST:-0.0.0.0}"
 DEFAULT_PORT="${PORT:-8023}"
 PID_FILE="server.pid"
 LOG_FILE="nohup.out"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo ">>> 未找到 ${PYTHON_BIN}，请先安装 Python 3，或通过 PYTHON_BIN=/path/to/python3 指定解释器"
+    exit 1
+fi
 
 # 检查 Python 虚拟环境，不存在则自动创建
 if [ ! -d ".venv" ]; then
     echo ">>> 未检测到虚拟环境，正在创建 .venv ..."
-    python3 -m venv .venv
+    "${PYTHON_BIN}" -m venv .venv
 fi
 
 # 激活虚拟环境
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-# 安装/更新依赖
-echo ">>> 安装依赖..."
-python -m pip install -q -r requirements.txt
+VENV_PYTHON=".venv/bin/python"
+
+if ! "${VENV_PYTHON}" -c 'import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)' >/dev/null 2>&1; then
+    echo ">>> 当前 .venv 不是 Python 3 环境，请删除 .venv 后重试，或重新指定正确的 PYTHON_BIN"
+    exit 1
+fi
+
+echo ">>> 当前 Python: $("${VENV_PYTHON}" --version 2>&1)"
+
+has_runtime_deps() {
+    "${VENV_PYTHON}" - <<'PY' >/dev/null 2>&1
+import fastapi
+import uvicorn
+import pydantic
+import httpx
+import bs4
+import lxml
+import tenacity
+import tldextract
+import orjson
+import dotenv
+import pythonjsonlogger
+PY
+}
+
+SKIP_PIP_INSTALL="${SKIP_PIP_INSTALL:-}"
+FORCE_PIP_INSTALL="${FORCE_PIP_INSTALL:-}"
+
+if [[ "${SKIP_PIP_INSTALL}" =~ ^([Yy]|1|true|TRUE)$ ]]; then
+    echo ">>> 已设置 SKIP_PIP_INSTALL，跳过依赖安装"
+elif [[ "${FORCE_PIP_INSTALL}" =~ ^([Yy]|1|true|TRUE)$ ]]; then
+    echo ">>> 强制安装依赖..."
+    "${VENV_PYTHON}" -m pip install -q -r requirements.txt
+elif has_runtime_deps; then
+    echo ">>> 检测到运行依赖已存在，跳过依赖安装（如需强制更新可设置 FORCE_PIP_INSTALL=1）"
+else
+    echo ">>> 安装依赖..."
+    if ! "${VENV_PYTHON}" -m pip install -q -r requirements.txt; then
+        echo ">>> 依赖安装失败：服务器可能无法访问 PyPI / DNS 不通"
+        echo ">>> 如果依赖其实已经装好，可使用 SKIP_PIP_INSTALL=1 ./start.sh"
+        echo ">>> 如果是离线环境，请先准备 wheel 包或可访问的私有镜像源"
+        exit 1
+    fi
+fi
 
 # 加载 .env 文件（如果存在）
 if [ -f ".env" ]; then
@@ -73,9 +120,9 @@ echo ""
 
 # 启动服务
 if [[ "${IS_PROD}" =~ ^[Yy]$ ]]; then
-    nohup uvicorn "${APP_MODULE}" --host "${HOST}" --port "${PORT}" > "${LOG_FILE}" 2>&1 &
+    nohup "${VENV_PYTHON}" -m uvicorn "${APP_MODULE}" --host "${HOST}" --port "${PORT}" > "${LOG_FILE}" 2>&1 &
     echo $! > "${PID_FILE}"
     echo ">>> 服务已在后台启动，PID: $(cat "${PID_FILE}")"
 else
-    exec uvicorn "${APP_MODULE}" --host "${HOST}" --port "${PORT}" --reload
+    exec "${VENV_PYTHON}" -m uvicorn "${APP_MODULE}" --host "${HOST}" --port "${PORT}" --reload
 fi
