@@ -907,8 +907,8 @@ HTML = """<!doctype html>
 
 <div class="wrap">
   <div class="page-title">
-    <h1>网站 GEO 审计</h1>
-    <p>提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
+    <h1 id="page-heading">网站 GEO 审计</h1>
+    <p id="page-subtitle">提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
   </div>
 
   <div class="grid-top">
@@ -923,14 +923,14 @@ HTML = """<!doctype html>
       </div>
       <div class="card-body">
         <form id="audit-form">
-          <div class="field">
-            <label>目标 URL</label>
-            <div class="inp-wrap">
-              <span class="inp-icon">🌐</span>
-              <input id="url" type="text" class="has-icon" placeholder="https://example.com" required />
-            </div>
-          </div>
           <div class="row-2">
+            <div class="field">
+              <label>任务类型</label>
+              <select id="task-type">
+                <option value="site_geo_audit">网站 GEO 审计</option>
+                <option value="site_content_audit">网站内容审计</option>
+              </select>
+            </div>
             <div class="field">
               <label>审计模式</label>
               <select id="mode">
@@ -938,6 +938,15 @@ HTML = """<!doctype html>
                 <option value="premium">会员版（规则 + AI）</option>
               </select>
             </div>
+          </div>
+          <div class="field">
+            <label id="url-label">目标 URL</label>
+            <div class="inp-wrap">
+              <span class="inp-icon">🌐</span>
+              <input id="url" type="text" class="has-icon" placeholder="https://example.com" required />
+            </div>
+          </div>
+          <div class="row-2">
             <div class="field">
               <label>OpenRouter 模型</label>
               <select id="model" disabled>
@@ -946,13 +955,13 @@ HTML = """<!doctype html>
                 <option value="anthropic/claude-sonnet-4.6">anthropic / claude-sonnet-4.6</option>
               </select>
             </div>
-          </div>
-          <div class="field">
-            <label>反馈语言</label>
-            <select id="feedback-lang">
-              <option value="en">English</option>
-              <option value="zh">简体中文</option>
-            </select>
+            <div class="field">
+              <label>反馈语言</label>
+              <select id="feedback-lang">
+                <option value="en">English</option>
+                <option value="zh">简体中文</option>
+              </select>
+            </div>
           </div>
           <div class="field">
             <label for="force" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
@@ -961,7 +970,7 @@ HTML = """<!doctype html>
               <span class="toggle-hint">忽略一周内的历史结果</span>
             </label>
           </div>
-          <div class="row-2">
+          <div id="full-audit-row" class="row-2">
             <div class="field">
               <label for="full-audit" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
                 <input id="full-audit" type="checkbox" />
@@ -1383,8 +1392,33 @@ HTML = """<!doctype html>
   $('toast-close').addEventListener('click', () => $('toast').classList.remove('show'));
 
   /* ── Step config ── */
-  const STEP_ORDER = ['discovery', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
+  const SITE_GEO_STEP_ORDER = ['discovery', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
+  const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
   const STEP_ICON  = { discovery:'🔍', visibility:'👁', technical:'⚙️', content:'📝', schema:'🏷️', platform:'🌐', observation:'📎', summary:'📊' };
+  const TASK_TYPE_CONFIG = {
+    site_geo_audit: {
+      heading: { zh: '网站 GEO 审计', en: 'Site GEO Audit' },
+      subtitle: {
+        zh: '提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。',
+        en: 'Submit a target URL to run the full GEO audit pipeline with optional full audit expansion and page diagnostics.'
+      },
+      urlLabel: { zh: '目标 URL', en: 'Target URL' },
+      placeholder: 'https://example.com',
+      fullAuditVisible: true,
+      exportable: true
+    },
+    site_content_audit: {
+      heading: { zh: '网站内容审计', en: 'Website Content Audit' },
+      subtitle: {
+        zh: '输入具体 blog URL，按 GEO 内容可引用性与页面 SEO 信号做单页审计。',
+        en: 'Audit a specific blog URL for GEO citation readiness and on-page SEO signals.'
+      },
+      urlLabel: { zh: 'Blog URL', en: 'Blog URL' },
+      placeholder: 'https://example.com/blog/example-post',
+      fullAuditVisible: false,
+      exportable: false
+    }
+  };
 
   /* ── State ── */
   let pollTimer = null;
@@ -1395,6 +1429,44 @@ HTML = """<!doctype html>
 
   function tx(lang, zhText, enText) {
     return lang === 'zh' ? zhText : enText;
+  }
+
+  function getSelectedTaskType() {
+    return $('task-type')?.value || 'site_geo_audit';
+  }
+
+  function getTaskTypeConfig(taskType = null) {
+    return TASK_TYPE_CONFIG[taskType || getSelectedTaskType()] || TASK_TYPE_CONFIG.site_geo_audit;
+  }
+
+  function getTaskStepOrder(task = null) {
+    const taskType = task?.task_type || getSelectedTaskType();
+    return taskType === 'site_content_audit' ? SITE_CONTENT_STEP_ORDER : SITE_GEO_STEP_ORDER;
+  }
+
+  function applyTaskTypeUi(taskType = null) {
+    const resolvedTaskType = taskType || getSelectedTaskType();
+    const config = getTaskTypeConfig(resolvedTaskType);
+    const lang = $('feedback-lang')?.value || 'en';
+    $('page-heading').textContent = config.heading[lang] || config.heading.zh;
+    $('page-subtitle').textContent = config.subtitle[lang] || config.subtitle.zh;
+    $('url-label').textContent = config.urlLabel[lang] || config.urlLabel.zh;
+    $('url').placeholder = config.placeholder;
+    $('full-audit-row').style.display = config.fullAuditVisible ? 'grid' : 'none';
+    if (!config.fullAuditVisible) {
+      $('full-audit').checked = false;
+      $('max-pages').disabled = true;
+      $('max-pages').style.opacity = '0.45';
+    } else {
+      const enabled = $('full-audit').checked;
+      $('max-pages').disabled = !enabled;
+      $('max-pages').style.opacity = enabled ? '1' : '0.45';
+    }
+    if (currentTask && currentTask.task_type !== resolvedTaskType) {
+      $('export-btn').disabled = true;
+    } else if (currentTask) {
+      $('export-btn').disabled = currentTask.status !== 'completed' || config.exportable === false;
+    }
   }
 
   function getReportLang(task = null) {
@@ -1667,6 +1739,279 @@ function formatDetailMap(detailMap, fallback, lang = 'zh') {
     `).join('');
   }
 
+  const CONTENT_GEO_FACTOR_LABELS = {
+    clear_definitions: { zh: '定义清晰度', en: 'Clear definitions' },
+    quotable_statements: { zh: '可引用表述', en: 'Quotable statements' },
+    factual_density: { zh: '事实密度', en: 'Factual density' },
+    source_citations: { zh: '来源与引用', en: 'Source citations' },
+    qa_format: { zh: '问答结构', en: 'Q&A format' },
+    authority_signals: { zh: '权威信号', en: 'Authority signals' },
+    content_freshness: { zh: '内容新鲜度', en: 'Content freshness' },
+    structure_clarity: { zh: '结构清晰度', en: 'Structure clarity' }
+  };
+
+  function renderContentAuditReport(task, host, lang) {
+    const result = task?.result || {};
+    const summary = result.summary || {};
+    const discovery = result.discovery || {};
+    const content = result.content || {};
+    const target = content.target_page || {};
+    const geoFactors = content.geo_factors || {};
+    const onPage = content.on_page_checks || {};
+    const schema = content.schema_checks || {};
+    const coreChecks = Array.isArray(content.core_checks) ? content.core_checks : [];
+    const skillLenses = Array.isArray(content.skill_lenses) ? content.skill_lenses : [];
+    const topIssues = summary.top_issues || content.issues || [];
+    const quickWins = summary.quick_wins || content.recommendations || [];
+    const actions = Array.isArray(summary.prioritized_action_plan) ? summary.prioritized_action_plan : [];
+    const schemaTypes = Array.isArray(schema.types) ? schema.types : [];
+    const scoreBreakdown = summary.score_breakdown || {};
+    const labels = {
+      overall: tx(lang, '内容总分', 'Content Score'),
+      summaryTitle: tx(lang, '内容审计概览', 'Content Audit Overview'),
+      topIssuesTitle: tx(lang, '主要问题', 'Top Issues'),
+      quickWinsTitle: tx(lang, '优先动作', 'Quick Wins'),
+      factorTitle: tx(lang, 'GEO 内容因子', 'GEO Content Factors'),
+      factorSubtitle: tx(lang, '对齐 geo-content-optimizer 的主要判断维度', 'Aligned to the geo-content-optimizer skill logic'),
+      skillTitle: tx(lang, 'Skill 视角', 'Skill Lenses'),
+      skillSubtitle: tx(lang, '按接入的 skill 输出对应得分与建议', 'Scores and guidance grouped by the enabled skills'),
+      coreTitle: tx(lang, 'CORE-EEAT 自动检查', 'CORE-EEAT Automated Checks'),
+      coreSubtitle: tx(lang, '页面级可自动判断的关键 GEO 检查项', 'Automatically measured page-level GEO checks'),
+      evidenceTitle: tx(lang, '页面与结构信号', 'Page and Structure Signals'),
+      evidenceSubtitle: tx(lang, '输入页的正文、Schema 和 On-Page 基础信息', 'Signals from the target page content, schema, and on-page basics'),
+      actionTitle: tx(lang, '行动计划', 'Action Plan'),
+      actionSubtitle: tx(lang, '按优先级整理的落地动作', 'Prioritized fixes based on the page audit'),
+      noActions: tx(lang, '暂无行动计划。', 'No action plan available.'),
+      noChecks: tx(lang, '暂无检查项。', 'No checks available.'),
+      noLenses: tx(lang, '暂无 skill 视角结果。', 'No skill lens results available.'),
+      noFactors: tx(lang, '暂无内容因子结果。', 'No content factor results available.'),
+      noPageTitle: tx(lang, '未识别标题', 'Untitled page'),
+      pageType: tx(lang, '页面类型', 'Page Type'),
+      wordCount: tx(lang, '字数', 'Word Count'),
+      response: tx(lang, '响应时间', 'Response'),
+      pageLang: tx(lang, '页面语言', 'Page Language'),
+      schemaTypeCount: tx(lang, 'Schema 类型数', 'Schema Types'),
+      llm: tx(lang, 'AI 增强', 'AI Enrichment'),
+      yes: tx(lang, '是', 'Yes'),
+      no: tx(lang, '否', 'No'),
+      passed: tx(lang, '通过', 'Pass'),
+      failed: tx(lang, '待补齐', 'Needs work'),
+      notes: tx(lang, '说明', 'Notes'),
+      recommendation: tx(lang, '建议', 'Recommendation'),
+      priority: tx(lang, '优先级', 'Priority'),
+      targetUrl: tx(lang, '目标 URL', 'Target URL'),
+      appliedSkills: tx(lang, '已用 skill', 'Applied Skills'),
+      pageContentScore: tx(lang, '内容主体', 'Page Content'),
+      geoReadinessScore: tx(lang, 'GEO 就绪度', 'GEO Readiness'),
+      onPageScore: tx(lang, 'On-Page SEO', 'On-Page SEO'),
+      schemaSupportScore: tx(lang, 'Schema 支撑', 'Schema Support'),
+      eeat: tx(lang, 'E-E-A-T', 'E-E-A-T'),
+      title: 'Title',
+      meta: 'Meta',
+      canonical: 'Canonical',
+      h1: 'H1',
+      imagesAlt: tx(lang, '图片 Alt 覆盖率', 'Image Alt Coverage'),
+      links: tx(lang, '链接上下文', 'Link Context'),
+      faq: 'FAQ',
+      citations: tx(lang, '引用/来源', 'Citations / Sources'),
+      freshness: tx(lang, '发布日期/更新', 'Publish / Update'),
+      byline: tx(lang, '作者署名', 'Author Byline')
+    };
+
+    const breakdownCards = [
+      [labels.pageContentScore, scoreBreakdown.page_content_score ?? content.page_content_score ?? 0],
+      [labels.geoReadinessScore, scoreBreakdown.geo_readiness_score ?? content.geo_readiness_score ?? 0],
+      [labels.onPageScore, scoreBreakdown.on_page_seo_score ?? content.on_page_seo_score ?? 0],
+      [labels.schemaSupportScore, scoreBreakdown.schema_support_score ?? content.schema_support_score ?? 0],
+      [labels.eeat, `${content.experience_score ?? 0} / ${content.expertise_score ?? 0} / ${content.authoritativeness_score ?? 0} / ${content.trustworthiness_score ?? 0}`]
+    ].map(([name, value]) => `
+      <div class="report-dim-card">
+        <div class="report-dim-head">
+          <span class="report-dim-name">${escapeHtml(String(name))}</span>
+        </div>
+        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(value))}</span></div>
+      </div>
+    `).join('');
+
+    const factorHtml = Object.entries(geoFactors).length
+      ? Object.entries(geoFactors).map(([key, value]) => `
+          <div class="report-dim-card">
+            <div class="report-dim-head">
+              <span class="report-dim-name">${escapeHtml(CONTENT_GEO_FACTOR_LABELS[key]?.[lang] || key)}</span>
+              <span class="report-dim-pill">${escapeHtml(formatStatus(scoreToStatus(value), lang))}</span>
+            </div>
+            <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(value))}</span></div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">${escapeHtml(labels.noFactors)}</div>`;
+
+    const skillHtml = skillLenses.length
+      ? skillLenses.map(item => `
+          <div class="report-dim-card">
+            <div class="report-dim-head">
+              <span class="report-dim-name">${escapeHtml(item.label || item.key)}</span>
+              <span class="report-dim-pill">${escapeHtml(formatStatus(item.status, lang))}</span>
+            </div>
+            <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(item.score ?? 0))}</span></div>
+            <div class="report-dim-note">${escapeHtml(item.summary || '')}</div>
+            <div class="report-list" style="margin-top:10px">${formatList(item.issues || [], tx(lang, '暂无主要问题。', 'No major issues.'))}</div>
+            <div class="report-list" style="margin-top:10px">${formatList(item.recommendations || [], tx(lang, '暂无建议。', 'No recommendations.'))}</div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">${escapeHtml(labels.noLenses)}</div>`;
+
+    const coreHtml = coreChecks.length
+      ? coreChecks.map(item => `
+          <div class="evidence-card">
+            <h5>${escapeHtml(item.label || item.id)}</h5>
+            <div class="kv-list">
+              <div class="kv-row"><span class="kv-key">${escapeHtml(labels.priority)}</span><span class="kv-val">${escapeHtml(formatStatus(item.priority, lang))}</span></div>
+              <div class="kv-row"><span class="kv-key">${escapeHtml(tx(lang, '状态', 'Status'))}</span><span class="kv-val">${item.passed ? escapeHtml(labels.passed) : escapeHtml(labels.failed)}</span></div>
+              <div class="kv-row"><span class="kv-key">${escapeHtml(labels.notes)}</span><span class="kv-val">${escapeHtml(item.notes || '-')}</span></div>
+            </div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">${escapeHtml(labels.noChecks)}</div>`;
+
+    const actionHtml = actions.length
+      ? actions.map(item => `
+          <div class="report-dim-card">
+            <div class="report-dim-head">
+              <span class="report-dim-name">${escapeHtml(item.action || '-')}</span>
+              <span class="report-dim-pill">${escapeHtml(formatStatus(item.priority, lang))}</span>
+            </div>
+            <div class="report-dim-note"><strong>${escapeHtml(tx(lang, '模块', 'Module'))}:</strong> ${escapeHtml(item.module || '-')}</div>
+            <div class="report-dim-note" style="margin-top:6px">${escapeHtml(item.rationale || '-')}</div>
+          </div>
+        `).join('')
+      : `<div class="report-list-item">${escapeHtml(labels.noActions)}</div>`;
+
+    const evidenceHtml = `
+      <div class="report-evidence-grid">
+        <div class="evidence-card">
+          <h5>${escapeHtml(tx(lang, '页面概况', 'Page Overview'))}</h5>
+          <div class="kv-list">
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.targetUrl)}</span><span class="kv-val">${escapeHtml(discovery.final_url || task.url || '-')}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.pageType)}</span><span class="kv-val">${escapeHtml(target.page_type || 'article')}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.wordCount)}</span><span class="kv-val">${escapeHtml(String(target.word_count ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.response)}</span><span class="kv-val">${escapeHtml(String(discovery.fetch?.response_time_ms ?? '-'))} ms</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.pageLang)}</span><span class="kv-val">${escapeHtml(discovery.homepage?.lang || '-')}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.schemaTypeCount)}</span><span class="kv-val">${escapeHtml(String(schemaTypes.length))}</span></div>
+          </div>
+        </div>
+        <div class="evidence-card">
+          <h5>${escapeHtml(tx(lang, 'GEO 内容信号', 'GEO Content Signals'))}</h5>
+          <div class="kv-list">
+            <div class="kv-row"><span class="kv-key">FAQ</span><span class="kv-val">${formatBool(target.has_faq, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.citations)}</span><span class="kv-val">${formatBool(target.has_reference_section || target.has_inline_citations, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.freshness)}</span><span class="kv-val">${formatBool(target.has_publish_date || target.has_update_log, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.byline)}</span><span class="kv-val">${formatBool(target.has_author, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">TL;DR</span><span class="kv-val">${formatBool(target.has_tldr, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">Answer-first</span><span class="kv-val">${formatBool(target.answer_first, labels.yes, labels.no)}</span></div>
+          </div>
+        </div>
+        <div class="evidence-card">
+          <h5>${escapeHtml(tx(lang, 'On-Page 基础', 'On-Page Basics'))}</h5>
+          <div class="kv-list">
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.title)}</span><span class="kv-val">${formatBool(onPage.title_present, labels.yes, labels.no)} / ${escapeHtml(String(onPage.title_length ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.meta)}</span><span class="kv-val">${formatBool(onPage.meta_description_present, labels.yes, labels.no)} / ${escapeHtml(String(onPage.meta_description_length ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.canonical)}</span><span class="kv-val">${formatBool(onPage.canonical_present, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.h1)}</span><span class="kv-val">${formatBool(onPage.h1_present, labels.yes, labels.no)} / ${escapeHtml(String(onPage.heading_count ?? 0))} headings</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.imagesAlt)}</span><span class="kv-val">${escapeHtml(String(onPage.images_with_alt_ratio ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(labels.links)}</span><span class="kv-val">${escapeHtml(String(onPage.link_context_score ?? 0))}</span></div>
+          </div>
+        </div>
+        <div class="evidence-card">
+          <h5>${escapeHtml(tx(lang, 'Schema 支撑', 'Schema Support'))}</h5>
+          <div class="kv-list">
+            <div class="kv-row"><span class="kv-key">JSON-LD</span><span class="kv-val">${formatBool(schema.json_ld_present, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">Article / FAQPage</span><span class="kv-val">${formatBool(schema.has_article, labels.yes, labels.no)} / ${formatBool(schema.has_faq_page, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">sameAs</span><span class="kv-val">${escapeHtml(String(schema.same_as_count ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">datePublished / dateModified</span><span class="kv-val">${formatBool(schema.has_date_published, labels.yes, labels.no)} / ${formatBool(schema.has_date_modified, labels.yes, labels.no)}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(tx(lang, '对齐分', 'Alignment'))}</span><span class="kv-val">${escapeHtml(String(schema.visible_alignment_score ?? 0))}</span></div>
+            <div class="kv-row"><span class="kv-key">${escapeHtml(tx(lang, '@id / 关系数', '@id / Relations'))}</span><span class="kv-val">${escapeHtml(String(schema.entity_id_count ?? 0))} / ${escapeHtml(String(schema.relation_count ?? 0))}</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    host.className = 'report-shell';
+    const html = `
+      <section class="report-hero">
+        <div class="report-score-box">
+          <div>
+            <div class="report-score-label">${escapeHtml(labels.overall)}</div>
+            <div class="report-score-value">${escapeHtml(String(summary.overall_score ?? content.score ?? 0))}</div>
+            <div class="report-score-sub">${escapeHtml(formatStatus(summary.status || content.status, lang))} · ${escapeHtml(labels.summaryTitle)}</div>
+          </div>
+          <div class="report-badges">
+            <span class="r-badge ${escapeHtml(statusTone(summary.status || content.status))}">${escapeHtml(formatStatus(summary.status || content.status, lang))}</span>
+            <span class="r-badge">${task.mode === 'premium' ? tx(lang, '会员版 / AI 增强', 'Premium / AI Enriched') : tx(lang, '普通版 / 规则版', 'Standard / Rule-based')}</span>
+            <span class="r-badge ${summary.llm_enhanced ? 'success' : ''}">${summary.llm_enhanced ? escapeHtml(labels.yes) : escapeHtml(labels.no)}</span>
+          </div>
+        </div>
+        <div class="report-hero-main">
+          <div class="report-kicker">
+            <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '-')}</span>
+            <span class="dot"></span>
+            <span>${escapeHtml(summary.applied_skills?.join(' / ') || 'geo-content-optimizer / on-page-seo-auditor')}</span>
+          </div>
+          <h3>${escapeHtml(target.title || discovery.homepage?.title || labels.noPageTitle)}</h3>
+          <div class="report-summary">${escapeHtml(summary.summary || '')}</div>
+          <div class="report-meta-grid">
+            <div class="report-meta-item"><div class="lbl">${escapeHtml(labels.targetUrl)}</div><div class="val">${escapeHtml(discovery.final_url || task.url || '-')}</div></div>
+            <div class="report-meta-item"><div class="lbl">${escapeHtml(labels.appliedSkills)}</div><div class="val">${escapeHtml(summary.applied_skills?.join(', ') || 'geo-content-optimizer, on-page-seo-auditor')}</div></div>
+            <div class="report-meta-item"><div class="lbl">${escapeHtml(labels.pageLang)}</div><div class="val">${escapeHtml(discovery.homepage?.lang || '-')}</div></div>
+            <div class="report-meta-item"><div class="lbl">${escapeHtml(labels.llm)}</div><div class="val">${summary.llm_enhanced ? escapeHtml(labels.yes) : escapeHtml(labels.no)}</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.summaryTitle)}</h4><span>${escapeHtml(tx(lang, '内容总分、构成分和 E-E-A-T 拆解', 'Overall page content score with component and E-E-A-T breakdowns'))}</span></div>
+        <div class="report-section-body"><div class="report-dim-grid">${breakdownCards}</div></div>
+      </section>
+
+      <div class="report-grid-2">
+        <section class="report-section">
+          <div class="report-section-hdr"><h4>${escapeHtml(labels.topIssuesTitle)}</h4><span>${escapeHtml(tx(lang, '拖累页面引用与检索表现的主要缺口', 'The biggest gaps hurting retrieval and citation readiness'))}</span></div>
+          <div class="report-section-body"><div class="report-list">${formatList(topIssues, tx(lang, '暂无主要问题。', 'No major issues.'))}</div></div>
+        </section>
+        <section class="report-section">
+          <div class="report-section-hdr"><h4>${escapeHtml(labels.quickWinsTitle)}</h4><span>${escapeHtml(tx(lang, '优先处理低成本高收益项', 'Prioritize fast, high-leverage fixes'))}</span></div>
+          <div class="report-section-body"><div class="report-list">${formatList(quickWins, tx(lang, '暂无优先动作。', 'No quick wins available.'))}</div></div>
+        </section>
+      </div>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.factorTitle)}</h4><span>${escapeHtml(labels.factorSubtitle)}</span></div>
+        <div class="report-section-body"><div class="report-dim-grid">${factorHtml}</div></div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.skillTitle)}</h4><span>${escapeHtml(labels.skillSubtitle)}</span></div>
+        <div class="report-section-body"><div class="report-dim-grid">${skillHtml}</div></div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.coreTitle)}</h4><span>${escapeHtml(labels.coreSubtitle)}</span></div>
+        <div class="report-section-body"><div class="report-evidence-grid">${coreHtml}</div></div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.evidenceTitle)}</h4><span>${escapeHtml(labels.evidenceSubtitle)}</span></div>
+        <div class="report-section-body">${evidenceHtml}</div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-hdr"><h4>${escapeHtml(labels.actionTitle)}</h4><span>${escapeHtml(labels.actionSubtitle)}</span></div>
+        <div class="report-section-body"><div class="report-dim-grid">${actionHtml}</div></div>
+      </section>
+    `;
+    host.innerHTML = html;
+    setCachedReportHtml(task, lang, html);
+  }
+
 
 function renderReport(task) {
   const host = $('summary-text');
@@ -1685,6 +2030,10 @@ function renderReport(task) {
       '等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划、snapshot 发现与引用证据。',
       'Wait for task completion to generate the full report. The report will show the composite score, 6 scored dimensions, platform readiness, key issues, action plan, snapshot findings, and source evidence.'
     );
+    return;
+  }
+  if (task?.task_type === 'site_content_audit') {
+    renderContentAuditReport(task, host, lang);
     return;
   }
 
@@ -2159,7 +2508,7 @@ function renderReport(task) {
   function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';
-    STEP_ORDER.forEach((name, i) => {
+    getTaskStepOrder(currentTask).forEach((name, i) => {
       const step = steps?.[name] || { status: 'pending' };
       const raw  = step.data ? JSON.stringify(step.data) : null;
       const preview = raw
@@ -2194,9 +2543,13 @@ function renderReport(task) {
     currentTask = task || null;
     currentTaskId     = task.task_id || null;
     currentTaskStatus = task.status  || 'idle';
+    if (task.task_type && $('task-type').value !== task.task_type) {
+      $('task-type').value = task.task_type;
+    }
     if (task.feedback_lang && $('feedback-lang').value !== task.feedback_lang) {
       $('feedback-lang').value = task.feedback_lang;
     }
+    applyTaskTypeUi(task.task_type);
     const shortId = task.task_id ? task.task_id.slice(0, 10) + '…' : '—';
     $('task-id').textContent     = shortId;
     $('current-step').textContent = task.current_step || '—';
@@ -2210,13 +2563,15 @@ function renderReport(task) {
       ? '会员版（规则 + OpenRouter）'
       : (task.mode ? '普通版（规则）' : '—');
     setStatusBadge(task.status || 'idle');
-    $('export-btn').disabled = task.status !== 'completed';
+    $('export-btn').disabled = task.status !== 'completed' || getTaskTypeConfig(task.task_type).exportable === false;
   }
 
   /* ── LLM status panel ── */
   function renderLlmStatus(task) {
     const result  = task.result || {};
-    const modules = ['visibility', 'content', 'platform', 'summary'];
+    const modules = task.task_type === 'site_content_audit'
+      ? ['content', 'summary']
+      : ['visibility', 'content', 'platform', 'summary'];
     const available = modules.filter(n => result?.[n]);
     const enhanced  = modules.filter(n => result?.[n]?.llm_enhanced);
     const notes = [];
@@ -2236,7 +2591,9 @@ function renderReport(task) {
     }
     if (available.length === 0) {
       llmStatus.innerHTML = '<span class="badge b-warn">等待执行</span>';
-      notesEl.textContent = '会员版已提交，等待 visibility / content / platform / summary 返回增强结果。';
+      notesEl.textContent = task.task_type === 'site_content_audit'
+        ? '会员版已提交，等待 content / summary 返回增强结果。'
+        : '会员版已提交，等待 visibility / content / platform / summary 返回增强结果。';
       return;
     }
     if (enhanced.length > 0) {
@@ -2308,12 +2665,22 @@ function renderReport(task) {
     const btn = $('submit-btn');
     btn.disabled = true;
     btn.innerHTML = '<div class="spin"></div> 提交中…';
+    const taskType = getSelectedTaskType();
+    const isContentAudit = taskType === 'site_content_audit';
+    currentTask = { task_type: taskType, status: 'queued' };
+    currentTaskId = null;
+    currentTaskStatus = 'queued';
+    applyTaskTypeUi(taskType);
 
     const summaryEl = $('summary-text');
-    summaryEl.textContent = '任务已创建，等待后台返回各阶段结果……';
+    summaryEl.textContent = isContentAudit
+      ? '任务已创建，等待后台返回内容审计结果……'
+      : '任务已创建，等待后台返回各阶段结果……';
     summaryEl.classList.add('placeholder');
     summaryEl.className = 'report-empty placeholder';
-    summaryEl.innerHTML = '任务已创建，等待后台返回各阶段结果……<br />报告将在结果完成后自动生成。';
+    summaryEl.innerHTML = isContentAudit
+      ? '任务已创建，等待后台返回内容审计结果……<br />报告将在结果完成后自动生成。'
+      : '任务已创建，等待后台返回各阶段结果……<br />报告将在结果完成后自动生成。';
     $('llm-notes').textContent = '等待会员增强状态。';
     $('json-output').textContent = '{}';
     $('export-btn').disabled = true;
@@ -2321,13 +2688,14 @@ function renderReport(task) {
 
     const mode = $('mode').value;
     const body = {
+      task_type: taskType,
       url: $('url').value.trim(),
       mode,
       force_refresh: $('force').checked,
-      full_audit: $('full-audit').checked,
+      full_audit: !isContentAudit && $('full-audit').checked,
       feedback_lang: $('feedback-lang').value
     };
-    if ($('full-audit').checked) {
+    if (!isContentAudit && $('full-audit').checked) {
       body.max_pages = Number($('max-pages').value || 12);
     }
     if (mode === 'premium') {
@@ -2388,6 +2756,10 @@ function renderReport(task) {
       showToast('任务尚未完成，暂时无法导出报告。');
       return;
     }
+    if (currentTask?.task_type === 'site_content_audit') {
+      showToast('当前内容审计暂不支持导出 Markdown 报告。');
+      return;
+    }
     window.open(`/api/v1/tasks/${currentTaskId}/report`, '_blank');
   });
 
@@ -2396,7 +2768,25 @@ function renderReport(task) {
     $('model').disabled = !isPremium;
     $('model').style.opacity = isPremium ? '1' : '0.45';
   });
+  $('task-type').addEventListener('change', () => {
+    currentTask = { task_type: getSelectedTaskType(), status: 'idle' };
+    currentTaskId = null;
+    currentTaskStatus = 'idle';
+    $('task-id').textContent = '—';
+    $('current-step').textContent = '—';
+    $('progress').textContent = '0%';
+    $('prog-fill').style.width = '0%';
+    $('cached-flag').textContent = '否';
+    $('llm-model-used-flag').textContent = '否';
+    $('mode-display').textContent = '—';
+    $('current-mode-display').textContent = '—';
+    $('export-btn').disabled = true;
+    setStatusBadge('idle');
+    applyTaskTypeUi();
+    renderTimeline({});
+  });
   $('feedback-lang').addEventListener('change', () => {
+    applyTaskTypeUi();
     if (!currentTask || currentTask.status !== 'completed') return;
     const selectedLang = $('feedback-lang').value;
     if (currentTask.feedback_lang !== selectedLang) {
@@ -2412,6 +2802,7 @@ function renderReport(task) {
   });
 
   /* ── Init ── */
+  applyTaskTypeUi();
   renderTimeline({});
 </script>
 </body>

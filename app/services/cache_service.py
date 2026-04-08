@@ -38,6 +38,7 @@ class CacheService:
         full_audit: bool = False,
         max_pages: int = 12,
         feedback_lang: str = "en",
+        task_type: str = "site_geo_audit",
     ) -> tuple[str, str, str]:
         """生成缓存键，返回 (sha256_digest, normalized_url, domain)
 
@@ -55,7 +56,10 @@ class CacheService:
             else "none"
         )
         normalized_pages = max_pages if full_audit else 5
-        raw_key = f"{scope_key}|{mode}|{provider}|{model}|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}"
+        raw_key = (
+            f"{task_type}|{scope_key}|{mode}|{provider}|{model}"
+            f"|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}"
+        )
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return digest, normalized_url, domain
 
@@ -90,6 +94,7 @@ class CacheService:
         max_pages: int,
         payload: dict[str, Any],
         llm_config: LLMConfig | None = None,
+        task_type: str = "site_geo_audit",
     ) -> CachedAuditRecord:
         """将审计结果写入缓存文件（JSON 格式，缩进 2 格）"""
         now = datetime.now(timezone.utc)
@@ -98,6 +103,7 @@ class CacheService:
             url=url,
             normalized_url=normalized_url,
             domain=domain,
+            task_type=task_type,
             mode=mode,
             feedback_lang=feedback_lang,
             full_audit=full_audit,

@@ -10,6 +10,7 @@ from app.services.cache_service import CacheService
 from app.services.content_service import ContentService
 from app.services.discovery_service import DiscoveryService
 from app.services.observation_service import ObservationService
+from app.services.page_content_audit_service import PageContentAuditService
 from app.services.page_diagnostics_service import PageDiagnosticsService
 from app.services.platform_service import PlatformService
 from app.services.schema_service import SchemaService
@@ -31,7 +32,8 @@ class TaskService:
     """
 
     # 任务步骤的执行顺序
-    STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
+    SITE_GEO_STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
+    SITE_CONTENT_STEP_ORDER = ["discovery", "content", "summary"]
 
     def __init__(self) -> None:
         self.cache_service = CacheService()
@@ -43,14 +45,20 @@ class TaskService:
         self.schema_service = SchemaService(self.discovery_service)
         self.platform_service = PlatformService(self.discovery_service)
         self.observation_service = ObservationService()
+        self.page_content_audit_service = PageContentAuditService(self.discovery_service)
         self.page_diagnostics_service = PageDiagnosticsService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
         self._lock = asyncio.Lock()             # 保护 tasks dict 的并发访问
 
-    def _new_steps(self) -> dict[str, TaskStep]:
+    def _step_order_for(self, task_type: str) -> list[str]:
+        if task_type == "site_content_audit":
+            return list(self.SITE_CONTENT_STEP_ORDER)
+        return list(self.SITE_GEO_STEP_ORDER)
+
+    def _new_steps(self, step_order: list[str]) -> dict[str, TaskStep]:
         """初始化所有步骤为 pending 状态"""
-        return {name: TaskStep(name=name) for name in self.STEP_ORDER}
+        return {name: TaskStep(name=name) for name in step_order}
 
     def _utcnow(self) -> datetime:
         """获取当前 UTC 时间（带时区信息）"""
@@ -65,8 +73,7 @@ class TaskService:
         """根据模块结果判断是否真正使用并生效了 LLM 增强。"""
         if not payload:
             return False
-        for step_name in ("visibility", "technical", "content", "schema", "platform", "summary"):
-            step_payload = payload.get(step_name)
+        for step_payload in payload.values():
             if isinstance(step_payload, dict) and step_payload.get("llm_enhanced") is True:
                 return True
         return False
@@ -87,6 +94,7 @@ class TaskService:
                 request.full_audit,
                 request.max_pages,
                 request.feedback_lang,
+                request.task_type,
             )
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
@@ -95,12 +103,14 @@ class TaskService:
         cached_record = None if request.force_refresh or request.observation else self.cache_service.get(cache_key)
         task_id = uuid4().hex
         now = self._utcnow()
+        step_order = self._step_order_for(request.task_type)
         task = AuditTask(
             task_id=task_id,
             url=request.url,
             normalized_url=normalized_url,
             domain=domain,
             cache_key=cache_key,
+            task_type=request.task_type,
             mode=request.mode,
             llm=request.llm,
             feedback_lang=request.feedback_lang,
@@ -111,22 +121,17 @@ class TaskService:
             force_refresh=request.force_refresh,
             created_at=now,
             updated_at=now,
-            steps=self._new_steps(),
+            step_order=step_order,
+            steps=self._new_steps(step_order),
         )
 
         # 缓存命中：直接从缓存构建已完成的任务
         if cached_record:
-            for step_name in self.STEP_ORDER:
+            for step_name in step_order:
                 task.steps[step_name].status = "completed"
                 task.steps[step_name].started_at = now
                 task.steps[step_name].completed_at = now
-                # summary 步骤的数据键名为 "summary"，其他模块用步骤名
-                if step_name == "summary":
-                    task.steps[step_name].data = cached_record.payload.get("summary")
-                elif step_name == "observation":
-                    task.steps[step_name].data = cached_record.payload.get("observation")
-                else:
-                    task.steps[step_name].data = cached_record.payload.get(step_name)
+                task.steps[step_name].data = cached_record.payload.get(step_name)
             task.status = "completed"
             task.current_step = "completed"
             task.progress_percent = 100
@@ -175,104 +180,19 @@ class TaskService:
         task.progress_percent = self._progress(task)
 
     async def _run_task(self, task_id: str) -> None:
-        """后台任务执行协程：按步骤顺序执行完整审计流程
-
-        执行顺序：
-        1. discovery（串行）
-        2. 5 个审计模块（并行，使用 asyncio.create_task + as_completed）
-        3. summary（串行，依赖所有模块结果）
-        4. 将结果写入文件缓存
-        """
+        """后台任务执行协程：按任务类型执行不同的审计流程。"""
         task = self.tasks[task_id]
         task.status = "running"
-        task.current_step = "discovery"
+        task.current_step = task.step_order[0] if task.step_order else "running"
         task.updated_at = self._utcnow()
         try:
-            # Step 1: 站点快照
-            await self._update_step(task, "discovery", "running")
-            discovery = await self.discovery_service.discover(task.url, full_audit=task.full_audit, max_pages=task.max_pages)
-            discovery_payload = discovery.model_dump()
-            await self._update_step(task, "discovery", "completed", discovery_payload)
-
-            # Step 2-6: 5 个审计模块并行执行
-            module_coroutines = {
-                "visibility": self.visibility_service.audit(
-                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
-                ),
-                "technical": self.technical_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
-                "content": self.content_service.audit(
-                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
-                ),
-                "schema": self.schema_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
-                "platform": self.platform_service.audit(
-                    task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
-                ),
-            }
-
-            async def run_named(step_name: str, coroutine):
-                """包装协程，返回 (步骤名, 结果) 元组"""
-                result = await coroutine
-                return step_name, result
-
-            # 先将所有模块标记为 running，再并行等待
-            futures = []
-            for step_name, coroutine in module_coroutines.items():
-                await self._update_step(task, step_name, "running")
-                futures.append(asyncio.create_task(run_named(step_name, coroutine)))
-
-            # 使用 as_completed 实时更新每个完成的模块状态
-            module_results = {}
-            for future in asyncio.as_completed(futures):
-                step_name, result = await future
-                payload = result.model_dump()
-                module_results[step_name] = result
-                await self._update_step(task, step_name, "completed", payload)
-
-            # Step 7: 可选观测层（不计分）
-            await self._update_step(task, "observation", "running")
-            observation_result = self.observation_service.build(task.observation)
-            await self._update_step(task, "observation", "completed", observation_result.model_dump())
-
-            # Step 8: 汇总计算复合 GEO 分数
-            await self._update_step(task, "summary", "running")
-            summary = await self.summarizer_service.summarize(
-                url=task.url,
-                discovery=discovery,
-                visibility=module_results["visibility"],
-                technical=module_results["technical"],
-                content=module_results["content"],
-                schema=module_results["schema"],
-                platform=module_results["platform"],
-                observation=observation_result,
-                mode=task.mode,
-                llm_config=task.llm,
-                feedback_lang=task.feedback_lang,
-            )
-            summary_payload = summary.model_dump()
-            await self._update_step(task, "summary", "completed", summary_payload)
-            page_diagnostics = self.page_diagnostics_service.build(discovery, max_pages=task.max_pages) if task.full_audit else []
-
-            # 组装完整结果
-            task.result = {
-                "url": task.url,
-                "discovery": discovery_payload,
-                "visibility": module_results["visibility"].model_dump(),
-                "technical": module_results["technical"].model_dump(),
-                "content": module_results["content"].model_dump(),
-                "schema": module_results["schema"].model_dump(),
-                "platform": module_results["platform"].model_dump(),
-                "page_diagnostics": [item.model_dump() for item in page_diagnostics],
-                "observation": observation_result.model_dump(),
-                "summary": summary_payload,
-            }
+            if task.task_type == "site_content_audit":
+                task.result = await self._run_site_content_task(task)
+            else:
+                task.result = await self._run_site_geo_task(task)
             task.result = localize_payload(task.result, task.feedback_lang)
-            for step_name in self.STEP_ORDER:
-                if step_name == "summary":
-                    task.steps[step_name].data = task.result.get("summary")
-                elif step_name == "observation":
-                    task.steps[step_name].data = task.result.get("observation")
-                else:
-                    task.steps[step_name].data = task.result.get(step_name)
+            for step_name in task.step_order:
+                task.steps[step_name].data = task.result.get(step_name)
             task.llm_model_used = self._detect_llm_model_used(task.result)
             # 写入文件缓存，供后续相同请求直接命中
             if not getattr(task, "observation", None):
@@ -287,6 +207,7 @@ class TaskService:
                     max_pages=task.max_pages,
                     payload=task.result,
                     llm_config=task.llm,
+                    task_type=task.task_type,
                 )
             task.status = "completed"
             task.current_step = "completed"
@@ -299,3 +220,107 @@ class TaskService:
             task.error = str(exc)
             task.current_step = "failed"
             task.updated_at = self._utcnow()
+
+    async def _run_site_geo_task(self, task: AuditTask) -> dict:
+        await self._update_step(task, "discovery", "running")
+        discovery = await self.discovery_service.discover(task.url, full_audit=task.full_audit, max_pages=task.max_pages)
+        discovery_payload = discovery.model_dump()
+        await self._update_step(task, "discovery", "completed", discovery_payload)
+
+        module_coroutines = {
+            "visibility": self.visibility_service.audit(
+                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+            ),
+            "technical": self.technical_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+            "content": self.content_service.audit(
+                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+            ),
+            "schema": self.schema_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+            "platform": self.platform_service.audit(
+                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+            ),
+        }
+
+        async def run_named(step_name: str, coroutine):
+            result = await coroutine
+            return step_name, result
+
+        futures = []
+        for step_name, coroutine in module_coroutines.items():
+            await self._update_step(task, step_name, "running")
+            futures.append(asyncio.create_task(run_named(step_name, coroutine)))
+
+        module_results = {}
+        for future in asyncio.as_completed(futures):
+            step_name, result = await future
+            module_results[step_name] = result
+            await self._update_step(task, step_name, "completed", result.model_dump())
+
+        await self._update_step(task, "observation", "running")
+        observation_result = self.observation_service.build(task.observation)
+        observation_payload = observation_result.model_dump()
+        await self._update_step(task, "observation", "completed", observation_payload)
+
+        await self._update_step(task, "summary", "running")
+        summary = await self.summarizer_service.summarize(
+            url=task.url,
+            discovery=discovery,
+            visibility=module_results["visibility"],
+            technical=module_results["technical"],
+            content=module_results["content"],
+            schema=module_results["schema"],
+            platform=module_results["platform"],
+            observation=observation_result,
+            mode=task.mode,
+            llm_config=task.llm,
+            feedback_lang=task.feedback_lang,
+        )
+        summary_payload = summary.model_dump()
+        await self._update_step(task, "summary", "completed", summary_payload)
+        page_diagnostics = self.page_diagnostics_service.build(discovery, max_pages=task.max_pages) if task.full_audit else []
+
+        return {
+            "url": task.url,
+            "discovery": discovery_payload,
+            "visibility": module_results["visibility"].model_dump(),
+            "technical": module_results["technical"].model_dump(),
+            "content": module_results["content"].model_dump(),
+            "schema": module_results["schema"].model_dump(),
+            "platform": module_results["platform"].model_dump(),
+            "page_diagnostics": [item.model_dump() for item in page_diagnostics],
+            "observation": observation_payload,
+            "summary": summary_payload,
+        }
+
+    async def _run_site_content_task(self, task: AuditTask) -> dict:
+        await self._update_step(task, "discovery", "running")
+        discovery = await self.discovery_service.discover(task.url, full_audit=False, max_pages=5)
+        discovery_payload = discovery.model_dump()
+        await self._update_step(task, "discovery", "completed", discovery_payload)
+
+        await self._update_step(task, "content", "running")
+        content = await self.page_content_audit_service.audit(
+            task.url,
+            discovery,
+            mode=task.mode,
+            llm_config=task.llm,
+            feedback_lang=task.feedback_lang,
+        )
+        content_payload = content.model_dump()
+        await self._update_step(task, "content", "completed", content_payload)
+
+        await self._update_step(task, "summary", "running")
+        summary = self.page_content_audit_service.summarize(
+            discovery,
+            content,
+            feedback_lang=task.feedback_lang,
+        )
+        summary_payload = summary.model_dump()
+        await self._update_step(task, "summary", "completed", summary_payload)
+
+        return {
+            "url": task.url,
+            "discovery": discovery_payload,
+            "content": content_payload,
+            "summary": summary_payload,
+        }

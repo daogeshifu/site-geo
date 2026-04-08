@@ -82,6 +82,48 @@ class ContentAuditResult(BaseAuditResult):
     page_analyses: dict[str, ContentPageAnalysis] = Field(default_factory=dict)  # 各页面分析详情
 
 
+class ContentRuleCheck(BaseModel):
+    """页面内容审计中的单条规则检查结果"""
+
+    id: str
+    label: str
+    passed: bool
+    priority: str = "medium"
+    notes: str = ""
+
+
+class SkillLensResult(BaseModel):
+    """按 skill 视角组织的审计结果摘要"""
+
+    key: str
+    label: str
+    score: int
+    status: str
+    summary: str = ""
+    issues: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class PageContentAuditResult(BaseAuditResult):
+    """单篇页面/博客内容审计结果"""
+
+    page_content_score: int
+    geo_readiness_score: int
+    on_page_seo_score: int
+    schema_support_score: int
+    experience_score: int
+    expertise_score: int
+    authoritativeness_score: int
+    trustworthiness_score: int
+    checks: dict[str, Any] = Field(default_factory=dict)
+    geo_factors: dict[str, int] = Field(default_factory=dict)
+    on_page_checks: dict[str, Any] = Field(default_factory=dict)
+    schema_checks: dict[str, Any] = Field(default_factory=dict)
+    target_page: ContentPageAnalysis
+    core_checks: list[ContentRuleCheck] = Field(default_factory=list)
+    skill_lenses: list[SkillLensResult] = Field(default_factory=list)
+
+
 class SchemaAuditResult(BaseAuditResult):
     """结构化数据模块结果：评估 JSON-LD Schema 覆盖情况"""
 
@@ -234,3 +276,21 @@ class SummaryResult(BaseModel):
     ai_perception: AIPerceptionResult | None = None
     observation: ObservationResult | None = None
     notices: list[str] = Field(default_factory=list)
+
+
+class PageContentSummaryResult(BaseModel):
+    """页面内容审计汇总结果"""
+
+    overall_score: int
+    status: str
+    summary: str
+    audit_mode: str = "standard"
+    llm_enhanced: bool = False
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    applied_skills: list[str] = Field(default_factory=list)
+    score_breakdown: dict[str, Any] = Field(default_factory=dict)
+    top_issues: list[str] = Field(default_factory=list)
+    quick_wins: list[str] = Field(default_factory=list)
+    prioritized_action_plan: list[ActionPlanItem] = Field(default_factory=list)
+    processing_notes: list[str] = Field(default_factory=list)

@@ -99,6 +99,8 @@ async def export_task_report(task_id: str) -> PlainTextResponse:
     # 任务未完成时拒绝导出，返回 409 Conflict
     if task.status != "completed" or not task.result:
         raise AppError(409, "task is not completed yet")
+    if task.task_type != "site_geo_audit":
+        raise AppError(409, "report export is only available for site GEO audits")
 
     # 从任务结果字典中反序列化各模块 Pydantic 模型
     discovery = DiscoveryResult.model_validate(task.result["discovery"])

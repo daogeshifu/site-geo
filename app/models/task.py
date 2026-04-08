@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.models.audit import ObservationInput
-from app.models.requests import LLMConfig, UrlRequest
+from app.models.requests import LLMConfig, TaskType, UrlRequest
 
 # 任务状态枚举
 TaskStatus = Literal["queued", "running", "completed", "failed"]
@@ -17,6 +17,7 @@ StepStatus = Literal["pending", "running", "completed", "failed"]
 class TaskAuditRequest(UrlRequest):
     """异步审计任务创建请求"""
 
+    task_type: TaskType = "site_geo_audit"
     force_refresh: bool = False  # 是否强制跳过缓存重新执行
     observation: ObservationInput | None = None
 
@@ -40,6 +41,7 @@ class AuditTask(BaseModel):
     normalized_url: str    # 规范化 URL
     domain: str            # 目标域名
     cache_key: str         # SHA256 缓存键
+    task_type: TaskType = "site_geo_audit"
     mode: str = "standard"
     llm: LLMConfig | None = None
     feedback_lang: str = "en"
@@ -56,6 +58,7 @@ class AuditTask(BaseModel):
     updated_at: datetime
     completed_at: datetime | None = None
     error: str | None = None              # 任务失败时的全局错误信息
+    step_order: list[str] = Field(default_factory=list)
     steps: dict[str, TaskStep] = Field(default_factory=dict)  # 各步骤状态
     result: dict[str, Any] | None = None  # 任务完成后的全量结果
 
@@ -67,6 +70,7 @@ class CachedAuditRecord(BaseModel):
     url: str
     normalized_url: str
     domain: str
+    task_type: TaskType = "site_geo_audit"
     mode: str
     feedback_lang: str = "en"
     full_audit: bool = False

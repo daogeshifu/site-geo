@@ -18,6 +18,7 @@ from app.models.discovery import DiscoveryResult
 # 审计模式：standard（规则驱动）或 premium（LLM 增强）
 AuditMode = Literal["standard", "premium"]
 FeedbackLang = Literal["en", "zh"]
+TaskType = Literal["site_geo_audit", "site_content_audit"]
 # 目前仅支持 OpenRouter 作为 LLM 提供商
 LLMProvider = Literal["openrouter"]
 
