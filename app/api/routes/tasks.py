@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.core.exceptions import AppError
 from app.models.responses import success_response
 from app.models.task import TaskAuditRequest
-from app.services.task_service import TaskService
+from app.services.orchestration.tasks import TaskService
 
 # 异步任务路由，挂载在 /api/v1/tasks 前缀下
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])

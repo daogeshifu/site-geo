@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GEO Audit Console</title>
+  <link rel="stylesheet" href="/static/css/demo.css" />
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-inner">
+    <div class="hdr-brand">
+      <div class="hdr-logo">G</div>
+      <div class="hdr-copy">
+        <div class="hdr-eyebrow">FastAPI Console</div>
+        <div class="hdr-title-row">
+          <span class="hdr-name">GEO Audit Console</span>
+          <span class="hdr-pill">v3</span>
+        </div>
+        <div class="hdr-sub">FastAPI-powered workspace for GEO site audits, content reviews, and async task execution.</div>
+      </div>
+    </div>
+    <div class="hdr-actions">
+      <a class="hdr-link hdr-link-primary" href="/">Live Preview</a>
+      <a class="hdr-link" href="/health" target="_blank" rel="noreferrer">Health API</a>
+      <a class="hdr-link" href="/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
+      <a class="hdr-link" href="/openapi.json" target="_blank" rel="noreferrer">openapi.json</a>
+    </div>
+  </div>
+  <div class="hdr-meta">
+    <div class="hdr-meta-card">
+      <span class="hdr-meta-label">API Base</span>
+      <code class="hdr-meta-code">/api/v1</code>
+    </div>
+    <div class="hdr-meta-card">
+      <span class="hdr-meta-label">Async Task</span>
+      <code class="hdr-meta-code">POST /api/v1/tasks/audit</code>
+    </div>
+    <div class="hdr-meta-card">
+      <span class="hdr-meta-label">Task Status</span>
+      <code class="hdr-meta-code">GET /api/v1/tasks/{task_id}</code>
+    </div>
+    <div class="hdr-meta-card">
+      <span class="hdr-meta-label">FastAPI Docs</span>
+      <code class="hdr-meta-code">/docs · /openapi.json</code>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="page-title">
+    <h1 id="page-heading">网站 GEO 审计</h1>
+    <p id="page-subtitle">提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
+  </div>
+
+  <div class="grid-top">
+
+    <!-- 配置卡 -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-ttl">
+          <div class="card-ico">⚙️</div>
+          审计配置
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="audit-form">
+          <div class="row-2">
+            <div class="field">
+              <label>任务类型</label>
+              <select id="task-type">
+                <option value="site_geo_audit">网站 GEO 审计</option>
+                <option value="site_content_audit">网站内容审计</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>审计模式</label>
+              <select id="mode">
+                <option value="standard">普通版（规则）</option>
+                <option value="premium">会员版（规则 + AI）</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label id="url-label">目标 URL</label>
+            <div class="inp-wrap">
+              <span class="inp-icon">🌐</span>
+              <input id="url" type="text" class="has-icon" placeholder="https://example.com" required />
+            </div>
+          </div>
+          <div class="row-2">
+            <div class="field">
+              <label>OpenRouter 模型</label>
+              <select id="model" disabled>
+                <option value="deepseek/deepseek-v3.2">deepseek / deepseek-v3.2</option>
+                <option value="openai/gpt-4.1">openai / gpt-4.1</option>
+                <option value="anthropic/claude-sonnet-4.6">anthropic / claude-sonnet-4.6</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>反馈语言</label>
+              <select id="feedback-lang">
+                <option value="en">English</option>
+                <option value="zh">简体中文</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="force" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
+              <input id="force" type="checkbox" />
+              <span class="toggle-lbl">强制刷新缓存</span>
+              <span class="toggle-hint">忽略一周内的历史结果</span>
+            </label>
+          </div>
+          <div id="full-audit-row" class="row-2">
+            <div class="field">
+              <label for="full-audit" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
+                <input id="full-audit" type="checkbox" />
+                <span class="toggle-lbl">启用 Full Audit</span>
+                <span class="toggle-hint">返回逐页诊断</span>
+              </label>
+            </div>
+            <div class="field">
+              <label>最大页面数</label>
+              <select id="max-pages" disabled>
+                <option value="12">12 页</option>
+                <option value="20">20 页</option>
+                <option value="30">30 页</option>
+                <option value="50">50 页</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button id="submit-btn" type="button" class="btn btn-primary">开始审计</button>
+            <button id="export-btn" type="button" class="btn btn-ghost" disabled>导出报告</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 状态卡 -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-ttl">
+          <div class="card-ico">📡</div>
+          任务状态
+        </div>
+        <span id="status-badge" class="badge b-default">空闲</span>
+      </div>
+      <div class="card-body">
+        <div class="meta-grid">
+          <div class="meta-cell">
+            <div class="meta-lbl">任务 ID</div>
+            <div class="meta-val" id="task-id">—</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-lbl">当前步骤</div>
+            <div class="meta-val" id="current-step">—</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-lbl">缓存命中</div>
+            <div class="meta-val" id="cached-flag">否</div>
+            <div class="meta-sub-row">
+              <span class="meta-sub-lbl">LLM 模型生效</span>
+              <span class="meta-sub-val" id="llm-model-used-flag">否</span>
+            </div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-lbl">执行模式</div>
+            <div class="meta-val" id="mode-display">—</div>
+          </div>
+        </div>
+
+        <div class="prog-row">
+          <span class="prog-label">进度</span>
+          <span class="prog-pct" id="progress">0%</span>
+        </div>
+        <div class="prog-track">
+          <div id="prog-fill" class="prog-fill"></div>
+        </div>
+
+        <div class="tl-label">各模块状态</div>
+        <div id="timeline" class="timeline"></div>
+      </div>
+    </div>
+
+  </div><!-- /grid-top -->
+
+  <!-- 结果区 -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" data-tab="summary">报告</button>
+    <button class="tab-btn" data-tab="llm">AI 增强</button>
+    <button class="tab-btn" data-tab="compare">版本对比</button>
+    <button class="tab-btn" data-tab="json">原始数据</button>
+  </div>
+  <div class="tabs-body">
+
+    <div id="tab-summary" class="tab-panel active">
+      <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、6 平台适配、可选 Observation Layer、非首页提示、full audit 逐页诊断、关键问题、行动计划与 snapshot 证据。</div>
+    </div>
+
+    <div id="tab-llm" class="tab-panel">
+      <div class="llm-stats">
+        <div class="stat-box">
+          <div class="stat-lbl">LLM 增强状态</div>
+          <div id="llm-status"><span class="badge b-default">未判断</span></div>
+          <div class="stat-hint" style="margin-top:6px">会员版专属</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-lbl">已增强模块数</div>
+          <div class="stat-big" id="llm-count">0</div>
+          <div class="stat-hint">visibility · content · platform · summary</div>
+        </div>
+      </div>
+      <div id="llm-notes" class="llm-notes-box">等待任务开始。</div>
+    </div>
+
+    <div id="tab-compare" class="tab-panel">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>普通版</th>
+            <th>会员版</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>分析方式</td>
+            <td>规则判断</td>
+            <td>规则 + OpenRouter 语义增强</td>
+          </tr>
+          <tr>
+            <td>输出内容</td>
+            <td>基础结构化结果</td>
+            <td>含 visibility / content / platform / summary 语义增强</td>
+          </tr>
+          <tr>
+            <td>LLM 调用</td>
+            <td><span class="badge b-default">不调用</span></td>
+            <td><span class="badge b-success">OpenRouter 统一接入</span></td>
+          </tr>
+          <tr>
+            <td>判定依据</td>
+            <td colspan="2">以响应中 <code>llm_enhanced=true</code> 字段为准</td>
+          </tr>
+          <tr>
+            <td>当前选择</td>
+            <td colspan="2"><strong id="current-mode-display">—</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="tab-json" class="tab-panel">
+      <div class="json-shell">
+        <div class="json-toolbar">
+          <span class="json-title">Raw JSON</span>
+          <button id="copy-json-btn" type="button" class="btn-json">复制原始数据</button>
+        </div>
+        <pre id="json-output" class="json-out">{}</pre>
+      </div>
+    </div>
+
+  </div><!-- /tabs-body -->
+
+  <!-- ═══ 打分维度说明 ═══ -->
+
+<hr class="section-divider" style="margin-top:36px" />
+<div style="margin-top:28px">
+  <div class="section-hdr">
+    <h2>打分维度与规则</h2>
+    <span>按 6 个汇总层展示关键指标、内部公式与综合分权重，单维度原始分满分均为 100 分</span>
+  </div>
+
+  <div class="dim-grid">
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">AI 可见性</span><span class="dim-score">25%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.32</span></div>
+        <div class="dim-row"><span class="dim-row-label">snapshot citability</span><span class="dim-row-val">×0.40</span></div>
+        <div class="dim-row"><span class="dim-row-label">llms.txt 有效性</span><span class="dim-row-val">×0.12</span></div>
+        <div class="dim-row"><span class="dim-row-label">基础实体存在</span><span class="dim-row-val">×0.16</span></div>
+        <div class="dim-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)"><span class="dim-row-label" style="color:var(--subtle);font-size:11px">citability 基于 snapshot 中 homepage 与最佳页面的 answer-first、信息密度、数据点、分块结构和 FAQ / 作者 / 日期信号综合评估</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">品牌权威</span><span class="dim-score">20%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">外链质量</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">品牌提及覆盖</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">sameAs / Entity 一致性</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">企业信息完整度</span><span class="dim-row-val">25%</span></div>
+        <div class="dim-row"><span class="dim-row-label">站外数据源</span><span class="dim-row-val">Semrush Backlinks Overview</span></div>
+        <div class="dim-row"><span class="dim-row-label">结构预留</span><span class="dim-row-val">已抽离 BrandAuthorityService 边界</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">内容与 E-E-A-T</span><span class="dim-score">20%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 个子分均值</span></div>
+        <div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">字数 / FAQ / 作者 / 日期 / 数据 / 标题 / answer-first</span></div>
+        <div class="dim-row"><span class="dim-row-label">experience</span><span class="dim-row-val">案例 / 量化结果 / 服务页深度 / About</span></div>
+        <div class="dim-row"><span class="dim-row-label">expertise</span><span class="dim-row-val">服务页深度 / 文章深度 / answer-first / heading quality</span></div>
+        <div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">作者 / 资质 / sameAs / contact / 日期</span></div>
+        <div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">page_profiles 中的 service / article / about / case_study</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">技术基础</span><span class="dim-score">15%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">16 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">8 / 10</span></div>
+        <div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">5 / 5</span></div>
+        <div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8 / 4</span></div>
+        <div class="dim-row"><span class="dim-row-label">性能 / 渲染阻塞</span><span class="dim-row-val">8 / 8</span></div>
+        <div class="dim-row"><span class="dim-row-label">图片 / OG / Twitter / hreflang</span><span class="dim-row-val">8 / 5 / 3 / 4</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">结构化数据</span><span class="dim-score">10%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">JSON-LD / Organization</span><span class="dim-row-val">12 / 14</span></div>
+        <div class="dim-row"><span class="dim-row-label">WebSite / Service / Article</span><span class="dim-row-val">10 / 10 / 10</span></div>
+        <div class="dim-row"><span class="dim-row-label">FAQPage / Product / DefinedTerm</span><span class="dim-row-val">8 / 10 / 8</span></div>
+        <div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">8 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">稳定 @id</span><span class="dim-row-val">5 pts</span></div>
+        <div class="dim-row"><span class="dim-row-label">关系丰富度</span><span class="dim-row-val">5 pts</span></div>
+      </div>
+    </div>
+    <div class="dim-card">
+      <div class="dim-head"><span class="dim-name">平台适配</span><span class="dim-score">10%</span></div>
+      <div class="dim-rows">
+        <div class="dim-row"><span class="dim-row-label">汇总方式</span><span class="dim-row-val">战略权重加权</span></div>
+        <div class="dim-row"><span class="dim-row-label">ChatGPT</span><span class="dim-row-val" style="font-size:10.5px">22% · crawler + llms + citability + brand</span></div>
+        <div class="dim-row"><span class="dim-row-label">Google AI Mode</span><span class="dim-row-val" style="font-size:10.5px">18% · topic breadth + entity graph + schema</span></div>
+        <div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val" style="font-size:10.5px">18% · citability + schema + FAQ + metadata</span></div>
+        <div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val" style="font-size:10.5px">16% · cited evidence + brand + schema</span></div>
+        <div class="dim-row"><span class="dim-row-label">Gemini / Grok</span><span class="dim-row-val" style="font-size:10.5px">13% / 13% · authority / social amplification</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted);font-weight:500">分级标准：</span>
+    <div class="score-table">
+      <div class="score-cell"><span class="sc-range sc-critical">0-24</span><span class="sc-lbl">critical</span></div>
+      <div class="score-cell"><span class="sc-range sc-poor">25-44</span><span class="sc-lbl">poor</span></div>
+      <div class="score-cell"><span class="sc-range sc-fair">45-64</span><span class="sc-lbl">fair</span></div>
+      <div class="score-cell"><span class="sc-range sc-good">65-84</span><span class="sc-lbl">good</span></div>
+      <div class="score-cell"><span class="sc-range sc-strong">85-100</span><span class="sc-lbl">strong</span></div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider" style="margin-top:32px" />
+<div style="margin-top:28px">
+  <div class="section-hdr">
+    <h2>汇总层维度业务落成</h2>
+    <span>按 6 个汇总维度展示数据来源、权重比例、计算公式与接入要点</span>
+  </div>
+  <div class="biz-grid">
+    <div class="biz-card"><h4>AI 可见性 · 25%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.32 × AI crawler 放行率 + 0.40 × snapshot citability + 0.12 × llms.txt 有效性 + 0.16 × 基础实体存在</code></li><li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、构建 snapshot 页面画像，并复用 homepage / about / service / article / case_study 的实体信号</li><li><strong>细项规则</strong>：citability 综合 answer-first、信息密度、数据点、分块结构与 FAQ / 作者 / 日期信号，输出 <code>homepage_citability</code>、<code>best_page_citability</code> 和 <code>citation_probability</code></li></ul></div>
+    <div class="biz-card"><h4>品牌权威 · 20%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs / Entity 一致性 + 0.25 × 企业信息完整度</code></li><li><strong>数据来源</strong>：站内品牌信号 + Schema sameAs + sitemap / canonical 一致性 + Semrush Backlinks Overview</li><li><strong>结构预留</strong>：当前仍由 <code>visibility</code> 产出品牌总分，但代码层已预留 <code>BrandAuthorityService</code> 边界，方便后续独立服务化</li></ul></div>
+    <div class="biz-card"><h4>内容与 E-E-A-T · 20%</h4><ul><li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li><li><strong>内容总分</strong>：服务页深度、文章页深度、FAQ、作者、日期、量化数据、标题质量、answer-first、信息密度、分块结构、引用来源区、内联引用与链接语义共同构成</li><li><strong>E-E-A-T 细项</strong>：Experience 看案例与量化结果；Expertise 看服务页/文章深度与结构；Authority 看作者、资质、sameAs 与参考来源；Trust 看联系信息、日期、更新记录与证据引用</li><li><strong>数据来源</strong>：优先复用 <code>discovery.page_profiles</code>，不再为了内容审计重复抓取这些关键页面</li></ul></div>
+    <div class="biz-card"><h4>技术基础 · 15%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li><li><strong>计算公式</strong>：<code>HTTPS8 + SSR10 + Meta5 + Canonical5 + lang4 + uniqueH1 4 + Sitemap8 + robots 指令4 + 性能8 + 渲染阻塞8 + 安全头16 + 图片4 + OG5 + Twitter3 + hreflang4 + freshness headers4</code></li><li><strong>数据来源</strong>：最终 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li><li><strong>细项说明</strong>：<code>response_time_ms</code> 已纳入正式性能评分；新增检查唯一 H1 与 <code>ETag / Last-Modified</code> 新鲜度信号；图片优化由 lazyload 与显式尺寸比例组成</li></ul></div>
+    <div class="biz-card"><h4>结构化数据 · 10%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li><li><strong>计算公式</strong>：<code>JSON-LD + Organization + WebSite + Service + Article + FAQPage + Product + BreadcrumbList + machine dates + sameAs + @id + visible-content alignment</code></li><li><strong>数据来源</strong>：优先复用 snapshot 中各页面的 <code>json_ld_blocks</code>，统一汇总 <code>@type</code>、<code>sameAs</code>、稳定 <code>@id</code>、机器可读日期以及 Schema 与页面可见内容的一致性</li><li><strong>接入要点</strong>：schema 既参与综合分，也被平台适配模块复用，尤其影响 Google AI Mode、AI Overviews 与 Gemini</li></ul></div>
+    <div class="biz-card"><h4>平台适配 · 10%</h4><ul><li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，按平台战略权重汇总后再按 <code>×0.10</code> 计入综合分</li><li><strong>平台权重</strong>：ChatGPT 22%，Google AI Mode 18%，Google AI Overviews 18%，Perplexity 16%，Gemini 13%，Grok 13%</li><li><strong>数据来源</strong>：不额外抓取，直接复用 discovery snapshot、visibility、schema 与 metadata 结果</li><li><strong>输出结果</strong>：分别产出 <code>chatgpt / google_ai_mode / google_ai_overviews / perplexity / gemini / grok</code> 的分数、优化焦点、主缺口与建议</li></ul></div>
+  </div>
+  <div class="biz-card" style="margin-top:10px"><h4>发现层与复用机制</h4><ul><li><strong>发现层升级</strong>：当前 discovery 已升级为 <code>snapshot-v3</code>，默认抓取 homepage、about、service、article、case_study；full audit 时继续扩展到更多内部页</li><li><strong>抓取作用域</strong>：按“精确 host + 语言路径前缀”限制范围；例如 <code>www.ecoflow.com/de/</code> 只抓 <code>/de/</code>，不会抓 <code>de.ecoflow.com</code> 或 <code>/fr/</code></li><li><strong>统一画像</strong>：每个页面都输出 title、meta、canonical、lang、headings、word_count、FAQ / 作者 / 日期、引用来源区、TL;DR、链接语义、JSON-LD 摘要、entity signals 等统一 profile</li><li><strong>复用机制</strong>：<code>audit_full</code> 支持直接传入已有 <code>discovery</code>，存在时复用，不再重复执行 discover</li><li><strong>提示机制</strong>：当输入 URL 不是首页或语言首页时，结果中会增加“非首页，数据可能有偏差”的提示，但不会强制改写输入页</li></ul></div>
+  <div class="biz-card" style="margin-top:10px"><h4>Observation Layer · 不计分</h4><ul><li><strong>定位</strong>：可选上传 GA4、日志或人工引用观测，用于展示实际观测结果，不属于 6 个计分维度</li><li><strong>默认行为</strong>：大部分用户只输入 <code>url</code> 即可；未上传 observation 时仍可完成完整审计</li><li><strong>展示内容</strong>：可呈现 AI sessions、来源平台拆分、citation observations 与 measurement maturity</li><li><strong>评分规则</strong>：无论是否上传，<code>composite_geo_score</code> 都不会被 observation 改写</li></ul></div>
+  <div class="biz-card" style="margin-top:10px"><h4>会员 AI 增强 · 机制说明</h4><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div>
+</div>
+
+  <div style="margin-top:28px;margin-bottom:48px">
+    <div class="section-hdr">
+      <h2>API 调用步骤</h2>
+      <span>异步任务模式（推荐）及单模块直调两种方式</span>
+    </div>
+    <div class="api-steps">
+
+      <div class="api-step">
+        <div class="api-step-hdr">
+          <div class="api-num">1</div>
+          <span class="api-step-title">创建审计任务</span>
+        </div>
+        <div class="api-step-body">
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/tasks/audit</div>
+          <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
+          <div class="api-params">
+            <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
+            <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
+            <div class="param-row"><span class="param-key">force_refresh</span><span class="param-type">boolean</span><span class="param-desc">true 则跳过 7 天缓存强制重新审计</span></div>
+            <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；选择 <code>zh</code> 时，JSON key 保持英文，问题、建议、摘要、维度展示名和大部分用户可读 value 尽量返回中文</span></div>
+            <div class="param-row"><span class="param-key">full_audit</span><span class="param-type">boolean</span><span class="param-desc">可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></span></div>
+            <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">仅 full audit 生效，范围 5-50，默认 12</span></div>
+            <div class="param-row"><span class="param-key">observation</span><span class="param-type">object</span><span class="param-desc">可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</span></div>
+            <div class="param-row"><span class="param-key">llm.provider</span><span class="param-type">string</span><span class="param-desc">premium 模式下固定 <code>"openrouter"</code></span></div>
+            <div class="param-row"><span class="param-key">llm.model</span><span class="param-type">string</span><span class="param-desc">如 <code>"openai/gpt-4.1"</code>、<code>"anthropic/claude-sonnet-4.6"</code></span></div>
+          </div>
+          <div class="code-snippet"><pre>{
+  "url": "https://example.com",
+  "mode": "premium",
+  "feedback_lang": "zh",
+  "full_audit": true,
+  "max_pages": 12,
+  "force_refresh": false,
+  "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" }
+}</pre></div>
+          <div class="api-desc">作用域示例：<code>https://www.ecoflow.com/de/</code> 只抓 <code>www.ecoflow.com/de/</code>；<code>https://de.ecoflow.com/</code> 会作为另一站独立审计。</div>
+        </div>
+      </div>
+
+      <div class="api-step">
+        <div class="api-step-hdr">
+          <div class="api-num">2</div>
+          <span class="api-step-title">轮询任务状态</span>
+        </div>
+        <div class="api-step-body">
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}</div>
+          <div class="api-desc">每隔 1–2 秒轮询一次。<code>status</code> 为 <code>"completed"</code> 或 <code>"failed"</code> 时停止。<code>steps</code> 字段实时反映各模块状态（pending / running / completed / failed）。完成后，<code>summary.ai_perception</code> 还会返回 AI 对站点的认知百分比分布和 4 个认知标签。</div>
+          <div class="api-params">
+            <div class="param-row"><span class="param-key">status</span><span class="param-type">string</span><span class="param-desc">queued → running → completed | failed</span></div>
+            <div class="param-row"><span class="param-key">progress_percent</span><span class="param-type">int</span><span class="param-desc">0–100，按完成步骤数计算</span></div>
+            <div class="param-row"><span class="param-key">cached</span><span class="param-type">boolean</span><span class="param-desc">命中缓存时为 true，直接返回历史结果</span></div>
+            <div class="param-row"><span class="param-key">llm_model_used</span><span class="param-type">boolean</span><span class="param-desc">只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</span></div>
+            <div class="param-row"><span class="param-key">result</span><span class="param-type">object</span><span class="param-desc">completed 后包含完整的 visibility / technical / content / schema / platform / observation / summary；full audit 时额外返回 <code>page_diagnostics</code>，并在 <code>discovery.scope_root_url</code> 标明抓取边界</span></div>
+          </div>
+          <div class="code-snippet"><pre>// 响应结构示意
+{
+  "success": true,
+  "data": {
+    "task_id": "abc123",
+    "status": "completed",          // queued | running | completed | failed
+    "progress_percent": 100,
+    "cached": false,
+    "llm_model_used": true,
+    "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
+    "result": {
+      "visibility": { "score": 72, "status": "good", "llm_enhanced": true, ... },
+      "technical":  { "score": 85, ... },
+      "content":    { "score": 60, ... },
+      "schema":     { "score": 45, ... },
+      "platform":   { "chatgpt": { "platform_score": 68 }, ... },
+      "discovery":  { "scope_root_url": "https://www.ecoflow.com/de/", ... },
+      "page_diagnostics": [ { "page_type": "product", "overall_score": 71, ... } ],
+      "observation":{ "provided": false, "scored": false, ... },
+      "summary":    {
+        "composite_geo_score": 70,
+        "summary": "...",
+        "ai_perception": {
+          "positive_percentage": 58,
+          "neutral_percentage": 29,
+          "controversial_percentage": 13,
+          "cognition_keywords": ["Thought Leader", "Well-structured", "Evidence-led", "Trustworthy"]
+        }
+      }
+    }
+  }
+}</pre></div>
+        </div>
+      </div>
+
+      <div class="api-step">
+        <div class="api-step-hdr">
+          <div class="api-num">3</div>
+          <span class="api-step-title">导出 Markdown 报告（可选）</span>
+        </div>
+        <div class="api-step-body">
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/report</div>
+          <div class="api-desc">任务完成后可拉取完整 Markdown 报告，直接在浏览器渲染或保存为文件。仅在 <code>status=completed</code> 时有效。</div>
+        </div>
+      </div>
+
+      <div class="api-step">
+        <div class="api-step-hdr">
+          <div class="api-num">4</div>
+          <span class="api-step-title">单模块直调（高级用法）</span>
+        </div>
+        <div class="api-step-body">
+          <div class="api-desc">无需走任务队列，直接同步调用单个审计模块，适合实时集成或调试；<code>/api/v1/audit/full</code> 同样支持 full audit 与作用域限制。</div>
+          <div class="api-params">
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/visibility</code><span class="param-desc" style="margin-left:4px">AI 可见性模块</span></div>
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/technical</code><span class="param-desc" style="margin-left:4px">技术基础模块</span></div>
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/content</code><span class="param-desc" style="margin-left:4px">内容质量模块</span></div>
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/schema</code><span class="param-desc" style="margin-left:4px">结构化数据模块</span></div>
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/platform</code><span class="param-desc" style="margin-left:4px">平台适配模块</span></div>
+            <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/full</code><span class="param-desc" style="margin-left:4px">全量同步审计（含 summary，无缓存）</span></div>
+          </div>
+          <div class="code-snippet"><pre>// 单模块请求体（Body 字段相同）
+{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12 }
+
+// premium 模式下可附加 LLM 配置
+{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20,
+  "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" } }</pre></div>
+        </div>
+      </div>
+
+    </div><!-- /api-steps -->
+  </div>
+
+</div><!-- /wrap -->
+
+<!-- Toast -->
+<div id="toast" class="toast">
+  <span class="toast-icon" id="toast-icon"></span>
+  <span id="toast-msg"></span>
+  <button class="toast-close" id="toast-close">✕</button>
+</div>
+
+<script type="module" src="/static/js/demo/index.js"></script>
+</body>
+</html>

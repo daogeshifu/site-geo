@@ -1,5 +1,5 @@
 from app.models.discovery import PageProfile, SiteSignals
-from app.services.page_diagnostics_service import PageDiagnosticsService
+from app.services.audit.page_diagnostics import PageDiagnosticsService
 from app.utils.schema_extractor import extract_schema_summary
 
 

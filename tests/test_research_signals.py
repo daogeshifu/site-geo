@@ -12,9 +12,9 @@ from app.models.discovery import (
     SitemapResult,
     SiteSignals,
 )
-from app.services.content_service import ContentService
-from app.services.schema_service import SchemaService
-from app.services.technical_service import TechnicalService
+from app.services.audit.content import ContentService
+from app.services.audit.schema import SchemaService
+from app.services.audit.technical import TechnicalService
 
 
 def _base_discovery() -> DiscoveryResult:

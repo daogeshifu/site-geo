@@ -4,8 +4,8 @@ import time
 
 from app.models.audit import TechnicalAuditResult
 from app.models.requests import LLMConfig
-from app.services.audit_service import AuditBaseService
-from app.services.scoring_service import ScoringService
+from app.services.audit.base import AuditBaseService
+from app.services.audit.scoring import ScoringService
 from app.utils.heuristics import assess_render_blocking, assess_ssr_signal
 from app.utils.security_headers import evaluate_security_headers
 

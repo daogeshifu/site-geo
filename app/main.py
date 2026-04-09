@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.audit import router as audit_router
 from app.api.routes.demo import router as demo_router
@@ -28,6 +30,9 @@ app = FastAPI(
     debug=settings.debug,
     default_response_class=ORJSONResponse,
 )
+
+WEB_STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
+app.mount("/static", StaticFiles(directory=str(WEB_STATIC_DIR)), name="static")
 
 
 @app.exception_handler(AppError)

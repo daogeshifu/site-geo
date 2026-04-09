@@ -12,8 +12,8 @@ from app.models.audit import (
 )
 from app.models.discovery import DiscoveryResult
 from app.models.requests import LLMConfig
-from app.services.llm_service import LLMService, LLMServiceError
-from app.services.scoring_service import ScoringService
+from app.services.llm.client import LLMService, LLMServiceError
+from app.services.audit.scoring import ScoringService
 
 
 def _merge_unique(existing: list[str], extra: list[str], limit: int = 8) -> list[str]:

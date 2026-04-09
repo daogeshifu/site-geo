@@ -6,17 +6,17 @@ from uuid import uuid4
 
 from app.core.exceptions import AppError
 from app.models.task import AuditTask, TaskAuditRequest, TaskStep
-from app.services.cache_service import CacheService
-from app.services.content_service import ContentService
-from app.services.discovery_service import DiscoveryService
-from app.services.observation_service import ObservationService
-from app.services.page_content_audit_service import PageContentAuditService
-from app.services.page_diagnostics_service import PageDiagnosticsService
-from app.services.platform_service import PlatformService
-from app.services.schema_service import SchemaService
-from app.services.summarizer_service import SummarizerService
-from app.services.technical_service import TechnicalService
-from app.services.visibility_service import VisibilityService
+from app.services.infra.cache import CacheService
+from app.services.audit.content import ContentService
+from app.services.discovery.discovery import DiscoveryService
+from app.services.reporting.observation import ObservationService
+from app.services.audit.page_content import PageContentAuditService
+from app.services.audit.page_diagnostics import PageDiagnosticsService
+from app.services.audit.platform import PlatformService
+from app.services.audit.schema import SchemaService
+from app.services.audit.summarizer import SummarizerService
+from app.services.audit.technical import TechnicalService
+from app.services.audit.visibility import VisibilityService
 from app.utils.localization import localize_payload
 
 

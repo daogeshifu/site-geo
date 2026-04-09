@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.models.audit import PageDiagnosticResult
 from app.models.discovery import DiscoveryResult, PageProfile
-from app.services.scoring_service import ScoringService
+from app.services.audit.scoring import ScoringService
 from app.utils.heuristics import assess_page_citability
 
 

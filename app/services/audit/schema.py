@@ -4,8 +4,8 @@ import time
 
 from app.models.audit import SchemaAuditResult
 from app.models.requests import LLMConfig
-from app.services.audit_service import AuditBaseService
-from app.services.scoring_service import ScoringService
+from app.services.audit.base import AuditBaseService
+from app.services.audit.scoring import ScoringService
 from app.utils.schema_extractor import extract_schema_summary
 
 

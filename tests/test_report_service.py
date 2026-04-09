@@ -17,7 +17,7 @@ from app.models.discovery import (
     SitemapResult,
     SiteSignals,
 )
-from app.services.report_service import ReportService
+from app.services.reporting.report import ReportService
 
 
 def test_report_contains_reference_sections() -> None:

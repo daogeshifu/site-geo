@@ -3,7 +3,7 @@ from app.models.audit import (
     PageContentAuditResult,
 )
 from app.models.discovery import DiscoveryResult
-from app.services.page_content_audit_service import PageContentAuditService
+from app.services.audit.page_content import PageContentAuditService
 
 
 def test_page_content_summary_uses_skill_breakdown() -> None:

@@ -4,10 +4,10 @@ import time
 
 from app.models.audit import PlatformAuditDetail, PlatformAuditResult
 from app.models.requests import LLMConfig
-from app.services.audit_service import AuditBaseService
-from app.services.brand_authority_service import BrandAuthorityService
-from app.services.llm_enrichment_service import LLMEnrichmentService
-from app.services.scoring_service import ScoringService
+from app.services.audit.base import AuditBaseService
+from app.services.discovery.brand_authority import BrandAuthorityService
+from app.services.llm.enrichment import LLMEnrichmentService
+from app.services.audit.scoring import ScoringService
 from app.utils.heuristics import assess_citability, assess_llms_effectiveness
 
 

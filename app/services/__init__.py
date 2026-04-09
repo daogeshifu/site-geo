@@ -1,1 +1,1 @@
-"""Service layer for audit orchestration and rules."""
+"""Service layer organized by business domain."""

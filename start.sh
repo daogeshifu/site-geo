@@ -15,6 +15,19 @@ if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! "${PYTHON_BIN}" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+then
+    echo ">>> 当前 ${PYTHON_BIN} 版本过低：$("${PYTHON_BIN}" --version 2>&1)"
+    echo ">>> 本项目要求 Python 3.10+，推荐 Python 3.11"
+    echo ">>> 可选方案："
+    echo ">>> 1) 安装 python3.10 / python3.11 后用 PYTHON_BIN=python3.11 ./start.sh"
+    echo ">>> 2) 直接使用 Docker 启动（Dockerfile 基于 python:3.11-slim）"
+    exit 1
+fi
+
 # 检查 Python 虚拟环境，不存在则自动创建
 if [ ! -d ".venv" ]; then
     echo ">>> 未检测到虚拟环境，正在创建 .venv ..."
@@ -29,6 +42,17 @@ VENV_PYTHON=".venv/bin/python"
 
 if ! "${VENV_PYTHON}" -c 'import sys; raise SystemExit(0 if sys.version_info.major == 3 else 1)' >/dev/null 2>&1; then
     echo ">>> 当前 .venv 不是 Python 3 环境，请删除 .venv 后重试，或重新指定正确的 PYTHON_BIN"
+    exit 1
+fi
+
+if ! "${VENV_PYTHON}" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+then
+    echo ">>> 当前 .venv Python 版本过低：$("${VENV_PYTHON}" --version 2>&1)"
+    echo ">>> 请删除 .venv 后，使用 Python 3.10+ 重新创建，例如："
+    echo ">>> rm -rf .venv && PYTHON_BIN=python3.11 ./start.sh"
     exit 1
 fi
 

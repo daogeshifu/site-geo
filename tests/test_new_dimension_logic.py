@@ -1,5 +1,5 @@
 from app.models.discovery import BacklinkOverviewResult, KeyPages, LlmsResult, SiteSignals
-from app.services.backlink_service import BacklinkService
+from app.services.discovery.backlinks import BacklinkService
 from app.utils.heuristics import assess_llms_effectiveness, calculate_brand_authority
 
 

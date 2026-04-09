@@ -8,9 +8,9 @@ import httpx
 from app.core.config import settings
 from app.models.requests import LLMConfig
 from app.models.audit import ContentAuditResult, ContentPageAnalysis
-from app.services.audit_service import AuditBaseService
-from app.services.llm_enrichment_service import LLMEnrichmentService
-from app.services.scoring_service import ScoringService
+from app.services.audit.base import AuditBaseService
+from app.services.llm.enrichment import LLMEnrichmentService
+from app.services.audit.scoring import ScoringService
 from app.utils.fetcher import fetch_url
 from app.utils.html_parser import parse_html
 from app.utils.text_analyzer import (

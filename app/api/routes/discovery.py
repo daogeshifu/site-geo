@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from app.models.requests import UrlRequest
 from app.models.responses import success_response
-from app.services.discovery_service import DiscoveryService
+from app.services.discovery.discovery import DiscoveryService
 from app.utils.localization import localize_payload
 
 # 站点发现路由，挂载在 /api/v1 前缀下

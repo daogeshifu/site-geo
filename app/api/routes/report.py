@@ -17,9 +17,9 @@ from app.models.audit import (
 from app.models.discovery import DiscoveryResult
 from app.models.report import ReportExportRequest
 from app.models.responses import success_response
-from app.services.observation_service import ObservationService
-from app.services.report_service import ReportService
-from app.services.summarizer_service import SummarizerService
+from app.services.reporting.observation import ObservationService
+from app.services.reporting.report import ReportService
+from app.services.audit.summarizer import SummarizerService
 from app.api.routes.tasks import task_service  # 复用 tasks 路由中的 task_service 单例
 
 # 报告导出路由，挂载在 /api/v1 前缀下

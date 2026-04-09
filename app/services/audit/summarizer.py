@@ -14,8 +14,8 @@ from app.models.audit import (
 )
 from app.models.discovery import DiscoveryResult
 from app.models.requests import LLMConfig
-from app.services.llm_enrichment_service import LLMEnrichmentService
-from app.services.scoring_service import ScoringService
+from app.services.llm.enrichment import LLMEnrichmentService
+from app.services.audit.scoring import ScoringService
 
 
 class SummarizerService:

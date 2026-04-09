@@ -1,4 +1,4 @@
-from app.services.cache_service import CacheService
+from app.services.infra.cache import CacheService
 
 
 def test_cache_key_changes_with_mode() -> None:

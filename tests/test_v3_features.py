@@ -20,10 +20,10 @@ from app.models.discovery import (
     SitemapResult,
     SiteSignals,
 )
-from app.services.report_service import ReportService
-from app.services.cache_service import CacheService
-from app.services.discovery_service import DiscoveryService
-from app.services.summarizer_service import SummarizerService
+from app.services.reporting.report import ReportService
+from app.services.infra.cache import CacheService
+from app.services.discovery.discovery import DiscoveryService
+from app.services.audit.summarizer import SummarizerService
 from app.utils.fetcher import FetchedResponse
 from app.utils.url_utils import entry_url_candidates, get_scope_root, is_internal_url, is_likely_homepage_url
 from app.utils.localization import localize_payload
@@ -131,7 +131,7 @@ def test_discovery_entry_fetch_falls_back_to_www_variant(monkeypatch) -> None:
             )
         raise AssertionError(f"Unexpected candidate URL: {url}")
 
-    monkeypatch.setattr("app.services.discovery_service.fetch_url", fake_fetch_url)
+    monkeypatch.setattr("app.services.discovery.discovery.fetch_url", fake_fetch_url)
 
     response = asyncio.run(service._fetch_entry_response(client=None, url="https://idtcpack.com"))
     assert response.final_url == "https://www.idtcpack.com/"

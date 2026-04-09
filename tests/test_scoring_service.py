@@ -1,4 +1,4 @@
-from app.services.scoring_service import ScoringService
+from app.services.audit.scoring import ScoringService
 
 
 def test_status_mapping() -> None:

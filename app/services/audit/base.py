@@ -6,8 +6,8 @@ from typing import Any
 
 from app.models.discovery import DiscoveryResult
 from app.models.requests import LLMConfig
-from app.services.discovery_service import DiscoveryService
-from app.services.observation_service import ObservationService
+from app.services.discovery.discovery import DiscoveryService
+from app.services.reporting.observation import ObservationService
 
 
 class AuditBaseService:
@@ -108,13 +108,13 @@ class FullAuditService(AuditBaseService):
         返回包含所有模块结果的 dict
         """
         # 延迟导入避免循环依赖
-        from app.services.content_service import ContentService
-        from app.services.page_diagnostics_service import PageDiagnosticsService
-        from app.services.platform_service import PlatformService
-        from app.services.schema_service import SchemaService
-        from app.services.summarizer_service import SummarizerService
-        from app.services.technical_service import TechnicalService
-        from app.services.visibility_service import VisibilityService
+        from app.services.audit.content import ContentService
+        from app.services.audit.page_diagnostics import PageDiagnosticsService
+        from app.services.audit.platform import PlatformService
+        from app.services.audit.schema import SchemaService
+        from app.services.audit.summarizer import SummarizerService
+        from app.services.audit.technical import TechnicalService
+        from app.services.audit.visibility import VisibilityService
 
         resolved_discovery = await self.ensure_discovery(url, discovery, full_audit=full_audit, max_pages=max_pages)
         # 所有模块共享同一个 DiscoveryService 实例

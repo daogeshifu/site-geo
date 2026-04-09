@@ -1,4 +1,4 @@
-from app.services.llm_service import LLMService
+from app.services.llm.client import LLMService
 
 
 def test_llm_service_resolves_default_model() -> None:

@@ -14,7 +14,7 @@ from app.models.discovery import (
     PageProfile,
     SiteSignals,
 )
-from app.services.backlink_service import BacklinkService
+from app.services.discovery.backlinks import BacklinkService
 from app.utils.fetcher import fetch_url
 from app.utils.heuristics import detect_site_signals, infer_business_type, select_key_pages
 from app.utils.html_parser import parse_html

@@ -13,7 +13,7 @@ from app.models.audit import (
     VisibilityAuditResult,
 )
 from app.models.discovery import DiscoveryResult
-from app.services.scoring_service import ScoringService
+from app.services.audit.scoring import ScoringService
 
 
 class ReportService:
