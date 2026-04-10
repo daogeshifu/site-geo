@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.models.audit import ObservationInput
 from app.models.requests import LLMConfig, TaskType, UrlRequest
+from app.models.storage import SiteAssetSummary
 
 # 任务状态枚举
 TaskStatus = Literal["queued", "running", "completed", "failed"]
@@ -54,6 +55,8 @@ class AuditTask(BaseModel):
     cached: bool = False                  # 是否从缓存加载结果
     llm_model_used: bool = False          # 是否真正使用并生效了 llm.model
     force_refresh: bool = False
+    storage_backend: str = "file"
+    site_asset_summary: SiteAssetSummary | None = None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None

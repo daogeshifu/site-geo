@@ -32,6 +32,14 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    """从环境变量读取布尔值，无效时返回默认值。"""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     """全局配置类（不可变），所有配置项从环境变量读取，提供合理默认值"""
@@ -55,6 +63,22 @@ class Settings:
     # 审计结果缓存配置
     cache_ttl_days: int = _get_int("CACHE_TTL_DAYS", 7)
     cache_dir: str = os.getenv("CACHE_DIR", ".cache/audits")
+
+    # 站点资产库（MySQL）配置
+    mysql_enabled: bool = _get_bool("MYSQL_ENABLED", False)
+    mysql_host: str = os.getenv("MYSQL_HOST", "")
+    mysql_port: int = _get_int("MYSQL_PORT", 3306)
+    mysql_database: str = os.getenv("MYSQL_DATABASE", "")
+    mysql_user: str = os.getenv("MYSQL_USER", "")
+    mysql_password: str = os.getenv("MYSQL_PASSWORD", "")
+    mysql_connect_timeout_seconds: int = _get_int("MYSQL_CONNECT_TIMEOUT_SECONDS", 5)
+    mysql_read_timeout_seconds: int = _get_int("MYSQL_READ_TIMEOUT_SECONDS", 15)
+    mysql_write_timeout_seconds: int = _get_int("MYSQL_WRITE_TIMEOUT_SECONDS", 15)
+    mysql_store_raw_html: bool = _get_bool("MYSQL_STORE_RAW_HTML", False)
+    mysql_store_parsed_content: bool = _get_bool("MYSQL_STORE_PARSED_CONTENT", True)
+    discovery_fetch_concurrency: int = _get_int("DISCOVERY_FETCH_CONCURRENCY", 8)
+    mysql_retry_attempts: int = _get_int("MYSQL_RETRY_ATTEMPTS", 3)
+    mysql_retry_backoff_ms: int = _get_int("MYSQL_RETRY_BACKOFF_MS", 300)
 
     # 爬虫 UA 标识
     default_user_agent: str = os.getenv(

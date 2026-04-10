@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.models.storage import SiteAssetSummary
+
 
 class HeadingItem(BaseModel):
     """页面标题标签（h1-h6）的数据模型"""
@@ -226,3 +228,4 @@ class DiscoveryResult(BaseModel):
     requested_max_pages: int = 12
     profiled_page_count: int = 0
     site_snapshot_version: str = "snapshot-v3"  # 数据模型版本标识
+    asset_summary: SiteAssetSummary = Field(default_factory=SiteAssetSummary)

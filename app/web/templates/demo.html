@@ -123,12 +123,7 @@
             </div>
             <div class="field">
               <label>最大页面数</label>
-              <select id="max-pages" disabled>
-                <option value="12">12 页</option>
-                <option value="20">20 页</option>
-                <option value="30">30 页</option>
-                <option value="50">50 页</option>
-              </select>
+              <input id="max-pages" type="number" min="5" max="10000" step="1" value="12" disabled />
             </div>
           </div>
           <div class="btn-row">
@@ -169,6 +164,18 @@
           <div class="meta-cell">
             <div class="meta-lbl">执行模式</div>
             <div class="meta-val" id="mode-display">—</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-lbl">存储后端</div>
+            <div class="meta-val" id="storage-backend">—</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-lbl">站点资产</div>
+            <div class="meta-val" id="asset-counts">—</div>
+            <div class="meta-sub-row">
+              <span class="meta-sub-lbl">快照复用 / 新抓取</span>
+              <span class="meta-sub-val" id="asset-reuse">—</span>
+            </div>
           </div>
         </div>
 

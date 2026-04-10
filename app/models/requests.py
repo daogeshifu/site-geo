@@ -42,7 +42,7 @@ class UrlRequest(BaseModel):
     llm: LLMConfig | None = None          # 可选 LLM 配置（premium 模式专用）
     observation: ObservationInput | None = None  # 可选观测层输入，不参与评分
     full_audit: bool = False
-    max_pages: int = Field(default=12, ge=5, le=50)
+    max_pages: int = Field(default=12, ge=5, le=10000)
     feedback_lang: FeedbackLang = "en"
 
 

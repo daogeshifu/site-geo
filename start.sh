@@ -97,10 +97,19 @@ fi
 # 加载 .env 文件（如果存在）
 if [ -f ".env" ]; then
     echo ">>> 加载 .env 配置..."
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
+    while IFS= read -r env_line; do
+        eval "export ${env_line}"
+    done < <(
+        "${VENV_PYTHON}" - <<'PY'
+from dotenv import dotenv_values
+import shlex
+
+for key, value in dotenv_values(".env").items():
+    if key is None or value is None:
+        continue
+    print(f"{key}={shlex.quote(str(value))}")
+PY
+    )
 fi
 
 HOST="${HOST:-$DEFAULT_HOST}"

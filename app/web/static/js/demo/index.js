@@ -96,6 +96,18 @@ function setCachedReportHtml(task, lang, html) {
     // Ignore storage failures and keep rendering live output.
   }
 }
+
+function getAssetSummary(task) {
+  return task?.site_asset_summary || task?.result?.discovery?.asset_summary || task?.steps?.discovery?.data?.asset_summary || null;
+}
+
+function formatAssetCounts(summary, lang) {
+  if (!summary?.enabled) return tx(lang, '文件缓存', 'File cache');
+  const urls = Number(summary.stored_url_count || 0);
+  const snapshots = Number(summary.stored_snapshot_count || 0);
+  return tx(lang, `${urls} URL / ${snapshots} 快照`, `${urls} URLs / ${snapshots} snapshots`);
+}
+
 function renderReport(task) {
   const host = $('summary-text');
   const lang = getReportLang(task);
@@ -160,6 +172,7 @@ function renderReport(task) {
     currentTask = task || null;
     currentTaskId     = task.task_id || null;
     currentTaskStatus = task.status  || 'idle';
+    const assetSummary = getAssetSummary(task);
     if (task.task_type && $('task-type').value !== task.task_type) {
       $('task-type').value = task.task_type;
     }
@@ -176,6 +189,11 @@ function renderReport(task) {
     $('cached-flag').textContent = task.cached ? '是 ✓' : '否';
     $('llm-model-used-flag').textContent = task.llm_model_used ? '是 ✓' : '否';
     $('mode-display').textContent = task.mode === 'premium' ? '会员版' : (task.mode ? '普通版' : '—');
+    $('storage-backend').textContent = assetSummary?.backend ? assetSummary.backend : (task.storage_backend || 'file');
+    $('asset-counts').textContent = formatAssetCounts(assetSummary, getReportLang(task));
+    $('asset-reuse').textContent = assetSummary?.enabled
+      ? `${assetSummary.reused_snapshot_count || 0} / ${assetSummary.fetched_snapshot_count || 0}`
+      : tx(getReportLang(task), '未启用', 'Disabled');
     $('current-mode-display').textContent = task.mode === 'premium'
       ? '会员版（规则 + OpenRouter）'
       : (task.mode ? '普通版（规则）' : '—');
@@ -313,7 +331,8 @@ function renderReport(task) {
       feedback_lang: $('feedback-lang').value
     };
     if (!isContentAudit && $('full-audit').checked) {
-      body.max_pages = Number($('max-pages').value || 12);
+      const parsedPages = Number($('max-pages').value || 12);
+      body.max_pages = Math.max(5, Math.min(10000, Number.isFinite(parsedPages) ? parsedPages : 12));
     }
     if (mode === 'premium') {
       body.llm = { provider: 'openrouter' };
@@ -396,6 +415,9 @@ function renderReport(task) {
     $('cached-flag').textContent = '否';
     $('llm-model-used-flag').textContent = '否';
     $('mode-display').textContent = '—';
+    $('storage-backend').textContent = '—';
+    $('asset-counts').textContent = '—';
+    $('asset-reuse').textContent = '—';
     $('current-mode-display').textContent = '—';
     $('export-btn').disabled = true;
     setStatusBadge('idle');

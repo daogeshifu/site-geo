@@ -309,6 +309,18 @@ MAX_SITEMAP_URLS=50
 MAX_SITEMAP_INDEXES=10
 CACHE_TTL_DAYS=7
 CACHE_DIR=.cache/audits
+MYSQL_ENABLED=false
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_DATABASE=site_geo_audit
+MYSQL_USER=site_geo_audit
+MYSQL_PASSWORD=
+MYSQL_CONNECT_TIMEOUT_SECONDS=5
+MYSQL_READ_TIMEOUT_SECONDS=15
+MYSQL_WRITE_TIMEOUT_SECONDS=15
+MYSQL_STORE_RAW_HTML=false
+MYSQL_STORE_PARSED_CONTENT=true
+DISCOVERY_FETCH_CONCURRENCY=8
 DEFAULT_USER_AGENT=GEOAuditBot/1.0 (+https://example.com/bot)
 ALLOW_PLAYWRIGHT=false
 ```
@@ -332,6 +344,27 @@ SEMRUSH_API_KEY=
 SEMRUSH_BASE_URL=https://api.semrush.com/
 SEMRUSH_TARGET_TYPE=root_domain
 ```
+
+### MySQL 站点资产库
+
+启用后，系统会将站点主记录、URL 清单、页面快照和任务记录写入 MySQL：
+
+- `geo_sites`
+- `geo_urls`
+- `geo_page_snapshots`
+- `geo_audit_tasks`
+
+初始化表结构：
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/init_mysql_schema.py
+```
+
+建表 SQL 位于：
+
+- `sql/mysql/001_geo_asset_schema.sql`
+
+启用后，`discovery` 会优先复用 MySQL 中的站点资产；传入 `force_refresh=true` 时会清空该站点的页面快照并重新抓取。
 
 ---
 
@@ -398,6 +431,7 @@ curl -X POST http://127.0.0.1:8023/api/v1/audit/full \
 ```
 
 同步完整审计返回中同样包含 `summary.ai_perception`。
+当 MySQL 资产库启用时，`result.discovery.asset_summary` 会返回当前站点的 URL 存量、页面快照数量、URL 类型分布和快照复用情况。
 
 ### 单独调用 discovery
 

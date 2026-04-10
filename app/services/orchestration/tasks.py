@@ -38,6 +38,7 @@ class TaskService:
     def __init__(self) -> None:
         self.cache_service = CacheService()
         self.discovery_service = DiscoveryService()
+        self.asset_store = self.discovery_service.asset_store
         # 所有审计模块共享同一个 discovery_service 实例
         self.visibility_service = VisibilityService(self.discovery_service)
         self.technical_service = TechnicalService(self.discovery_service)
@@ -119,6 +120,7 @@ class TaskService:
             max_pages=request.max_pages,
             cached=bool(cached_record),
             force_refresh=request.force_refresh,
+            storage_backend=self.asset_store.backend,
             created_at=now,
             updated_at=now,
             step_order=step_order,
@@ -138,12 +140,26 @@ class TaskService:
             task.completed_at = now
             task.result = cached_record.payload
             task.llm_model_used = self._detect_llm_model_used(cached_record.payload)
+            discovery_payload = cached_record.payload.get("discovery") if isinstance(cached_record.payload, dict) else None
+            if isinstance(discovery_payload, dict) and discovery_payload.get("asset_summary"):
+                task.site_asset_summary = discovery_payload["asset_summary"]
+                task.storage_backend = discovery_payload["asset_summary"].get("backend", task.storage_backend)
             self.tasks[task_id] = task
+            if self.asset_store.available:
+                try:
+                    await self.asset_store.save_task(task)
+                except Exception:
+                    pass
             return task
 
         # 新任务：注册后在后台启动审计协程
         async with self._lock:
             self.tasks[task_id] = task
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
         asyncio.create_task(self._run_task(task_id))
         return task
 
@@ -185,6 +201,11 @@ class TaskService:
         task.status = "running"
         task.current_step = task.step_order[0] if task.step_order else "running"
         task.updated_at = self._utcnow()
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
         try:
             if task.task_type == "site_content_audit":
                 task.result = await self._run_site_content_task(task)
@@ -214,17 +235,34 @@ class TaskService:
             task.progress_percent = 100
             task.completed_at = self._utcnow()
             task.updated_at = task.completed_at
+            if self.asset_store.available:
+                try:
+                    await self.asset_store.save_task(task)
+                except Exception:
+                    pass
         except Exception as exc:
             # 任何步骤失败都标记整体任务失败
             task.status = "failed"
             task.error = str(exc)
             task.current_step = "failed"
             task.updated_at = self._utcnow()
+            if self.asset_store.available:
+                try:
+                    await self.asset_store.save_task(task)
+                except Exception:
+                    pass
 
     async def _run_site_geo_task(self, task: AuditTask) -> dict:
         await self._update_step(task, "discovery", "running")
-        discovery = await self.discovery_service.discover(task.url, full_audit=task.full_audit, max_pages=task.max_pages)
+        discovery = await self.discovery_service.discover(
+            task.url,
+            full_audit=task.full_audit,
+            max_pages=task.max_pages,
+            force_refresh=task.force_refresh,
+        )
         discovery_payload = discovery.model_dump()
+        task.site_asset_summary = discovery.asset_summary
+        task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
 
         module_coroutines = {
@@ -294,8 +332,15 @@ class TaskService:
 
     async def _run_site_content_task(self, task: AuditTask) -> dict:
         await self._update_step(task, "discovery", "running")
-        discovery = await self.discovery_service.discover(task.url, full_audit=False, max_pages=5)
+        discovery = await self.discovery_service.discover(
+            task.url,
+            full_audit=False,
+            max_pages=5,
+            force_refresh=task.force_refresh,
+        )
         discovery_payload = discovery.model_dump()
+        task.site_asset_summary = discovery.asset_summary
+        task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
 
         await self._update_step(task, "content", "running")
