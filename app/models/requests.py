@@ -44,6 +44,7 @@ class UrlRequest(BaseModel):
     full_audit: bool = False
     max_pages: int = Field(default=12, ge=5, le=10000)
     feedback_lang: FeedbackLang = "en"
+    build_knowledge_graph: bool = True
 
 
 class AuditModuleRequest(UrlRequest):

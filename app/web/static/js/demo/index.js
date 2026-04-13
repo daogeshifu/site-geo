@@ -1,4 +1,5 @@
 import { renderContentAuditReport } from './content-report.js';
+import { renderKnowledgeGraph } from './knowledge-graph.js';
 import { renderSiteAuditReport } from './site-report.js';
 import {
   getTaskStepOrder,
@@ -17,6 +18,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     $(`tab-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'graph' && currentTask?.task_id && currentTask?.build_knowledge_graph !== false) {
+      loadKnowledgeGraph(currentTask).catch(() => {});
+    }
   });
 });
 
@@ -34,9 +38,12 @@ $('toast-close').addEventListener('click', () => $('toast').classList.remove('sh
 
 /* ── State ── */
 let pollTimer = null;
+let knowledgeGraphPollTimer = null;
 let currentTaskId = null;
 let currentTaskStatus = 'idle';
 let currentTask = null;
+let currentKnowledgeGraph = null;
+let knowledgeGraphLoading = false;
 const REPORT_CACHE_PREFIX = 'geo-audit-report:';
 
 function getSelectedTaskType() {
@@ -105,6 +112,14 @@ function formatAssetCounts(summary, lang) {
   if (!summary?.enabled) return tx(lang, '文件缓存', 'File cache');
   const urls = Number(summary.stored_url_count || 0);
   const snapshots = Number(summary.stored_snapshot_count || 0);
+  const graph = summary?.knowledge_graph;
+  if (graph?.built) {
+    return tx(
+      lang,
+      `${urls} URL / ${snapshots} 快照 / 图谱 ${Number(graph.entity_count || 0)} 实体 ${Number(graph.edge_count || 0)} 关系`,
+      `${urls} URLs / ${snapshots} snapshots / Graph ${Number(graph.entity_count || 0)} entities ${Number(graph.edge_count || 0)} edges`
+    );
+  }
   return tx(lang, `${urls} URL / ${snapshots} 快照`, `${urls} URLs / ${snapshots} snapshots`);
 }
 
@@ -132,6 +147,165 @@ function renderReport(task) {
     return;
   }
   renderSiteAuditReport({ task, host, lang, setCachedReportHtml });
+}
+
+function buildRawPayload(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
+  return {
+    task: task || null,
+    knowledge_graph: knowledgeGraph || null
+  };
+}
+
+function renderRawPayload(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
+  $('json-output').textContent = JSON.stringify(buildRawPayload(task, knowledgeGraph), null, 2);
+}
+
+function renderKnowledgeGraphPanel(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
+  renderKnowledgeGraph({
+    task,
+    graph: knowledgeGraph,
+    host: $('graph-output'),
+    lang: getReportLang(task)
+  });
+}
+
+function setKnowledgeGraphPlaceholder(task = currentTask, note = null) {
+  const lang = getReportLang(task);
+  currentKnowledgeGraph = {
+    task_id: task?.task_id || null,
+    backend: task?.storage_backend || getAssetSummary(task)?.backend || 'file',
+    available: Boolean(task?.build_knowledge_graph),
+    built: false,
+    note: note || (
+      task?.build_knowledge_graph === false
+        ? tx(lang, '当前任务未开启知识图谱构建。', 'Knowledge graph build is disabled for this task.')
+        : tx(lang, '等待任务完成后返回知识图谱结构。', 'Waiting for the task to finish before loading the knowledge graph.')
+    ),
+    task: task ? {
+      task_id: task.task_id,
+      site_id: getAssetSummary(task)?.site_id || null,
+      domain: task.domain,
+      status: task.status,
+      url: task.url,
+      normalized_url: task.normalized_url,
+      full_audit: task.full_audit,
+      requested_max_pages: task.max_pages,
+      created_at: task.created_at,
+      updated_at: task.updated_at,
+      completed_at: task.completed_at
+    } : null,
+    site_id: getAssetSummary(task)?.site_id || null,
+    graph_version: null,
+    built_at: null,
+    summary: {
+      entity_count: 0,
+      edge_count: 0,
+      evidence_count: 0,
+      source_snapshot_count: 0,
+      entity_type_counts: {},
+      relation_type_counts: {}
+    },
+    site: {},
+    entities: [],
+    edges: [],
+    evidence: [],
+    source_pages: []
+  };
+  renderKnowledgeGraphPanel(task, currentKnowledgeGraph);
+  renderRawPayload(task, currentKnowledgeGraph);
+}
+
+function clearKnowledgeGraphPolling() {
+  if (knowledgeGraphPollTimer) {
+    clearInterval(knowledgeGraphPollTimer);
+    knowledgeGraphPollTimer = null;
+  }
+}
+
+function shouldPollKnowledgeGraph(task = currentTask, graph = currentKnowledgeGraph) {
+  if (!task?.task_id || task?.build_knowledge_graph === false) return false;
+  if (task.status === 'failed') return false;
+  return graph?.built !== true;
+}
+
+function ensureKnowledgeGraphPolling(task = currentTask) {
+  if (!shouldPollKnowledgeGraph(task, currentKnowledgeGraph)) {
+    clearKnowledgeGraphPolling();
+    return;
+  }
+  if (knowledgeGraphPollTimer) return;
+  knowledgeGraphPollTimer = setInterval(() => {
+    if (!shouldPollKnowledgeGraph(currentTask, currentKnowledgeGraph)) {
+      clearKnowledgeGraphPolling();
+      return;
+    }
+    loadKnowledgeGraph(currentTask).catch(() => {});
+  }, 1500);
+}
+
+async function loadKnowledgeGraph(task = currentTask) {
+  if (!task?.task_id) {
+    setKnowledgeGraphPlaceholder(task, tx(getReportLang(task), '尚未生成任务 ID。', 'Task ID is not available yet.'));
+    clearKnowledgeGraphPolling();
+    return;
+  }
+  if (task.build_knowledge_graph === false) {
+    setKnowledgeGraphPlaceholder(task);
+    clearKnowledgeGraphPolling();
+    return;
+  }
+  if (knowledgeGraphLoading) {
+    return;
+  }
+  knowledgeGraphLoading = true;
+  try {
+    const res = await fetch(`/api/v1/tasks/${task.task_id}/knowledge-graph`);
+    const payload = await res.json();
+    if (!payload.success) throw new Error(payload.message || 'knowledge graph load failed');
+    currentKnowledgeGraph = payload.data;
+  } catch (err) {
+    currentKnowledgeGraph = {
+      task_id: task.task_id,
+      backend: getAssetSummary(task)?.backend || task.storage_backend || 'file',
+      available: false,
+      built: false,
+      note: tx(getReportLang(task), '知识图谱接口请求失败，请稍后重试。', 'Knowledge graph request failed. Please retry later.'),
+      task: {
+        task_id: task.task_id,
+        site_id: getAssetSummary(task)?.site_id || null,
+        domain: task.domain,
+        status: task.status,
+        url: task.url,
+        normalized_url: task.normalized_url,
+        full_audit: task.full_audit,
+        requested_max_pages: task.max_pages,
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+        completed_at: task.completed_at
+      },
+      site_id: getAssetSummary(task)?.site_id || null,
+      graph_version: null,
+      built_at: null,
+      summary: {
+        entity_count: 0,
+        edge_count: 0,
+        evidence_count: 0,
+        source_snapshot_count: 0,
+        entity_type_counts: {},
+        relation_type_counts: {}
+      },
+      site: {},
+      entities: [],
+      edges: [],
+      evidence: [],
+      source_pages: []
+    };
+  } finally {
+    knowledgeGraphLoading = false;
+  }
+  renderKnowledgeGraphPanel(task, currentKnowledgeGraph);
+  renderRawPayload(task, currentKnowledgeGraph);
+  ensureKnowledgeGraphPolling(task);
 }
 
   function renderTimeline(steps) {
@@ -178,6 +352,9 @@ function renderReport(task) {
     }
     if (task.feedback_lang && $('feedback-lang').value !== task.feedback_lang) {
       $('feedback-lang').value = task.feedback_lang;
+    }
+    if (typeof task.build_knowledge_graph === 'boolean') {
+      $('build-knowledge-graph').checked = task.build_knowledge_graph;
     }
     applyTaskTypeUi(task.task_type);
     const shortId = task.task_id ? task.task_id.slice(0, 10) + '…' : '—';
@@ -257,10 +434,11 @@ function renderReport(task) {
       el.classList.remove('placeholder');
     }
     renderReport(task);
-    $('json-output').textContent = JSON.stringify(task.result || task, null, 2);
+    await loadKnowledgeGraph(task);
     if (task.status === 'completed' || task.status === 'failed') {
       resetBtn();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (task.status === 'failed') clearKnowledgeGraphPolling();
       if (task.status === 'failed') showToast(task.error || '任务执行失败');
       else showToast('审计已完成', 'success');
     }
@@ -296,6 +474,7 @@ function renderReport(task) {
   /* ── Start audit ── */
   async function startAudit() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    clearKnowledgeGraphPolling();
 
     const btn = $('submit-btn');
     btn.disabled = true;
@@ -303,8 +482,10 @@ function renderReport(task) {
     const taskType = getSelectedTaskType();
     const isContentAudit = taskType === 'site_content_audit';
     currentTask = { task_type: taskType, status: 'queued' };
+    currentKnowledgeGraph = null;
     currentTaskId = null;
     currentTaskStatus = 'queued';
+    knowledgeGraphLoading = false;
     applyTaskTypeUi(taskType);
 
     const summaryEl = $('summary-text');
@@ -317,7 +498,7 @@ function renderReport(task) {
       ? '任务已创建，等待后台返回内容审计结果……<br />报告将在结果完成后自动生成。'
       : '任务已创建，等待后台返回各阶段结果……<br />报告将在结果完成后自动生成。';
     $('llm-notes').textContent = '等待会员增强状态。';
-    $('json-output').textContent = '{}';
+    setKnowledgeGraphPlaceholder(currentTask);
     $('export-btn').disabled = true;
     renderTimeline({});
 
@@ -328,7 +509,8 @@ function renderReport(task) {
       mode,
       force_refresh: $('force').checked,
       full_audit: !isContentAudit && $('full-audit').checked,
-      feedback_lang: $('feedback-lang').value
+      feedback_lang: $('feedback-lang').value,
+      build_knowledge_graph: $('build-knowledge-graph').checked
     };
     if (!isContentAudit && $('full-audit').checked) {
       const parsedPages = Number($('max-pages').value || 12);
@@ -355,7 +537,7 @@ function renderReport(task) {
       renderTimeline(task.steps);
       renderLlmStatus(task);
       renderReport(task);
-      $('json-output').textContent = JSON.stringify(task.result || task, null, 2);
+      await loadKnowledgeGraph(task);
 
       if (task.status === 'completed') {
         resetBtn();
@@ -368,9 +550,11 @@ function renderReport(task) {
         return;
       }
 
+      ensureKnowledgeGraphPolling(task);
       pollTimer = setInterval(() => {
         pollTask(task.task_id).catch(err => {
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          clearKnowledgeGraphPolling();
           resetBtn();
           showToast(err.message);
         });
@@ -405,9 +589,12 @@ function renderReport(task) {
     $('model').style.opacity = isPremium ? '1' : '0.45';
   });
   $('task-type').addEventListener('change', () => {
+    clearKnowledgeGraphPolling();
     currentTask = { task_type: getSelectedTaskType(), status: 'idle' };
+    currentKnowledgeGraph = null;
     currentTaskId = null;
     currentTaskStatus = 'idle';
+    knowledgeGraphLoading = false;
     $('task-id').textContent = '—';
     $('current-step').textContent = '—';
     $('progress').textContent = '0%';
@@ -423,6 +610,7 @@ function renderReport(task) {
     setStatusBadge('idle');
     applyTaskTypeUi();
     renderTimeline({});
+    setKnowledgeGraphPlaceholder(currentTask, tx(getReportLang(currentTask), '等待任务开始后展示知识图谱。', 'Knowledge graph will appear after the task starts.'));
   });
   $('feedback-lang').addEventListener('change', () => {
     applyTaskTypeUi();
@@ -433,6 +621,8 @@ function renderReport(task) {
       return;
     }
     renderReport(currentTask);
+    renderKnowledgeGraphPanel(currentTask, currentKnowledgeGraph);
+    renderRawPayload(currentTask, currentKnowledgeGraph);
   });
   $('full-audit').addEventListener('change', () => {
     const enabled = $('full-audit').checked;
@@ -443,3 +633,4 @@ function renderReport(task) {
   /* ── Init ── */
   applyTaskTypeUi();
   renderTimeline({});
+  setKnowledgeGraphPlaceholder(currentTask, tx(getReportLang(currentTask), '等待任务开始后展示知识图谱。', 'Knowledge graph will appear after the task starts.'));

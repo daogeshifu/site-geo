@@ -49,6 +49,7 @@ class AuditTask(BaseModel):
     observation: ObservationInput | None = None
     full_audit: bool = False
     max_pages: int = 12
+    build_knowledge_graph: bool = True
     status: TaskStatus = "queued"         # 任务整体状态
     current_step: str = "queued"          # 当前正在执行的步骤名称
     progress_percent: int = 0             # 完成进度百分比（0-100）

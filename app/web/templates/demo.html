@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/demo.css" />
+  <link rel="stylesheet" href="/static/css/demo.css?v=20260413-graph-layout" />
 </head>
 <body>
 
@@ -108,6 +108,13 @@
               <span class="toggle-hint">忽略一周内的历史结果</span>
             </label>
           </div>
+          <div class="field">
+            <label for="build-knowledge-graph" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
+              <input id="build-knowledge-graph" type="checkbox" checked />
+              <span class="toggle-lbl">构建站点知识图谱</span>
+              <span class="toggle-hint">基于 MySQL 快照做实体关系投影</span>
+            </label>
+          </div>
           <div id="full-audit-row" class="row-2">
             <div class="field">
               <label for="full-audit" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
@@ -192,6 +199,7 @@
   <!-- 结果区 -->
   <div class="tabs-bar">
     <button class="tab-btn active" data-tab="summary">报告</button>
+    <button class="tab-btn" data-tab="graph">知识图谱</button>
     <button class="tab-btn" data-tab="llm">AI 增强</button>
     <button class="tab-btn" data-tab="compare">版本对比</button>
     <button class="tab-btn" data-tab="json">原始数据</button>
@@ -200,6 +208,10 @@
 
     <div id="tab-summary" class="tab-panel active">
       <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、6 平台适配、可选 Observation Layer、非首页提示、full audit 逐页诊断、关键问题、行动计划与 snapshot 证据。</div>
+    </div>
+
+    <div id="tab-graph" class="tab-panel">
+      <div id="graph-output" class="report-empty placeholder">等待任务完成后生成知识图谱。将展示站点、页面、产品/服务、外部引用、sameAs 关系及证据样本。</div>
     </div>
 
     <div id="tab-llm" class="tab-panel">
@@ -258,7 +270,7 @@
     <div id="tab-json" class="tab-panel">
       <div class="json-shell">
         <div class="json-toolbar">
-          <span class="json-title">Raw JSON</span>
+          <span class="json-title">Task + Knowledge Graph JSON</span>
           <button id="copy-json-btn" type="button" class="btn-json">复制原始数据</button>
         </div>
         <pre id="json-output" class="json-out">{}</pre>
@@ -397,6 +409,7 @@
             <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；选择 <code>zh</code> 时，JSON key 保持英文，问题、建议、摘要、维度展示名和大部分用户可读 value 尽量返回中文</span></div>
             <div class="param-row"><span class="param-key">full_audit</span><span class="param-type">boolean</span><span class="param-desc">可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></span></div>
             <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">仅 full audit 生效，范围 5-50，默认 12</span></div>
+            <div class="param-row"><span class="param-key">build_knowledge_graph</span><span class="param-type">boolean</span><span class="param-desc">是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>true</code>，失败不会中断审计</span></div>
             <div class="param-row"><span class="param-key">observation</span><span class="param-type">object</span><span class="param-desc">可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</span></div>
             <div class="param-row"><span class="param-key">llm.provider</span><span class="param-type">string</span><span class="param-desc">premium 模式下固定 <code>"openrouter"</code></span></div>
             <div class="param-row"><span class="param-key">llm.model</span><span class="param-type">string</span><span class="param-desc">如 <code>"openai/gpt-4.1"</code>、<code>"anthropic/claude-sonnet-4.6"</code></span></div>
@@ -407,6 +420,7 @@
   "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12,
+  "build_knowledge_graph": true,
   "force_refresh": false,
   "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" }
 }</pre></div>
@@ -467,6 +481,17 @@
       <div class="api-step">
         <div class="api-step-hdr">
           <div class="api-num">3</div>
+          <span class="api-step-title">获取任务知识图谱（可选）</span>
+        </div>
+        <div class="api-step-body">
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/knowledge-graph</div>
+          <div class="api-desc">返回当前任务对应的站点知识图谱结构数据，单个响应内包含 summary、site、entities、edges、evidence 与 source_pages，适合前端可视化或后续图分析。</div>
+        </div>
+      </div>
+
+      <div class="api-step">
+        <div class="api-step-hdr">
+          <div class="api-num">4</div>
           <span class="api-step-title">导出 Markdown 报告（可选）</span>
         </div>
         <div class="api-step-body">
@@ -477,7 +502,7 @@
 
       <div class="api-step">
         <div class="api-step-hdr">
-          <div class="api-num">4</div>
+          <div class="api-num">5</div>
           <span class="api-step-title">单模块直调（高级用法）</span>
         </div>
         <div class="api-step-body">
@@ -491,10 +516,10 @@
             <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/full</code><span class="param-desc" style="margin-left:4px">全量同步审计（含 summary，无缓存）</span></div>
           </div>
           <div class="code-snippet"><pre>// 单模块请求体（Body 字段相同）
-{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12 }
+{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12, "build_knowledge_graph": true }
 
 // premium 模式下可附加 LLM 配置
-{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20,
+{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20, "build_knowledge_graph": true,
   "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" } }</pre></div>
         </div>
       </div>
@@ -511,6 +536,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260413-graph-layout"></script>
 </body>
 </html>

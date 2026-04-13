@@ -54,3 +54,12 @@ async def get_audit_task(task_id: str) -> dict:
     if not task:
         raise AppError(404, "task not found")
     return success_response(task.model_dump(mode="json"))
+
+
+@router.get("/{task_id}/knowledge-graph")
+async def get_task_knowledge_graph(task_id: str) -> dict:
+    """按任务 ID 返回对应的知识图谱结构数据。"""
+    graph_payload = await task_service.site_graph_service.load_task_graph(task_id)
+    if graph_payload is None:
+        raise AppError(404, "task knowledge graph not found")
+    return success_response(graph_payload)

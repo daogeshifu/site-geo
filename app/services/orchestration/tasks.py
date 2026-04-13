@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.exceptions import AppError
+from app.models.discovery import DiscoveryResult
 from app.models.task import AuditTask, TaskAuditRequest, TaskStep
 from app.services.infra.cache import CacheService
+from app.services.infra.site_graph import SiteKnowledgeGraphService
 from app.services.audit.content import ContentService
 from app.services.discovery.discovery import DiscoveryService
 from app.services.reporting.observation import ObservationService
@@ -18,6 +21,8 @@ from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
 from app.utils.localization import localize_payload
+
+logger = logging.getLogger(__name__)
 
 
 class TaskService:
@@ -39,6 +44,7 @@ class TaskService:
         self.cache_service = CacheService()
         self.discovery_service = DiscoveryService()
         self.asset_store = self.discovery_service.asset_store
+        self.site_graph_service = SiteKnowledgeGraphService()
         # 所有审计模块共享同一个 discovery_service 实例
         self.visibility_service = VisibilityService(self.discovery_service)
         self.technical_service = TechnicalService(self.discovery_service)
@@ -118,6 +124,7 @@ class TaskService:
             observation=request.observation,
             full_audit=request.full_audit,
             max_pages=request.max_pages,
+            build_knowledge_graph=request.build_knowledge_graph,
             cached=bool(cached_record),
             force_refresh=request.force_refresh,
             storage_backend=self.asset_store.backend,
@@ -150,6 +157,8 @@ class TaskService:
                     await self.asset_store.save_task(task)
                 except Exception:
                     pass
+            if request.build_knowledge_graph:
+                await self._maybe_build_knowledge_graph_from_payload(task, cached_record.payload)
             return task
 
         # 新任务：注册后在后台启动审计协程
@@ -252,6 +261,75 @@ class TaskService:
                 except Exception:
                     pass
 
+    async def _maybe_build_knowledge_graph(self, task: AuditTask, discovery: DiscoveryResult) -> None:
+        if not task.build_knowledge_graph or not self.site_graph_service.enabled:
+            logger.info(
+                "Knowledge graph build skipped",
+                extra={
+                    "task_id": task.task_id,
+                    "enabled": task.build_knowledge_graph,
+                    "mysql_enabled": self.site_graph_service.enabled,
+                    "reason": "disabled_by_request_or_mysql",
+                },
+            )
+            return
+        site_id = discovery.asset_summary.site_id if discovery.asset_summary else None
+        if site_id is None:
+            logger.info(
+                "Knowledge graph build skipped",
+                extra={
+                    "task_id": task.task_id,
+                    "enabled": task.build_knowledge_graph,
+                    "mysql_enabled": self.site_graph_service.enabled,
+                    "reason": "missing_site_id",
+                },
+            )
+            return
+        logger.info("Knowledge graph build started", extra={"task_id": task.task_id, "site_id": site_id})
+        graph_summary = await self.site_graph_service.build(site_id=site_id, discovery=discovery, task_id=task.task_id)
+        discovery.asset_summary.knowledge_graph = graph_summary
+        task.site_asset_summary = discovery.asset_summary
+        logger.info(
+            "Knowledge graph build completed",
+            extra={
+                "task_id": task.task_id,
+                "site_id": site_id,
+                "built": graph_summary.built,
+                "entity_count": graph_summary.entity_count,
+                "edge_count": graph_summary.edge_count,
+                "evidence_count": graph_summary.evidence_count,
+                "note": graph_summary.note,
+            },
+        )
+
+    async def _maybe_build_knowledge_graph_from_payload(self, task: AuditTask, payload: dict | None) -> None:
+        if not task.build_knowledge_graph or not isinstance(payload, dict):
+            return
+        discovery_payload = payload.get("discovery")
+        if not isinstance(discovery_payload, dict):
+            return
+        try:
+            discovery = DiscoveryResult.model_validate(discovery_payload)
+        except Exception:
+            return
+        site_id = discovery.asset_summary.site_id if discovery.asset_summary else None
+        if site_id is not None and self.site_graph_service.enabled:
+            graph_summary = await self.site_graph_service.ensure_task_snapshot(task_id=task.task_id, site_id=site_id)
+            if graph_summary.built:
+                discovery.asset_summary.knowledge_graph = graph_summary
+                task.site_asset_summary = discovery.asset_summary
+            else:
+                await self._maybe_build_knowledge_graph(task, discovery)
+        else:
+            await self._maybe_build_knowledge_graph(task, discovery)
+        if isinstance(task.result, dict):
+            task.result["discovery"] = discovery.model_dump(mode="json")
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
+
     async def _run_site_geo_task(self, task: AuditTask) -> dict:
         await self._update_step(task, "discovery", "running")
         discovery = await self.discovery_service.discover(
@@ -260,6 +338,7 @@ class TaskService:
             max_pages=task.max_pages,
             force_refresh=task.force_refresh,
         )
+        await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
@@ -338,6 +417,7 @@ class TaskService:
             max_pages=5,
             force_refresh=task.force_refresh,
         )
+        await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend

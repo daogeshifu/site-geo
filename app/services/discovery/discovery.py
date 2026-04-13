@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
 
@@ -48,6 +49,8 @@ from app.utils.url_utils import (
     normalize_url,
     registered_domain,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DiscoveryService:
@@ -348,6 +351,15 @@ class DiscoveryService:
                 max_pages=max_pages,
             )
             if cached_discovery:
+                logger.info(
+                    "Discovery loaded from MySQL cache",
+                    extra={
+                        "url": normalized_url,
+                        "site_id": initial_site.site_id,
+                        "full_audit": full_audit,
+                        "max_pages": max_pages,
+                    },
+                )
                 return cached_discovery
 
         asset_stats = {"reused": 0, "fetched": 0}
@@ -375,6 +387,16 @@ class DiscoveryService:
                         max_pages=max_pages,
                     )
                     if redirected_cached:
+                        logger.info(
+                            "Discovery loaded from redirected MySQL cache",
+                            extra={
+                                "url": normalized_url,
+                                "site_id": actual_site.site_id,
+                                "final_url": homepage_response.final_url,
+                                "full_audit": full_audit,
+                                "max_pages": max_pages,
+                            },
+                        )
                         return redirected_cached
                 if actual_site:
                     cached_snapshots = await self.asset_store.load_snapshot_map(actual_site.site_id)
@@ -575,8 +597,34 @@ class DiscoveryService:
                 reused_snapshot_count=asset_stats["reused"],
                 fetched_snapshot_count=asset_stats["fetched"],
             )
+            logger.info(
+                "Discovery asset persistence completed",
+                extra={
+                    "url": normalized_url,
+                    "site_id": actual_site.site_id,
+                    "backend": result.asset_summary.backend,
+                    "stored_url_count": result.asset_summary.stored_url_count,
+                    "stored_snapshot_count": result.asset_summary.stored_snapshot_count,
+                    "reused_snapshot_count": result.asset_summary.reused_snapshot_count,
+                    "fetched_snapshot_count": result.asset_summary.fetched_snapshot_count,
+                    "note": result.asset_summary.note,
+                },
+            )
         else:
             result.asset_summary.backend = "file"
-            result.asset_summary.note = "MySQL asset storage is disabled; discovery uses live fetch plus file cache."
+            if not self.asset_store.enabled:
+                result.asset_summary.note = "MySQL asset storage is disabled; discovery uses live fetch plus file cache."
+            else:
+                result.asset_summary.note = "MySQL asset storage is enabled, but site persistence was unavailable; discovery uses live fetch plus file cache."
+            logger.info(
+                "Discovery asset persistence skipped",
+                extra={
+                    "url": normalized_url,
+                    "backend": result.asset_summary.backend,
+                    "site_id": actual_site.site_id if actual_site else None,
+                    "asset_store_available": self.asset_store.available,
+                    "note": result.asset_summary.note,
+                },
+            )
 
         return result

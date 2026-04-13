@@ -23,6 +23,21 @@ class SiteAssetSummary(BaseModel):
     discovery_source_counts: dict[str, int] = Field(default_factory=dict)
     last_discovered_at: datetime | None = None
     last_snapshot_at: datetime | None = None
+    knowledge_graph: "KnowledgeGraphSummary" = Field(default_factory=lambda: KnowledgeGraphSummary())
+    note: str | None = None
+
+
+class KnowledgeGraphSummary(BaseModel):
+    """站点知识图谱构建概览。"""
+
+    enabled: bool = False
+    built: bool = False
+    site_id: int | None = None
+    entity_count: int = 0
+    edge_count: int = 0
+    evidence_count: int = 0
+    source_snapshot_count: int = 0
+    last_built_at: datetime | None = None
     note: str | None = None
 
 

@@ -79,6 +79,12 @@ class Settings:
     discovery_fetch_concurrency: int = _get_int("DISCOVERY_FETCH_CONCURRENCY", 8)
     mysql_retry_attempts: int = _get_int("MYSQL_RETRY_ATTEMPTS", 3)
     mysql_retry_backoff_ms: int = _get_int("MYSQL_RETRY_BACKOFF_MS", 300)
+    mysql_pool_size: int = _get_int("MYSQL_POOL_SIZE", 5)
+    mysql_pool_max_overflow: int = _get_int("MYSQL_POOL_MAX_OVERFLOW", 10)
+    mysql_pool_timeout_seconds: float = _get_float("MYSQL_POOL_TIMEOUT_SECONDS", 10.0)
+    mysql_pool_recycle_seconds: int = _get_int("MYSQL_POOL_RECYCLE_SECONDS", 1800)
+    mysql_pool_pre_ping: bool = _get_bool("MYSQL_POOL_PRE_PING", True)
+    mysql_recovery_probe_interval_seconds: float = _get_float("MYSQL_RECOVERY_PROBE_INTERVAL_SECONDS", 1.0)
 
     # 爬虫 UA 标识
     default_user_agent: str = os.getenv(

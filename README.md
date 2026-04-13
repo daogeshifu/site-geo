@@ -318,6 +318,12 @@ MYSQL_PASSWORD=
 MYSQL_CONNECT_TIMEOUT_SECONDS=5
 MYSQL_READ_TIMEOUT_SECONDS=15
 MYSQL_WRITE_TIMEOUT_SECONDS=15
+MYSQL_POOL_SIZE=5
+MYSQL_POOL_MAX_OVERFLOW=10
+MYSQL_POOL_TIMEOUT_SECONDS=10
+MYSQL_POOL_RECYCLE_SECONDS=1800
+MYSQL_POOL_PRE_PING=true
+MYSQL_RECOVERY_PROBE_INTERVAL_SECONDS=1
 MYSQL_STORE_RAW_HTML=false
 MYSQL_STORE_PARSED_CONTENT=true
 DISCOVERY_FETCH_CONCURRENCY=8
@@ -347,11 +353,15 @@ SEMRUSH_TARGET_TYPE=root_domain
 
 ### MySQL 站点资产库
 
-启用后，系统会将站点主记录、URL 清单、页面快照和任务记录写入 MySQL：
+启用后，系统会将站点主记录、URL 清单、页面快照、站点知识图谱投影和任务记录写入 MySQL：
 
 - `geo_sites`
 - `geo_urls`
 - `geo_page_snapshots`
+- `geo_graph_entities`
+- `geo_graph_edges`
+- `geo_graph_evidence`
+- `geo_site_graph_snapshots`
 - `geo_audit_tasks`
 
 初始化表结构：
@@ -365,6 +375,25 @@ PYTHONPATH=. .venv/bin/python scripts/init_mysql_schema.py
 - `sql/mysql/001_geo_asset_schema.sql`
 
 启用后，`discovery` 会优先复用 MySQL 中的站点资产；传入 `force_refresh=true` 时会清空该站点的页面快照并重新抓取。
+
+当前 MySQL 基础设施包含：
+
+- 连接池复用：`MYSQL_POOL_SIZE` + `MYSQL_POOL_MAX_OVERFLOW`
+- 借出前探活：`MYSQL_POOL_PRE_PING=true`
+- 长连接回收：`MYSQL_POOL_RECYCLE_SECONDS`
+- 短暂故障后的自动恢复尝试：`MYSQL_RECOVERY_PROBE_INTERVAL_SECONDS`
+- 操作级重试：`MYSQL_RETRY_ATTEMPTS` + `MYSQL_RETRY_BACKOFF_MS`
+
+异步任务创建时还支持：
+
+- `build_knowledge_graph`: 是否在 discovery 完成后，基于 MySQL 已保存的页面快照构建站点知识图谱投影；默认 `true`
+
+知识图谱构建是附加流程：
+
+- 默认不会改变现有审计打分逻辑
+- 构建失败不会让原有 audit 任务失败
+- 当前图谱以 MySQL 投影表形式落地，适合做站点级实体、页面、关系和证据溯源
+- 任务完成后可通过 `GET /api/v1/tasks/{task_id}/knowledge-graph` 拉取整张图谱结构数据
 
 ---
 

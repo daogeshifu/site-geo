@@ -3,13 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 from app.core.config import settings
 from app.models.discovery import DiscoveryResult, PageProfile
-from app.models.storage import PageSnapshotRecord, SiteAssetSummary, SiteRecord, SiteUrlRecord
+from app.models.storage import KnowledgeGraphSummary, PageSnapshotRecord, SiteAssetSummary, SiteRecord, SiteUrlRecord
 from app.models.task import AuditTask
 from app.services.infra.mysql import MySQLClient
 from app.utils.url_classifier import classify_url_type
@@ -45,19 +46,29 @@ class SiteAssetStore:
         self.enabled = self.client.enabled
         self.backend = "mysql" if self.enabled else "file"
         self._degraded = False
+        self._degraded_at = 0.0
 
     def _mark_degraded(self, exc: Exception, operation: str) -> None:
         logger.warning("MySQL asset storage degraded", extra={"operation": operation, "error": str(exc)})
         self._degraded = True
+        self._degraded_at = time.monotonic()
 
     def _recover_if_needed(self) -> None:
         if self.enabled and self._degraded:
             logger.info("MySQL asset storage recovered")
             self._degraded = False
+            self._degraded_at = 0.0
 
     @property
     def available(self) -> bool:
-        return self.enabled and not self._degraded
+        if not self.enabled:
+            return False
+        if not self._degraded:
+            return True
+        probe_interval = max(0.0, settings.mysql_recovery_probe_interval_seconds)
+        if probe_interval == 0:
+            return True
+        return (time.monotonic() - self._degraded_at) >= probe_interval
 
     async def ensure_site(self, url: str) -> SiteRecord | None:
         if not self.enabled:
@@ -79,7 +90,18 @@ class SiteAssetStore:
             )
             if row:
                 self._recover_if_needed()
-                return SiteRecord.model_validate(row)
+                record = SiteRecord.model_validate(row)
+                logger.info(
+                    "MySQL asset storage site resolved",
+                    extra={
+                        "operation": "ensure_site",
+                        "site_id": record.site_id,
+                        "domain": record.domain,
+                        "scope_root_url": record.scope_root_url,
+                        "site_created": False,
+                    },
+                )
+                return record
 
             await self.client.execute(
                 """
@@ -98,7 +120,19 @@ class SiteAssetStore:
                 (domain, scope_key),
             )
             self._recover_if_needed()
-            return SiteRecord.model_validate(created) if created else None
+            record = SiteRecord.model_validate(created) if created else None
+            if record is not None:
+                logger.info(
+                    "MySQL asset storage site resolved",
+                    extra={
+                        "operation": "ensure_site",
+                        "site_id": record.site_id,
+                        "domain": record.domain,
+                        "scope_root_url": record.scope_root_url,
+                        "site_created": True,
+                    },
+                )
+            return record
         except Exception as exc:
             self._mark_degraded(exc, "ensure_site")
             return None
@@ -268,6 +302,14 @@ class SiteAssetStore:
                 rows,
             )
             self._recover_if_needed()
+            logger.info(
+                "MySQL asset storage URLs upserted",
+                extra={
+                    "operation": "upsert_urls",
+                    "site_id": site_id,
+                    "row_count": len(rows),
+                },
+            )
         except Exception as exc:
             self._mark_degraded(exc, "upsert_urls")
 
@@ -313,6 +355,15 @@ class SiteAssetStore:
             self._mark_degraded(exc, "save_page_snapshot.fetch_url_id")
             return
         if not url_row:
+            logger.warning(
+                "MySQL asset storage snapshot skipped because URL row was missing",
+                extra={
+                    "operation": "save_page_snapshot.fetch_url_id",
+                    "site_id": site_id,
+                    "normalized_url": normalized_url,
+                    "final_url": normalized_final_url,
+                },
+            )
             return
 
         parsed_payload = dict(parsed)
@@ -375,6 +426,18 @@ class SiteAssetStore:
                 ),
             )
             self._recover_if_needed()
+            logger.info(
+                "MySQL asset storage page snapshot saved",
+                extra={
+                    "operation": "save_page_snapshot",
+                    "site_id": site_id,
+                    "url_id": int(url_row["url_id"]),
+                    "normalized_url": normalized_url,
+                    "final_url": normalized_final_url,
+                    "url_type": url_type or classify_url_type(normalized_final_url),
+                    "status_code": status_code,
+                },
+            )
         except Exception as exc:
             self._mark_degraded(exc, "save_page_snapshot")
 
@@ -435,6 +498,18 @@ class SiteAssetStore:
                 ),
             )
             self._recover_if_needed()
+            logger.info(
+                "MySQL asset storage discovery persisted",
+                extra={
+                    "operation": "save_discovery",
+                    "site_id": site_id,
+                    "total_url_count": total_url_count,
+                    "snapshot_url_count": snapshot_url_count,
+                    "reused_snapshot_count": reused_snapshot_count,
+                    "fetched_snapshot_count": fetched_snapshot_count,
+                    "profiled_page_count": discovery.profiled_page_count,
+                },
+            )
         except Exception as exc:
             self._mark_degraded(exc, "save_discovery.update_site")
             return SiteAssetSummary(backend="file", note="MySQL unavailable; discovery result not persisted.")
@@ -481,7 +556,38 @@ class SiteAssetStore:
         except Exception as exc:
             self._mark_degraded(exc, "build_asset_summary")
             return SiteAssetSummary(backend="file", note="MySQL unavailable; asset summary skipped.")
-        return SiteAssetSummary(
+        graph_summary = KnowledgeGraphSummary(enabled=self.enabled, site_id=site_id)
+        try:
+            graph_row = await self.client.fetchone(
+                """
+                SELECT entity_count, edge_count, evidence_count, source_snapshot_count, built_at, note
+                FROM geo_site_graph_snapshots
+                WHERE site_id=%s
+                ORDER BY built_at DESC, graph_snapshot_id DESC
+                LIMIT 1
+                """,
+                (site_id,),
+            )
+            if graph_row:
+                graph_summary = KnowledgeGraphSummary(
+                    enabled=True,
+                    built=True,
+                    site_id=site_id,
+                    entity_count=int(graph_row.get("entity_count") or 0),
+                    edge_count=int(graph_row.get("edge_count") or 0),
+                    evidence_count=int(graph_row.get("evidence_count") or 0),
+                    source_snapshot_count=int(graph_row.get("source_snapshot_count") or 0),
+                    last_built_at=graph_row.get("built_at"),
+                    note=graph_row.get("note"),
+                )
+        except Exception:
+            graph_summary = KnowledgeGraphSummary(
+                enabled=self.enabled,
+                built=False,
+                site_id=site_id,
+                note="Knowledge graph tables unavailable or not initialized.",
+            )
+        summary = SiteAssetSummary(
             enabled=True,
             backend=self.backend,
             site_id=site_id,
@@ -497,8 +603,24 @@ class SiteAssetStore:
             discovery_source_counts={row["discovery_source"]: int(row["total"]) for row in source_rows},
             last_discovered_at=(site_row or {}).get("last_discovered_at"),
             last_snapshot_at=(site_row or {}).get("last_snapshot_at"),
+            knowledge_graph=graph_summary,
             note=note,
         )
+        logger.info(
+            "MySQL asset storage summary built",
+            extra={
+                "operation": "build_asset_summary",
+                "site_id": site_id,
+                "stored_url_count": summary.stored_url_count,
+                "stored_snapshot_count": summary.stored_snapshot_count,
+                "reused_discovery": reused_discovery,
+                "reused_snapshot_count": reused_snapshot_count,
+                "fetched_snapshot_count": fetched_snapshot_count,
+                "inventory_satisfied": inventory_satisfied,
+                "knowledge_graph_built": summary.knowledge_graph.built if summary.knowledge_graph else False,
+            },
+        )
+        return summary
 
     async def save_task(self, task: AuditTask) -> None:
         if not self.enabled:
@@ -560,5 +682,17 @@ class SiteAssetStore:
                 ),
             )
             self._recover_if_needed()
+            logger.info(
+                "MySQL asset storage task persisted",
+                extra={
+                    "operation": "save_task",
+                    "task_id": task.task_id,
+                    "site_id": site_id,
+                    "domain": task.domain,
+                    "status": task.status,
+                    "cached": task.cached,
+                    "full_audit": task.full_audit,
+                },
+            )
         except Exception as exc:
             self._mark_degraded(exc, "save_task")
