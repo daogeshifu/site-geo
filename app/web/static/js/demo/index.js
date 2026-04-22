@@ -44,7 +44,247 @@ let currentTaskStatus = 'idle';
 let currentTask = null;
 let currentKnowledgeGraph = null;
 let knowledgeGraphLoading = false;
+let demoTokenRequired = true;
+let demoTokenVerified = false;
 const REPORT_CACHE_PREFIX = 'geo-audit-report:';
+const DEMO_API_PREFIX = '/api/v1/demo';
+const DEMO_TOKEN_HEADER = 'X-Demo-Token';
+const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token';
+
+function getSelectedDemoToken() {
+  return $('demo-token')?.value?.trim() || '';
+}
+
+function loadStoredDemoToken() {
+  try {
+    return sessionStorage.getItem(DEMO_TOKEN_STORAGE_KEY) || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function saveDemoToken(token) {
+  try {
+    if (token) {
+      sessionStorage.setItem(DEMO_TOKEN_STORAGE_KEY, token);
+    } else {
+      sessionStorage.removeItem(DEMO_TOKEN_STORAGE_KEY);
+    }
+  } catch (err) {
+    // Ignore storage failures.
+  }
+}
+
+function setVerifyButtonLoading(loading = false) {
+  const btn = $('verify-token-btn');
+  btn.disabled = loading || (!getSelectedDemoToken() && demoTokenRequired);
+  btn.textContent = loading ? '验证中…' : '验证 Token';
+}
+
+function setDemoAccessState({
+  badgeText,
+  badgeClass = 'b-default',
+  description,
+  hint,
+  ready = false
+}) {
+  const panel = $('demo-access-panel');
+  panel.classList.toggle('ready', ready);
+  panel.classList.toggle('locked', !ready);
+  $('demo-token-badge').textContent = badgeText;
+  $('demo-token-badge').className = `badge ${badgeClass}`;
+  $('demo-token-desc').textContent = description;
+  $('demo-token-hint').textContent = hint;
+}
+
+function syncSubmitButtonState() {
+  const btn = $('submit-btn');
+  if (btn.dataset.busy === 'true') {
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = !demoTokenVerified;
+  btn.innerHTML = demoTokenVerified ? '开始审计' : '输入 Token 后可开始审计';
+}
+
+function setSubmitBusy(label) {
+  const btn = $('submit-btn');
+  btn.dataset.busy = 'true';
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spin"></div> ${label}`;
+}
+
+function resetBtn() {
+  const btn = $('submit-btn');
+  btn.dataset.busy = 'false';
+  syncSubmitButtonState();
+}
+
+async function readErrorMessage(response, fallback) {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      const payload = await response.json();
+      return payload?.message || fallback;
+    } catch (err) {
+      return fallback;
+    }
+  }
+  try {
+    const text = await response.text();
+    return text || fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function buildDemoHeaders(baseHeaders = {}) {
+  const headers = new Headers(baseHeaders);
+  const token = getSelectedDemoToken();
+  if (token) {
+    headers.set(DEMO_TOKEN_HEADER, token);
+  }
+  return headers;
+}
+
+function handleDemoAuthFailure(message = 'Demo token required or invalid') {
+  demoTokenVerified = false;
+  saveDemoToken('');
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  clearKnowledgeGraphPolling();
+  setDemoAccessState({
+    badgeText: '验证失败',
+    badgeClass: 'b-danger',
+    description: '当前 demo 受 token 保护，请输入环境变量 DEMO_ACCESS_TOKEN 对应的值后再继续。',
+    hint: message
+  });
+  resetBtn();
+  $('export-btn').disabled = true;
+}
+
+async function demoApiFetch(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: buildDemoHeaders(options.headers || {})
+  });
+  if (response.status === 401) {
+    const message = await readErrorMessage(response, 'Demo token required or invalid');
+    handleDemoAuthFailure(message);
+    throw new Error(message);
+  }
+  return response;
+}
+
+async function verifyDemoToken({ silent = false } = {}) {
+  if (!demoTokenRequired) {
+    demoTokenVerified = true;
+    syncSubmitButtonState();
+    return true;
+  }
+  const token = getSelectedDemoToken();
+  if (!token) {
+    demoTokenVerified = false;
+    setDemoAccessState({
+      badgeText: '待验证',
+      badgeClass: 'b-default',
+      description: '当前 demo 受 token 保护。请先输入 DEMO_ACCESS_TOKEN 对应的值，再开始任务。',
+      hint: '输入并验证 token 后，页面才会解锁创建任务、轮询状态、查看图谱和导出报告。'
+    });
+    syncSubmitButtonState();
+    if (!silent) showToast('请先输入 demo token');
+    setVerifyButtonLoading(false);
+    return false;
+  }
+  setVerifyButtonLoading(true);
+  try {
+    const response = await demoApiFetch(`${DEMO_API_PREFIX}/verify-token`, { method: 'POST' });
+    const payload = await response.json();
+    if (!payload.success) throw new Error(payload.message || 'token 验证失败');
+    demoTokenVerified = true;
+    saveDemoToken(token);
+    setDemoAccessState({
+      badgeText: '已解锁',
+      badgeClass: 'b-success',
+      description: 'token 验证通过，当前页面已解锁，可继续创建任务并访问任务相关接口。',
+      hint: `后续 demo 请求会自动携带 ${DEMO_TOKEN_HEADER} 请求头。`,
+      ready: true
+    });
+    syncSubmitButtonState();
+    if (!silent) showToast('Token 验证成功', 'success');
+    return true;
+  } catch (err) {
+    demoTokenVerified = false;
+    saveDemoToken('');
+    setDemoAccessState({
+      badgeText: '验证失败',
+      badgeClass: 'b-danger',
+      description: '输入的 token 未通过校验，请确认和环境变量 DEMO_ACCESS_TOKEN 保持一致。',
+      hint: '验证失败后，开始审计按钮会继续保持禁用。'
+    });
+    syncSubmitButtonState();
+    if (!silent) showToast(err?.message || 'token 验证失败');
+    return false;
+  } finally {
+    setVerifyButtonLoading(false);
+  }
+}
+
+async function initDemoAccess() {
+  $('demo-token').value = loadStoredDemoToken();
+  setDemoAccessState({
+    badgeText: '检查中',
+    badgeClass: 'b-warn',
+    description: '正在读取 demo token 保护配置。',
+    hint: '如果当前环境启用了 DEMO_ACCESS_TOKEN，验证通过后才允许执行任务。'
+  });
+  try {
+    const response = await fetch(`${DEMO_API_PREFIX}/token-status`);
+    const payload = await response.json();
+    if (!payload.success) throw new Error(payload.message || 'token status load failed');
+    demoTokenRequired = payload.data?.token_required !== false;
+    if (!demoTokenRequired) {
+      demoTokenVerified = true;
+      $('demo-token').disabled = true;
+      $('verify-token-btn').disabled = true;
+      setDemoAccessState({
+        badgeText: '未启用',
+        badgeClass: 'b-success',
+        description: '当前环境未配置 DEMO_ACCESS_TOKEN，demo 页面已自动开放。',
+        hint: '如需保护该页面，可在 env 中设置 DEMO_ACCESS_TOKEN。',
+        ready: true
+      });
+      syncSubmitButtonState();
+      return;
+    }
+    $('demo-token').disabled = false;
+    setVerifyButtonLoading(false);
+    if (getSelectedDemoToken()) {
+      await verifyDemoToken({ silent: true });
+      return;
+    }
+    demoTokenVerified = false;
+    setDemoAccessState({
+      badgeText: '待验证',
+      badgeClass: 'b-default',
+      description: '当前 demo 受 token 保护。请先输入 DEMO_ACCESS_TOKEN 对应的值，再开始任务。',
+      hint: '验证通过后，开始审计、轮询状态、知识图谱和导出报告才会解锁。'
+    });
+  } catch (err) {
+    demoTokenRequired = true;
+    demoTokenVerified = false;
+    setDemoAccessState({
+      badgeText: '异常',
+      badgeClass: 'b-danger',
+      description: '读取 demo token 配置失败，页面暂时保持锁定。',
+      hint: err?.message || '无法确认 demo token 配置状态。'
+    });
+    showToast(err?.message || '获取 demo token 配置失败');
+  }
+  syncSubmitButtonState();
+}
 
 function getSelectedTaskType() {
   return $('task-type')?.value || 'site_geo_audit';
@@ -71,7 +311,7 @@ function applyTaskTypeUi(taskType = null) {
   if (currentTask && currentTask.task_type !== resolvedTaskType) {
     $('export-btn').disabled = true;
   } else if (currentTask) {
-    $('export-btn').disabled = currentTask.status !== 'completed' || config.exportable === false;
+    $('export-btn').disabled = !demoTokenVerified || currentTask.status !== 'completed' || config.exportable === false;
   }
 }
 
@@ -259,7 +499,7 @@ async function loadKnowledgeGraph(task = currentTask) {
   }
   knowledgeGraphLoading = true;
   try {
-    const res = await fetch(`/api/v1/tasks/${task.task_id}/knowledge-graph`);
+    const res = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${task.task_id}/knowledge-graph`);
     const payload = await res.json();
     if (!payload.success) throw new Error(payload.message || 'knowledge graph load failed');
     currentKnowledgeGraph = payload.data;
@@ -375,7 +615,7 @@ async function loadKnowledgeGraph(task = currentTask) {
       ? '会员版（规则 + OpenRouter）'
       : (task.mode ? '普通版（规则）' : '—');
     setStatusBadge(task.status || 'idle');
-    $('export-btn').disabled = task.status !== 'completed' || getTaskTypeConfig(task.task_type).exportable === false;
+    $('export-btn').disabled = !demoTokenVerified || task.status !== 'completed' || getTaskTypeConfig(task.task_type).exportable === false;
   }
 
   /* ── LLM status panel ── */
@@ -421,7 +661,7 @@ async function loadKnowledgeGraph(task = currentTask) {
 
   /* ── Poll ── */
   async function pollTask(taskId) {
-    const res     = await fetch(`/api/v1/tasks/${taskId}`);
+    const res     = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${taskId}`);
     const payload = await res.json();
     if (!payload.success) throw new Error(payload.message || '轮询失败');
     const task = payload.data;
@@ -444,13 +684,6 @@ async function loadKnowledgeGraph(task = currentTask) {
     }
   }
 
-  /* ── Reset button ── */
-  function resetBtn() {
-    const btn = $('submit-btn');
-    btn.disabled = false;
-    btn.innerHTML = '开始审计';
-  }
-
   async function copyJsonOutput() {
     const content = $('json-output').textContent || '{}';
     try {
@@ -471,14 +704,59 @@ async function loadKnowledgeGraph(task = currentTask) {
     }
   }
 
+  function getDownloadFilename(response, fallback = 'geo-audit-report.md') {
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    return match?.[1] || fallback;
+  }
+
+  function triggerDownload(blob, filename) {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+
+  async function exportCurrentReport() {
+    if (!demoTokenVerified) {
+      showToast('请先输入并验证 demo token');
+      return;
+    }
+    if (!currentTaskId || currentTaskStatus !== 'completed') {
+      showToast('任务尚未完成，暂时无法导出报告。');
+      return;
+    }
+    if (currentTask?.task_type === 'site_content_audit') {
+      showToast('当前内容审计暂不支持导出 Markdown 报告。');
+      return;
+    }
+    try {
+      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${currentTaskId}/report`);
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '报告导出失败'));
+      }
+      const blob = await response.blob();
+      triggerDownload(blob, getDownloadFilename(response));
+      showToast('报告导出成功', 'success');
+    } catch (err) {
+      showToast(err?.message || '报告导出失败');
+    }
+  }
+
   /* ── Start audit ── */
   async function startAudit() {
+    if (!demoTokenVerified) {
+      showToast('请先输入并验证 demo token');
+      return;
+    }
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     clearKnowledgeGraphPolling();
 
-    const btn = $('submit-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spin"></div> 提交中…';
+    setSubmitBusy('提交中…');
     const taskType = getSelectedTaskType();
     const isContentAudit = taskType === 'site_content_audit';
     currentTask = { task_type: taskType, status: 'queued' };
@@ -523,7 +801,7 @@ async function loadKnowledgeGraph(task = currentTask) {
     }
 
     try {
-      const res     = await fetch('/api/v1/tasks/audit', {
+      const res     = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/audit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -532,7 +810,7 @@ async function loadKnowledgeGraph(task = currentTask) {
       if (!payload.success) throw new Error(payload.message || '创建任务失败');
 
       const task = payload.data;
-      btn.innerHTML = '<div class="spin"></div> 审计中…';
+      setSubmitBusy('审计中…');
       setMeta(task);
       renderTimeline(task.steps);
       renderLlmStatus(task);
@@ -567,21 +845,35 @@ async function loadKnowledgeGraph(task = currentTask) {
   }
 
   /* ── Events ── */
+  $('verify-token-btn').addEventListener('click', () => {
+    verifyDemoToken().catch(err => {
+      showToast(err?.message || 'token 验证失败');
+    });
+  });
+  $('demo-token').addEventListener('input', () => {
+    if (!demoTokenRequired) return;
+    demoTokenVerified = false;
+    saveDemoToken('');
+    setVerifyButtonLoading(false);
+    setDemoAccessState({
+      badgeText: '待验证',
+      badgeClass: 'b-default',
+      description: '当前 demo 受 token 保护。请先输入 DEMO_ACCESS_TOKEN 对应的值，再开始任务。',
+      hint: 'token 输入发生变化后，需要重新点击“验证 Token”。'
+    });
+    syncSubmitButtonState();
+  });
+  $('demo-token').addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    verifyDemoToken().catch(err => {
+      showToast(err?.message || 'token 验证失败');
+    });
+  });
   $('submit-btn').addEventListener('click', startAudit);
   $('audit-form').addEventListener('submit', e => { e.preventDefault(); startAudit(); });
   $('copy-json-btn').addEventListener('click', copyJsonOutput);
-
-  $('export-btn').addEventListener('click', () => {
-    if (!currentTaskId || currentTaskStatus !== 'completed') {
-      showToast('任务尚未完成，暂时无法导出报告。');
-      return;
-    }
-    if (currentTask?.task_type === 'site_content_audit') {
-      showToast('当前内容审计暂不支持导出 Markdown 报告。');
-      return;
-    }
-    window.open(`/api/v1/tasks/${currentTaskId}/report`, '_blank');
-  });
+  $('export-btn').addEventListener('click', exportCurrentReport);
 
   $('mode').addEventListener('change', () => {
     const isPremium = $('mode').value === 'premium';
@@ -634,3 +926,7 @@ async function loadKnowledgeGraph(task = currentTask) {
   applyTaskTypeUi();
   renderTimeline({});
   setKnowledgeGraphPlaceholder(currentTask, tx(getReportLang(currentTask), '等待任务开始后展示知识图谱。', 'Knowledge graph will appear after the task starts.'));
+  syncSubmitButtonState();
+  initDemoAccess().catch(err => {
+    showToast(err?.message || '初始化 demo token 失败');
+  });

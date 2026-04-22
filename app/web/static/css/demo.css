@@ -170,6 +170,111 @@
     .page-title h1 { font-size: 21px; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.02em; }
     .page-title p { color: var(--muted); font-size: 13.5px; }
 
+    .access-panel {
+      margin-bottom: 16px;
+      padding: 18px 20px;
+      border: 1px solid rgba(15,23,42,0.08);
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(15,23,42,0.96) 0%, rgba(15,118,110,0.94) 100%),
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+      color: #f8fafc;
+      box-shadow: 0 18px 42px rgba(15,23,42,0.14);
+    }
+    .access-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .access-eyebrow {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,0.82);
+    }
+    .access-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .access-title-row h2 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+    }
+    .access-panel .badge {
+      background: rgba(255,255,255,0.12);
+      color: #ffffff;
+      border-color: rgba(255,255,255,0.16);
+    }
+    .access-panel .badge.b-success {
+      background: rgba(16,185,129,0.18);
+      color: #d1fae5;
+      border-color: rgba(52,211,153,0.28);
+    }
+    .access-panel .badge.b-danger {
+      background: rgba(239,68,68,0.18);
+      color: #fee2e2;
+      border-color: rgba(252,165,165,0.3);
+    }
+    .access-panel .badge.b-warn,
+    .access-panel .badge.b-default {
+      color: #f8fafc;
+    }
+    .access-panel p,
+    .access-hint {
+      color: rgba(226,232,240,0.88);
+    }
+    .access-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .access-field {
+      margin-bottom: 0;
+    }
+    .access-field > label {
+      color: rgba(226,232,240,0.78);
+    }
+    .access-field input[type="password"] {
+      width: 100%;
+      height: 44px;
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(248,250,252,0.96);
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .access-field input[type="password"]:focus {
+      outline: none;
+      border-color: rgba(52,211,153,0.72);
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+    }
+    .access-controls .btn {
+      min-width: 136px;
+      height: 44px;
+    }
+    .access-hint {
+      margin-top: 12px;
+      font-size: 13px;
+    }
+    .access-panel.locked {
+      border-color: rgba(248,113,113,0.24);
+      box-shadow: 0 18px 42px rgba(127,29,29,0.16);
+    }
+    .access-panel.ready {
+      border-color: rgba(52,211,153,0.26);
+    }
+
     .grid-top {
       display: grid;
       grid-template-columns: 1.15fr 0.85fr;
@@ -1554,6 +1659,8 @@
       .hdr-inner { flex-direction: column; align-items: flex-start; }
       .hdr-actions { justify-content: flex-start; }
       .hdr-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .access-controls { grid-template-columns: 1fr; }
+      .access-controls .btn { width: 100%; }
       .grid-top { grid-template-columns: 1fr; }
       .row-2 { grid-template-columns: 1fr; }
       .llm-stats { grid-template-columns: 1fr; }
@@ -1586,6 +1693,8 @@
       .hdr-actions { width: 100%; }
       .hdr-link { flex: 1 1 calc(50% - 8px); }
       .hdr-meta { grid-template-columns: 1fr; }
+      .access-panel { padding: 16px; }
+      .access-title-row h2 { font-size: 18px; }
       .graph-meta-grid { grid-template-columns: 1fr; }
       .report-meta-grid { grid-template-columns: 1fr; }
       .graph-stat-grid { grid-template-columns: 1fr; }

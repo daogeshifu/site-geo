@@ -63,6 +63,7 @@ class Settings:
     # 审计结果缓存配置
     cache_ttl_days: int = _get_int("CACHE_TTL_DAYS", 7)
     cache_dir: str = os.getenv("CACHE_DIR", ".cache/audits")
+    demo_access_token: str = os.getenv("DEMO_ACCESS_TOKEN", "").strip()
 
     # 站点资产库（MySQL）配置
     mysql_enabled: bool = _get_bool("MYSQL_ENABLED", False)

@@ -78,6 +78,10 @@ async def export_report(request: ReportExportRequest) -> dict:
 
 @router.get("/tasks/{task_id}/report", response_class=PlainTextResponse)
 async def export_task_report(task_id: str) -> PlainTextResponse:
+    return await build_task_report_response(task_id)
+
+
+async def build_task_report_response(task_id: str) -> PlainTextResponse:
     """从已完成任务中导出 Markdown 报告（文件下载）
 
     从任务存储中反序列化所有审计结果，渲染为 Markdown 报告，

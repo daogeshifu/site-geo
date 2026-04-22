@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/demo.css?v=20260413-graph-layout" />
+  <link rel="stylesheet" href="/static/css/demo.css?v=20260413-demo-token" />
 </head>
 <body>
 
@@ -33,12 +33,16 @@
       <code class="hdr-meta-code">/api/v1</code>
     </div>
     <div class="hdr-meta-card">
-      <span class="hdr-meta-label">Async Task</span>
-      <code class="hdr-meta-code">POST /api/v1/tasks/audit</code>
+      <span class="hdr-meta-label">Demo Task</span>
+      <code class="hdr-meta-code">POST /api/v1/demo/tasks/audit</code>
     </div>
     <div class="hdr-meta-card">
       <span class="hdr-meta-label">Task Status</span>
-      <code class="hdr-meta-code">GET /api/v1/tasks/{task_id}</code>
+      <code class="hdr-meta-code">GET /api/v1/demo/tasks/{task_id}</code>
+    </div>
+    <div class="hdr-meta-card">
+      <span class="hdr-meta-label">Demo Guard</span>
+      <code class="hdr-meta-code">Header: X-Demo-Token</code>
     </div>
   </div>
 </header>
@@ -48,6 +52,25 @@
     <h1 id="page-heading">网站 GEO 审计</h1>
     <p id="page-subtitle">提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
   </div>
+
+  <section class="access-panel" id="demo-access-panel">
+    <div class="access-copy">
+      <div class="access-eyebrow">Demo Access</div>
+      <div class="access-title-row">
+        <h2>输入访问 Token 后再开始执行</h2>
+        <span id="demo-token-badge" class="badge b-default">待验证</span>
+      </div>
+      <p id="demo-token-desc">当前 demo 支持在页面顶部输入访问 token。验证通过后，才能创建任务、轮询状态、查看图谱和导出报告。</p>
+    </div>
+    <div class="access-controls">
+      <div class="field access-field">
+        <label for="demo-token">Demo Token</label>
+        <input id="demo-token" type="password" placeholder="请输入 DEMO_ACCESS_TOKEN" autocomplete="current-password" />
+      </div>
+      <button id="verify-token-btn" type="button" class="btn btn-primary">验证 Token</button>
+    </div>
+    <div id="demo-token-hint" class="access-hint">输入并验证 token 后，底部“开始审计”按钮才会解锁。</div>
+  </section>
 
   <div class="grid-top">
 
@@ -129,7 +152,7 @@
             </div>
           </div>
           <div class="btn-row">
-            <button id="submit-btn" type="button" class="btn btn-primary">开始审计</button>
+            <button id="submit-btn" type="button" class="btn btn-primary" disabled>开始审计</button>
             <button id="export-btn" type="button" class="btn btn-ghost" disabled>导出报告</button>
           </div>
         </form>
@@ -400,7 +423,8 @@
           <span class="api-step-title">创建审计任务</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/tasks/audit</div>
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/demo/tasks/audit</div>
+          <div class="api-desc">Demo 页面调用时默认附带请求头 <code>X-Demo-Token</code>，只有 token 验证通过后才允许提交任务。</div>
           <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
@@ -434,7 +458,7 @@
           <span class="api-step-title">轮询任务状态</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}</div>
           <div class="api-desc">每隔 1–2 秒轮询一次。<code>status</code> 为 <code>"completed"</code> 或 <code>"failed"</code> 时停止。<code>steps</code> 字段实时反映各模块状态（pending / running / completed / failed）。完成后，<code>summary.ai_perception</code> 还会返回 AI 对站点的认知百分比分布和 4 个认知标签。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">status</span><span class="param-type">string</span><span class="param-desc">queued → running → completed | failed</span></div>
@@ -484,7 +508,7 @@
           <span class="api-step-title">获取任务知识图谱（可选）</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/knowledge-graph</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/knowledge-graph</div>
           <div class="api-desc">返回当前任务对应的站点知识图谱结构数据，单个响应内包含 summary、site、entities、edges、evidence 与 source_pages，适合前端可视化或后续图分析。</div>
         </div>
       </div>
@@ -495,7 +519,7 @@
           <span class="api-step-title">导出 Markdown 报告（可选）</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/report</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/report</div>
           <div class="api-desc">任务完成后可拉取完整 Markdown 报告，直接在浏览器渲染或保存为文件。仅在 <code>status=completed</code> 时有效。</div>
         </div>
       </div>
@@ -536,6 +560,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260413-graph-layout"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260413-demo-token"></script>
 </body>
 </html>
