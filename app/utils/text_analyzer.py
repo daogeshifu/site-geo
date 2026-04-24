@@ -3,44 +3,109 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.utils.url_utils import base_locale
 
-# FAQ 检测关键词（中英文）
-FAQ_PATTERNS = ["faq", "frequently asked questions", "常见问题", "问答"]
-# 作者信号正则模式（英文"by"前缀 + 中文"作者/编辑"）
-AUTHOR_PATTERNS = [r"\bby\s+[A-Z][a-z]+", r"\bauthor\b", r"\bwritten by\b", r"\b编辑\b", r"\b作者\b"]
-# 发布日期正则模式：YYYY-MM-DD / YYYY/MM/DD / 英文月份格式
-DATE_PATTERNS = [
-    r"\b\d{4}-\d{2}-\d{2}\b",
-    r"\b\d{4}/\d{2}/\d{2}\b",
-    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4}\b",
+FAQ_PATTERNS = {
+    "default": ["faq", "frequently asked questions", "常见问题", "问答"],
+    "de": ["häufig gestellte fragen", "faq", "fragen und antworten"],
+    "nl": ["veelgestelde vragen", "faq", "vragen en antwoorden"],
+    "fr": ["foire aux questions", "questions frequentes", "faq", "questions et reponses"],
+}
+AUTHOR_PATTERNS = {
+    "default": [r"\bby\s+[A-Z][a-z]+", r"\bauthor\b", r"\bwritten by\b", r"\b编辑\b", r"\b作者\b"],
+    "de": [r"\bvon\s+[A-ZÄÖÜ][\w-]+", r"\bautor\b", r"\bverfasst von\b", r"\bredaktion\b"],
+    "nl": [r"\bdoor\s+[A-Z][\w-]+", r"\bauteur\b", r"\bgeschreven door\b", r"\bredactie\b"],
+    "fr": [r"\bpar\s+[A-ZÀ-ÿ][\w-]+", r"\bauteur\b", r"\br[ée]dig[ée] par\b", r"\br[ée]daction\b"],
+}
+DATE_PATTERNS = {
+    "default": [
+        r"\b\d{4}-\d{2}-\d{2}\b",
+        r"\b\d{4}/\d{2}/\d{2}\b",
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4}\b",
+    ],
+    "de": [r"\b\d{1,2}\.\s*(?:jan|feb|mär|mae|apr|mai|jun|jul|aug|sep|okt|nov|dez)[a-zäöü]*\s+\d{4}\b"],
+    "nl": [r"\b\d{1,2}\s+(?:jan|feb|mrt|apr|mei|jun|jul|aug|sep|okt|nov|dec)[a-z]*\s+\d{4}\b"],
+    "fr": [r"\b\d{1,2}\s+(?:jan|f[ée]v|mar|avr|mai|juin|juil|ao[uû]t|sept|oct|nov|d[ée]c)[a-zéû]*\s+\d{4}\b"],
+}
+QUANT_PATTERNS = [
+    r"\b\d+(\.\d+)?%\b",
+    r"\$\d[\d,]*(?:\.\d+)?",
+    r"\b€\s?\d[\d.,]*\b",
+    r"\b\d[\d.,]*\s?(?:eur|euro|euros|usd|rmb)\b",
+    r"\b\d{2,}\b",
+    r"\bUSD\b",
+    r"\bRMB\b",
 ]
-# 量化数据正则模式：百分比、美元、大数字、货币单位
-QUANT_PATTERNS = [r"\b\d+(\.\d+)?%\b", r"\$\d[\d,]*(?:\.\d+)?", r"\b\d{2,}\b", r"\bUSD\b", r"\bRMB\b"]
-REFERENCE_PATTERNS = ["references", "sources", "bibliography", "works cited", "citations", "参考资料", "参考文献", "资料来源"]
-SUMMARY_PATTERNS = ["tl;dr", "summary", "key takeaways", "in brief", "quick answer", "overview", "摘要", "要点", "结论"]
-UPDATE_PATTERNS = ["last updated", "updated on", "updated:", "revision history", "changelog", "最近更新", "更新记录", "修订"]
+REFERENCE_PATTERNS = {
+    "default": ["references", "sources", "bibliography", "works cited", "citations", "参考资料", "参考文献", "资料来源"],
+    "de": ["quellen", "literatur", "referenzen", "nachweise"],
+    "nl": ["bronnen", "referenties", "literatuur"],
+    "fr": ["sources", "r[ée]f[ée]rences", "bibliographie"],
+}
+SUMMARY_PATTERNS = {
+    "default": ["tl;dr", "summary", "key takeaways", "in brief", "quick answer", "overview", "摘要", "要点", "结论"],
+    "de": ["kurzfassung", "zusammenfassung", "auf einen blick", "kurz gesagt"],
+    "nl": ["samenvatting", "kort gezegd", "in het kort", "snel antwoord"],
+    "fr": ["r[ée]sum[ée]", "en bref", "l'essentiel", "r[ée]ponse rapide"],
+}
+UPDATE_PATTERNS = {
+    "default": ["last updated", "updated on", "updated:", "revision history", "changelog", "最近更新", "更新记录", "修订"],
+    "de": ["aktualisiert am", "zuletzt aktualisiert", "versionsverlauf", "änderungsprotokoll"],
+    "nl": ["bijgewerkt op", "laatst bijgewerkt", "wijzigingslog", "revisiegeschiedenis"],
+    "fr": ["mis [àa] jour le", "derni[èe]re mise [àa] jour", "historique des modifications"],
+}
 INLINE_CITATION_PATTERNS = [
     r"\[\d{1,3}\]",
     r"\([A-Z][A-Za-z]+(?:\s+et al\.)?,\s*\d{4}\)",
     r"\bsource:\b",
     r"\baccording to\b",
+    r"\bquelle:\b",
+    r"\bbron:\b",
+    r"\bsource\s*:\b",
 ]
 GENERIC_ANCHOR_TEXTS = {
-    "click here",
-    "learn more",
-    "read more",
-    "more",
-    "details",
-    "here",
-    "this link",
-    "view more",
-    "see more",
-    "了解更多",
-    "点击这里",
-    "更多",
-    "详情",
-    "查看",
+    "default": {
+        "click here",
+        "learn more",
+        "read more",
+        "more",
+        "details",
+        "here",
+        "this link",
+        "view more",
+        "see more",
+        "了解更多",
+        "点击这里",
+        "更多",
+        "详情",
+        "查看",
+    },
+    "de": {"hier", "mehr", "mehr erfahren", "weiterlesen", "details ansehen"},
+    "nl": {"hier", "meer", "lees meer", "bekijk meer", "meer informatie"},
+    "fr": {"ici", "en savoir plus", "lire la suite", "plus", "voir plus", "détails"},
 }
+ANSWER_FIRST_PATTERNS = {
+    "default": ["we help", "we provide", "our service", "is a", "is an", "helps businesses", "can help"],
+    "de": ["wir helfen", "wir bieten", "ist ein", "ist eine", "kann helfen"],
+    "nl": ["wij helpen", "wij bieden", "is een", "kan helpen"],
+    "fr": ["nous aidons", "nous proposons", "est un", "est une", "peut aider"],
+}
+
+
+def _pattern_list(values: dict[str, list[str]], locale: str | None) -> list[str]:
+    resolved = base_locale(locale)
+    items = list(values.get("default", []))
+    if resolved and resolved in values:
+        items.extend(values[resolved])
+    return items
+
+
+def _anchor_texts(locale: str | None) -> set[str]:
+    resolved = base_locale(locale)
+    items = set(GENERIC_ANCHOR_TEXTS.get("default", set()))
+    if resolved and resolved in GENERIC_ANCHOR_TEXTS:
+        items.update(GENERIC_ANCHOR_TEXTS[resolved])
+    return items
 
 
 def estimate_word_count(text: str) -> int:
@@ -48,22 +113,22 @@ def estimate_word_count(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text or ""))
 
 
-def contains_faq(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+def contains_faq(text: str, headings: list[dict[str, str]] | list[Any], locale: str | None = None) -> bool:
     """检测页面是否包含 FAQ 内容（在正文和标题中搜索关键词）"""
     haystack = f"{text} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
-    return any(pattern in haystack for pattern in FAQ_PATTERNS)
+    return any(re.search(pattern, haystack, re.I) for pattern in _pattern_list(FAQ_PATTERNS, locale))
 
 
-def has_author_signals(text: str) -> bool:
+def has_author_signals(text: str, locale: str | None = None) -> bool:
     """检测页面是否包含作者署名信号（by X / author / 作者等）"""
     lowered = text or ""
-    return any(re.search(pattern, lowered, re.I) for pattern in AUTHOR_PATTERNS)
+    return any(re.search(pattern, lowered, re.I) for pattern in _pattern_list(AUTHOR_PATTERNS, locale))
 
 
-def has_publish_date(text: str) -> bool:
+def has_publish_date(text: str, locale: str | None = None) -> bool:
     """检测页面是否包含发布日期（YYYY-MM-DD 等格式）"""
     lowered = text or ""
-    return any(re.search(pattern, lowered, re.I) for pattern in DATE_PATTERNS)
+    return any(re.search(pattern, lowered, re.I) for pattern in _pattern_list(DATE_PATTERNS, locale))
 
 
 def has_quantified_data(text: str) -> bool:
@@ -75,10 +140,10 @@ def has_quantified_data(text: str) -> bool:
     return any(re.search(pattern, lowered, re.I) for pattern in QUANT_PATTERNS)
 
 
-def has_reference_section(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+def has_reference_section(text: str, headings: list[dict[str, str]] | list[Any], locale: str | None = None) -> bool:
     """检测页面是否存在参考资料/引用来源区块。"""
     haystack = f"{text} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
-    return any(pattern in haystack for pattern in REFERENCE_PATTERNS)
+    return any(re.search(pattern, haystack, re.I) for pattern in _pattern_list(REFERENCE_PATTERNS, locale))
 
 
 def has_inline_citations(text: str) -> bool:
@@ -87,19 +152,23 @@ def has_inline_citations(text: str) -> bool:
     return any(re.search(pattern, lowered, re.I) for pattern in INLINE_CITATION_PATTERNS)
 
 
-def has_tldr_summary(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+def has_tldr_summary(text: str, headings: list[dict[str, str]] | list[Any], locale: str | None = None) -> bool:
     """检测页面是否包含 TL;DR / summary / key takeaways 一类结论前置模块。"""
     haystack = f"{text[:1200]} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
-    return any(pattern in haystack for pattern in SUMMARY_PATTERNS)
+    return any(re.search(pattern, haystack, re.I) for pattern in _pattern_list(SUMMARY_PATTERNS, locale))
 
 
-def has_update_log(text: str, headings: list[dict[str, str]] | list[Any]) -> bool:
+def has_update_log(text: str, headings: list[dict[str, str]] | list[Any], locale: str | None = None) -> bool:
     """检测页面是否公开暴露了更新说明或修订历史。"""
     haystack = f"{text[:1600]} {' '.join(str(item.get('text', '')) for item in headings if isinstance(item, dict))}".lower()
-    return any(pattern in haystack for pattern in UPDATE_PATTERNS)
+    return any(re.search(pattern, haystack, re.I) for pattern in _pattern_list(UPDATE_PATTERNS, locale))
 
 
-def assess_link_context(internal_links: list[dict[str, Any]], external_links: list[dict[str, Any]]) -> dict[str, Any]:
+def assess_link_context(
+    internal_links: list[dict[str, Any]],
+    external_links: list[dict[str, Any]],
+    locale: str | None = None,
+) -> dict[str, Any]:
     """评估站内/站外链接锚文本是否足够描述性，便于 RAG 检索建立上下文。"""
 
     def _summary(links: list[dict[str, Any]]) -> tuple[int, float]:
@@ -109,10 +178,11 @@ def assess_link_context(internal_links: list[dict[str, Any]], external_links: li
             return 0, 0.0
 
         descriptive = 0
+        generic_texts = _anchor_texts(locale)
         for label in labels:
             normalized = re.sub(r"\s+", " ", label.lower()).strip()
             word_count = len(re.findall(r"\b\w+\b", normalized))
-            if normalized in GENERIC_ANCHOR_TEXTS:
+            if normalized in generic_texts:
                 continue
             if word_count >= 2 or len(normalized) >= 12:
                 descriptive += 1
@@ -140,7 +210,7 @@ def assess_link_context(internal_links: list[dict[str, Any]], external_links: li
     }
 
 
-def is_answer_first(text: str) -> bool:
+def is_answer_first(text: str, locale: str | None = None) -> bool:
     """检测页面是否采用"先答后述"结构（AI 引用友好的写作方式）
 
     检查前 80 个词是否包含直接回答性短语（"we help"/"is a"/"can help" 等）
@@ -148,15 +218,7 @@ def is_answer_first(text: str) -> bool:
     """
     words = re.findall(r"\S+", text or "")
     lead = " ".join(words[:80]).lower()
-    patterns = [
-        "we help",
-        "we provide",
-        "our service",
-        "is a",
-        "is an",
-        "helps businesses",
-        "can help",
-    ]
+    patterns = _pattern_list(ANSWER_FIRST_PATTERNS, locale)
     return len(words) >= 20 and any(pattern in lead for pattern in patterns)
 
 

@@ -8,6 +8,7 @@ from app.services.audit.base import AuditBaseService
 from app.services.audit.scoring import ScoringService
 from app.utils.heuristics import assess_render_blocking, assess_ssr_signal
 from app.utils.security_headers import evaluate_security_headers
+from app.utils.url_utils import base_locale, locales_match
 
 
 class TechnicalService(AuditBaseService):
@@ -63,13 +64,14 @@ class TechnicalService(AuditBaseService):
         discovery=None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        target_locale: str | None = None,
     ) -> TechnicalAuditResult:
         """执行技术基础审计
 
         注：technical 模块在 premium 模式下仍保持规则驱动（确定性结果）
         """
         started_at = time.perf_counter()
-        resolved = await self.ensure_discovery(url, discovery)
+        resolved = await self.ensure_discovery(url, discovery, target_locale=target_locale)
         homepage = resolved.homepage
         homepage_profile = resolved.page_profiles.get("homepage")
 
@@ -94,6 +96,10 @@ class TechnicalService(AuditBaseService):
             + (15 if homepage_profile and homepage_profile.has_publish_date else 0)
             + (15 if homepage_profile and homepage_profile.has_update_log else 0)
         )
+        target_locale = base_locale(resolved.requested_target_locale)
+        homepage_locale = base_locale(homepage.lang)
+        locale_target_match = not target_locale or locales_match(homepage_locale, target_locale)
+        hreflang_target_present = not target_locale or any(locales_match(item, target_locale) for item in homepage.hreflang)
 
         # 各项检查点的权重定义（总和约等于 100）
         weights = {
@@ -129,6 +135,8 @@ class TechnicalService(AuditBaseService):
             "open_graph": bool(homepage.open_graph),
             "twitter_card": bool(homepage.twitter_cards),
             "hreflang": bool(homepage.hreflang),
+            "locale_target_match": locale_target_match,
+            "hreflang_target_present": hreflang_target_present,
             "security_headers": security_headers,
             "image_optimization": image_details,
             "render_blocking": render_blocking_risk,
@@ -180,6 +188,11 @@ class TechnicalService(AuditBaseService):
         if not checks["meta_description"]:
             issues.append("Homepage is missing a meta description.")
             recommendations.append("Add a concise meta description that describes the primary offer and location/entity.")
+        if target_locale and not locale_target_match:
+            issues.append("Homepage language declaration does not match the requested target locale.")
+            recommendations.append("Align html lang, visible copy, and the requested locale scope before running GEO diagnostics.")
+        elif target_locale and homepage_locale:
+            strengths.append("Homepage language declaration aligns with the requested locale.")
         if not checks["canonical"]:
             issues.append("Homepage is missing a canonical tag.")
             recommendations.append("Expose self-referencing canonical tags on primary pages.")
@@ -203,6 +216,9 @@ class TechnicalService(AuditBaseService):
             recommendations.append("Add lazy loading and width/height attributes to primary images.")
         else:
             strengths.append("Image delivery patterns show baseline optimization.")
+        if target_locale and homepage.hreflang and not hreflang_target_present:
+            issues.append("hreflang annotations do not expose the requested target locale.")
+            recommendations.append("Add hreflang coverage for the requested locale and keep alternate links mutually consistent.")
         if not (revalidation_headers["etag"] or revalidation_headers["last_modified"]):
             issues.append("Response headers do not expose ETag or Last-Modified freshness signals.")
             recommendations.append("Add ETag and/or Last-Modified headers so crawlers can revalidate content efficiently.")
@@ -218,6 +234,10 @@ class TechnicalService(AuditBaseService):
             "image_optimization": image_details,
             "h1_count": h1_count,
             "freshness_signal_score": freshness_signal_score,
+            "target_locale": target_locale,
+            "homepage_locale": homepage_locale,
+            "locale_target_match": locale_target_match,
+            "hreflang_target_present": hreflang_target_present,
         }
         result = TechnicalAuditResult(
             score=technical_score,

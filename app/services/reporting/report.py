@@ -454,8 +454,19 @@ class ReportService:
         - 无文章页：首先建议启动内容计划
         - 权威性弱：建议暴露专家信息
         """
+        locale_label = {
+            "en": "English",
+            "de": "German",
+            "nl": "Dutch",
+            "fr": "French",
+            "zh": "Chinese",
+        }.get(discovery.resolved_target_locale or "", None)
         actions = [
-            "Build English-language thought leadership pages for the highest-value services.",
+            (
+                f"Build {locale_label}-language thought leadership pages for the highest-value services."
+                if locale_label
+                else "Build audience-language thought leadership pages for the highest-value services."
+            ),
             "Create external entity/profile coverage on LinkedIn, Crunchbase, Clutch, and other AI-cited platforms.",
             "Publish quantified case studies and convert research assets into crawlable HTML.",
             "Strengthen sameAs and Organization schema after external profile creation.",
@@ -492,6 +503,8 @@ class ReportService:
         rows = [
             f"| Domain | {discovery.domain} |",
             f"| Final URL | {discovery.final_url} |",
+            f"| Requested Locale | {discovery.requested_target_locale or 'Auto'} |",
+            f"| Resolved Locale | {discovery.resolved_target_locale or 'Unknown'} |",
             f"| Business Type | {discovery.business_type} |",
             f"| Rendering | {technical.ssr_signal.get('classification', 'unknown').title()} |",
             f"| Primary Language | {discovery.homepage.lang or 'Not declared'} |",

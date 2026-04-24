@@ -9,21 +9,34 @@ from app.models.discovery import BacklinkOverviewResult, KeyPages, LlmsResult, P
 # 业务类型推断规则：关键词 → 业务类型映射
 # 用于从标题、描述和正文文本中自动判断站点所属行业
 BUSINESS_TYPE_RULES = {
-    "agency": ["agency", "marketing", "seo", "growth"],
-    "saas": ["platform", "software", "saas", "automation"],
-    "ecommerce": ["shop", "store", "ecommerce", "product"],
-    "local_service": ["clinic", "law firm", "dentist", "repair", "consulting"],
-    "publisher": ["news", "blog", "media", "insights", "magazine"],
+    "agency": ["agency", "marketing", "seo", "growth", "bureau", "agentschap", "agentur"],
+    "saas": ["platform", "software", "saas", "automation", "logiciel", "automatisering"],
+    "ecommerce": ["shop", "store", "ecommerce", "product", "boutique", "winkel", "produit", "produkt"],
+    "local_service": ["clinic", "law firm", "dentist", "repair", "consulting", "cabinet", "praktijk", "beratung"],
+    "publisher": ["news", "blog", "media", "insights", "magazine", "actualites", "nieuws", "nachrichten"],
 }
 
 # 关键页面类型及其识别关键词
 # 用于从 Sitemap URL 列表中定位 About / Service / Contact 等高价值页面
 KEY_PAGE_KEYWORDS = {
-    "about": ["about", "company", "关于"],
-    "service": ["service", "services", "seo", "solution", "产品", "服务"],
-    "contact": ["contact", "联系"],
-    "article": ["blog", "news", "article", "insights", "posts"],
-    "case_study": ["case", "study", "success", "work", "portfolio", "案例"],
+    "about": ["about", "company", "team", "story", "关于", "uber-uns", "ueber-uns", "a-propos", "apropos", "over-ons"],
+    "service": [
+        "service",
+        "services",
+        "seo",
+        "solution",
+        "产品",
+        "服务",
+        "dienst",
+        "diensten",
+        "oplossing",
+        "oplossingen",
+        "leistung",
+        "leistungen",
+    ],
+    "contact": ["contact", "联系", "kontakt", "contactez", "contact-us", "neem-contact", "nous-contacter"],
+    "article": ["blog", "news", "article", "insights", "posts", "actualites", "actualite", "nieuws", "artikel", "artikelen"],
+    "case_study": ["case", "study", "success", "work", "portfolio", "案例", "fallstudie", "referenz", "referenzen", "etude-de-cas", "klantverhaal"],
 }
 
 # 实体信息检测的正则表达式模式
@@ -106,10 +119,13 @@ def detect_site_signals(
         company_name = re.split(r"[|-]", title)[-1].strip() or None
 
     # 检测荣誉/认证关键词
-    awards_detected = any(keyword in text.lower() for keyword in ["award", "awards", "certified", "top rated"])
+    awards_detected = any(
+        keyword in text.lower()
+        for keyword in ["award", "awards", "certified", "top rated", "prix", "auszeichnung", "bekroond", "award-winning"]
+    )
     certifications_detected = any(
         keyword in text.lower()
-        for keyword in ["certification", "certified", "iso", "accredited", "google partner"]
+        for keyword in ["certification", "certified", "iso", "accredited", "google partner", "gecertificeerd", "certifie", "zertifiziert"]
     )
 
     return SiteSignals(
@@ -177,9 +193,31 @@ def assess_llms_effectiveness(
         "solutions",
         "product",
         "products",
+        "dienst",
+        "diensten",
+        "oplossing",
+        "oplossingen",
+        "leistung",
+        "leistungen",
+        "serviceleistungen",
+        "produit",
+        "produits",
     ]
     # 引导关键词：说明内容如何被引用或联系
-    guidance_keywords = ["cite", "citation", "canonical", "contact", "support", "policy", "preferred"]
+    guidance_keywords = [
+        "cite",
+        "citation",
+        "canonical",
+        "contact",
+        "support",
+        "policy",
+        "preferred",
+        "kontakt",
+        "guidance",
+        "citation preference",
+        "voorkeur",
+        "contactez",
+    ]
     signals = {
         "exists": True,
         "has_meaningful_length": llms.content_length >= 250,

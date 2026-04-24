@@ -7,6 +7,7 @@ import tldextract
 
 # 全局 TLD 提取器实例（关闭远程后缀列表更新，加快启动速度）
 EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=None)
+SUPPORTED_LOCALES = {"en", "de", "nl", "fr", "zh"}
 
 
 def _normalize_embedded_absolute(href: str) -> str:
@@ -97,6 +98,84 @@ def _is_locale_segment(segment: str) -> bool:
     if len(lowered) == 2 and lowered.isalpha():
         return True
     return len(lowered) == 5 and lowered[2] in {"-", "_"} and lowered.replace("-", "").replace("_", "").isalpha()
+
+
+def normalize_locale(locale: str | None) -> str | None:
+    if not locale:
+        return None
+    normalized = locale.strip().lower().replace("_", "-")
+    return normalized or None
+
+
+def base_locale(locale: str | None) -> str | None:
+    normalized = normalize_locale(locale)
+    if not normalized:
+        return None
+    return normalized.split("-", 1)[0]
+
+
+def locales_match(left: str | None, right: str | None) -> bool:
+    left_base = base_locale(left)
+    right_base = base_locale(right)
+    if not left_base or not right_base:
+        return False
+    return left_base == right_base
+
+
+def detect_path_locale(url: str) -> str | None:
+    parsed = urlparse(normalize_url(url))
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if segments and _is_locale_segment(segments[0]):
+        return normalize_locale(segments[0])
+    return None
+
+
+def detect_subdomain_locale(url: str) -> str | None:
+    parsed = urlparse(normalize_url(url))
+    host = parsed.netloc.lower()
+    labels = [label for label in host.split(".") if label]
+    if len(labels) >= 3 and _is_locale_segment(labels[0]):
+        return normalize_locale(labels[0])
+    return None
+
+
+def detect_explicit_locale(url: str) -> str | None:
+    return detect_path_locale(url) or detect_subdomain_locale(url)
+
+
+def build_locale_path_url(url: str, locale: str) -> str:
+    normalized = normalize_url(url)
+    parsed = urlparse(normalized)
+    path_locale = detect_path_locale(normalized)
+    locale_value = base_locale(locale) or normalize_locale(locale) or locale
+    if path_locale and locales_match(path_locale, locale_value):
+        return normalized
+    path = parsed.path or "/"
+    segments = [segment for segment in path.split("/") if segment]
+    if segments and _is_locale_segment(segments[0]):
+        segments[0] = locale_value
+    elif not segments:
+        segments = [locale_value]
+    else:
+        segments.insert(0, locale_value)
+    updated_path = "/" + "/".join(segments)
+    if not updated_path.endswith("/"):
+        updated_path += "/"
+    return urlunparse(parsed._replace(path=updated_path, fragment=""))
+
+
+def build_locale_subdomain_url(url: str, locale: str) -> str:
+    normalized = normalize_url(url)
+    parsed = urlparse(normalized)
+    locale_value = base_locale(locale) or normalize_locale(locale) or locale
+    labels = [label for label in parsed.netloc.split(".") if label]
+    if labels:
+        if _is_locale_segment(labels[0]):
+            labels[0] = locale_value
+        else:
+            labels.insert(0, locale_value)
+    netloc = ".".join(labels)
+    return urlunparse(parsed._replace(netloc=netloc, fragment=""))
 
 
 def get_scope_prefix(url: str) -> str:

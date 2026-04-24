@@ -25,6 +25,8 @@ from app.services.infra.cache import CacheService
 from app.services.discovery.discovery import DiscoveryService
 from app.services.audit.summarizer import SummarizerService
 from app.utils.fetcher import FetchedResponse
+from app.utils.heuristics import select_key_pages
+from app.utils.text_analyzer import contains_faq, has_author_signals, has_publish_date, is_answer_first
 from app.utils.url_utils import entry_url_candidates, get_scope_root, is_internal_url, is_likely_homepage_url
 from app.utils.localization import localize_payload
 
@@ -69,6 +71,36 @@ def test_cache_key_changes_with_scope() -> None:
 
     assert de_path_key != fr_path_key
     assert de_path_key != de_subdomain_key
+
+
+def test_select_key_pages_supports_localized_urls() -> None:
+    key_pages = select_key_pages(
+        [
+            "https://example.com/nl/over-ons/",
+            "https://example.com/nl/diensten/",
+            "https://example.com/nl/contact/",
+            "https://example.com/nl/nieuws/launch-update/",
+            "https://example.com/nl/klantverhaal/acme/",
+        ]
+    )
+    assert key_pages.about == "https://example.com/nl/over-ons/"
+    assert key_pages.service == "https://example.com/nl/diensten/"
+    assert key_pages.contact == "https://example.com/nl/contact/"
+    assert key_pages.article == "https://example.com/nl/nieuws/launch-update/"
+    assert key_pages.case_study == "https://example.com/nl/klantverhaal/acme/"
+
+
+def test_text_analyzer_detects_dutch_page_signals() -> None:
+    headings = [{"level": "h2", "text": "Veelgestelde vragen"}, {"level": "h2", "text": "Samenvatting"}]
+    text = (
+        "Geschreven door Berry Zhang. Bijgewerkt op 12 okt 2025. "
+        "Wij helpen merken groeien met duidelijke GEO-diensten, sterke structuur, betrouwbare bronvermelding "
+        "en praktische aanbevelingen voor teams die sneller AI-zichtbaarheid willen opbouwen."
+    )
+    assert contains_faq(text, headings, locale="nl")
+    assert has_author_signals(text, locale="nl")
+    assert has_publish_date(text, locale="nl")
+    assert is_answer_first(text, locale="nl")
 
 
 def test_localize_payload_translates_known_messages_to_zh() -> None:
@@ -136,6 +168,54 @@ def test_discovery_entry_fetch_falls_back_to_www_variant(monkeypatch) -> None:
     response = asyncio.run(service._fetch_entry_response(client=None, url="https://idtcpack.com"))
     assert response.final_url == "https://www.idtcpack.com/"
     assert attempted_urls == ["https://idtcpack.com/", "https://www.idtcpack.com/"]
+
+
+def test_discovery_resolves_target_locale_via_hreflang(monkeypatch) -> None:
+    service = DiscoveryService()
+
+    async def fake_fetch_entry_response(client, url: str) -> FetchedResponse:
+        normalized = url.rstrip("/")
+        if normalized == "https://example.com":
+            return FetchedResponse(
+                final_url="https://example.com/",
+                status_code=200,
+                headers={},
+                text=(
+                    '<html lang="en"><head>'
+                    '<link rel="alternate" hreflang="nl" href="https://example.com/nl/" />'
+                    "</head><body></body></html>"
+                ),
+                response_time_ms=20,
+            )
+        if normalized == "https://example.com/nl":
+            return FetchedResponse(
+                final_url="https://example.com/nl/",
+                status_code=200,
+                headers={},
+                text='<html lang="nl"><body></body></html>',
+                response_time_ms=20,
+            )
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(service, "_fetch_entry_response", fake_fetch_entry_response)
+    resolved = asyncio.run(service._resolve_target_scope(client=None, url="https://example.com", target_locale="nl"))
+    response = resolved["response"]
+    assert response.final_url == "https://example.com/nl/"
+    assert resolved["requested_target_locale"] == "nl"
+    assert resolved["resolved_target_locale"] == "nl"
+    assert resolved["locale_resolution_source"] == "hreflang"
+    assert resolved["locale_match_status"] == "inferred"
+
+
+def test_discovery_rejects_target_locale_conflict() -> None:
+    service = DiscoveryService()
+    try:
+        asyncio.run(service._resolve_target_scope(client=None, url="https://example.com/nl/", target_locale="fr"))
+    except AppError as exc:
+        assert exc.status_code == 400
+        assert exc.message == "target locale conflicts with input URL"
+    else:
+        raise AssertionError("expected AppError for conflicting locale selection")
 
 
 def test_report_renders_page_diagnostics_and_notices() -> None:

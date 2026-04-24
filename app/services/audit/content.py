@@ -28,6 +28,7 @@ from app.utils.text_analyzer import (
     has_update_log,
     is_answer_first,
 )
+from app.utils.url_utils import base_locale, detect_explicit_locale
 
 
 class ContentService(AuditBaseService):
@@ -55,24 +56,25 @@ class ContentService(AuditBaseService):
         """
         response = await fetch_url(page_url, client=client)
         parsed = parse_html(response.final_url, response.text)
+        page_locale = base_locale(parsed.get("lang") or detect_explicit_locale(response.final_url))
         heading_quality = evaluate_heading_quality(parsed["headings"])
         information_density = estimate_information_density(parsed["text_content"], parsed["headings"])
         chunk_structure = evaluate_chunk_structure(parsed["text_content"], parsed["headings"])
-        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"])
+        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"], locale=page_locale)
         return ContentPageAnalysis(
             url=response.final_url,
             page_type=page_type,
             title=parsed["title"],
             word_count=parsed["word_count"],
-            has_faq=contains_faq(parsed["text_content"], parsed["headings"]),
-            has_author=has_author_signals(parsed["text_content"]),
-            has_publish_date=has_publish_date(parsed["text_content"]),
+            has_faq=contains_faq(parsed["text_content"], parsed["headings"], locale=page_locale),
+            has_author=has_author_signals(parsed["text_content"], locale=page_locale),
+            has_publish_date=has_publish_date(parsed["text_content"], locale=page_locale),
             has_quantified_data=has_quantified_data(parsed["text_content"]),
-            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"]),
+            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"], locale=page_locale),
             has_inline_citations=has_inline_citations(parsed["text_content"]),
-            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"]),
-            has_update_log=has_update_log(parsed["text_content"], parsed["headings"]),
-            answer_first=is_answer_first(parsed["text_content"]),
+            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"], locale=page_locale),
+            has_update_log=has_update_log(parsed["text_content"], parsed["headings"], locale=page_locale),
+            answer_first=is_answer_first(parsed["text_content"], locale=page_locale),
             heading_quality_score=heading_quality["score"],
             information_density_score=information_density["score"],
             chunk_structure_score=chunk_structure["score"],
@@ -116,6 +118,7 @@ class ContentService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
         feedback_lang: str = "en",
+        target_locale: str | None = None,
     ) -> ContentAuditResult:
         """执行内容质量审计
 
@@ -126,7 +129,7 @@ class ContentService(AuditBaseService):
         4. premium 模式下进行 LLM E-E-A-T 深度评估
         """
         started_at = time.perf_counter()
-        resolved = await self.ensure_discovery(url, discovery)
+        resolved = await self.ensure_discovery(url, discovery, target_locale=target_locale)
         targets = {
             "service": resolved.key_pages.service,
             "article": resolved.key_pages.article,

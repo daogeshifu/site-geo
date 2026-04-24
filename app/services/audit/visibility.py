@@ -39,6 +39,7 @@ class VisibilityService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
         feedback_lang: str = "en",
+        target_locale: str | None = None,
     ) -> VisibilityAuditResult:
         """执行 AI 可见性审计
 
@@ -50,7 +51,7 @@ class VisibilityService(AuditBaseService):
         6. premium 模式下进行 LLM 增强
         """
         started_at = time.perf_counter()
-        resolved = await self.ensure_discovery(url, discovery)
+        resolved = await self.ensure_discovery(url, discovery, target_locale=target_locale)
 
         # 计算 AI 爬虫访问率（允许爬取的爬虫数 / 总检查爬虫数）
         crawler_rules = resolved.robots.user_agents

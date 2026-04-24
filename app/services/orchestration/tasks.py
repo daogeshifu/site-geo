@@ -102,6 +102,7 @@ class TaskService:
                 request.max_pages,
                 request.feedback_lang,
                 request.task_type,
+                request.target_locale,
             )
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
@@ -120,6 +121,7 @@ class TaskService:
             task_type=request.task_type,
             mode=request.mode,
             llm=request.llm,
+            target_locale=request.target_locale,
             feedback_lang=request.feedback_lang,
             observation=request.observation,
             full_audit=request.full_audit,
@@ -238,6 +240,7 @@ class TaskService:
                     payload=task.result,
                     llm_config=task.llm,
                     task_type=task.task_type,
+                    target_locale=task.target_locale,
                 )
             task.status = "completed"
             task.current_step = "completed"
@@ -337,6 +340,7 @@ class TaskService:
             full_audit=task.full_audit,
             max_pages=task.max_pages,
             force_refresh=task.force_refresh,
+            target_locale=task.target_locale,
         )
         await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()
@@ -346,15 +350,42 @@ class TaskService:
 
         module_coroutines = {
             "visibility": self.visibility_service.audit(
-                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                feedback_lang=task.feedback_lang,
+                target_locale=task.target_locale,
             ),
-            "technical": self.technical_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+            "technical": self.technical_service.audit(
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                target_locale=task.target_locale,
+            ),
             "content": self.content_service.audit(
-                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                feedback_lang=task.feedback_lang,
+                target_locale=task.target_locale,
             ),
-            "schema": self.schema_service.audit(task.url, discovery, mode=task.mode, llm_config=task.llm),
+            "schema": self.schema_service.audit(
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                target_locale=task.target_locale,
+            ),
             "platform": self.platform_service.audit(
-                task.url, discovery, mode=task.mode, llm_config=task.llm, feedback_lang=task.feedback_lang
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                feedback_lang=task.feedback_lang,
+                target_locale=task.target_locale,
             ),
         }
 
@@ -416,6 +447,7 @@ class TaskService:
             full_audit=False,
             max_pages=5,
             force_refresh=task.force_refresh,
+            target_locale=task.target_locale,
         )
         await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()

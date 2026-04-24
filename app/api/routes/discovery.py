@@ -28,5 +28,10 @@ async def run_discovery(request: UrlRequest) -> dict:
     Returns:
         DiscoveryResult 的序列化字典，包含主页信息、爬虫配置、站点信号等
     """
-    result = await discovery_service.discover(request.url, full_audit=request.full_audit, max_pages=request.max_pages)
+    result = await discovery_service.discover(
+        request.url,
+        full_audit=request.full_audit,
+        max_pages=request.max_pages,
+        target_locale=request.target_locale,
+    )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))

@@ -24,6 +24,7 @@ class AuditBaseService:
         *,
         full_audit: bool = False,
         max_pages: int = 12,
+        target_locale: str | None = None,
     ) -> DiscoveryResult:
         """确保 DiscoveryResult 可用：
         - 若已是 DiscoveryResult 实例，直接返回
@@ -34,7 +35,12 @@ class AuditBaseService:
             return discovery
         if isinstance(discovery, dict):
             return DiscoveryResult.model_validate(discovery)
-        return await self.discovery_service.discover(url, full_audit=full_audit, max_pages=max_pages)
+        return await self.discovery_service.discover(
+            url,
+            full_audit=full_audit,
+            max_pages=max_pages,
+            target_locale=target_locale,
+        )
 
     def set_execution_metadata(
         self,
@@ -99,6 +105,7 @@ class FullAuditService(AuditBaseService):
         full_audit: bool = False,
         max_pages: int = 12,
         feedback_lang: str = "en",
+        target_locale: str | None = None,
     ) -> dict[str, Any]:
         """执行完整 GEO 审计流程
 
@@ -116,7 +123,13 @@ class FullAuditService(AuditBaseService):
         from app.services.audit.technical import TechnicalService
         from app.services.audit.visibility import VisibilityService
 
-        resolved_discovery = await self.ensure_discovery(url, discovery, full_audit=full_audit, max_pages=max_pages)
+        resolved_discovery = await self.ensure_discovery(
+            url,
+            discovery,
+            full_audit=full_audit,
+            max_pages=max_pages,
+            target_locale=target_locale,
+        )
         # 所有模块共享同一个 DiscoveryService 实例
         visibility_service = VisibilityService(self.discovery_service)
         technical_service = TechnicalService(self.discovery_service)
@@ -128,11 +141,32 @@ class FullAuditService(AuditBaseService):
 
         # 5 个审计模块并行执行，共享已解析的 discovery
         visibility, technical, content, schema, platform = await asyncio.gather(
-            visibility_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
-            technical_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
-            content_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
-            schema_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config),
-            platform_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang),
+            visibility_service.audit(
+                url,
+                resolved_discovery,
+                mode=mode,
+                llm_config=llm_config,
+                feedback_lang=feedback_lang,
+                target_locale=target_locale,
+            ),
+            technical_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, target_locale=target_locale),
+            content_service.audit(
+                url,
+                resolved_discovery,
+                mode=mode,
+                llm_config=llm_config,
+                feedback_lang=feedback_lang,
+                target_locale=target_locale,
+            ),
+            schema_service.audit(url, resolved_discovery, mode=mode, llm_config=llm_config, target_locale=target_locale),
+            platform_service.audit(
+                url,
+                resolved_discovery,
+                mode=mode,
+                llm_config=llm_config,
+                feedback_lang=feedback_lang,
+                target_locale=target_locale,
+            ),
         )
 
         # 汇总：根据 5 个模块结果计算复合 GEO 评分

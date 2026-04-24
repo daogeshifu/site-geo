@@ -39,6 +39,7 @@ class CacheService:
         max_pages: int = 12,
         feedback_lang: str = "en",
         task_type: str = "site_geo_audit",
+        target_locale: str | None = None,
     ) -> tuple[str, str, str]:
         """生成缓存键，返回 (sha256_digest, normalized_url, domain)
 
@@ -58,7 +59,7 @@ class CacheService:
         normalized_pages = max_pages if full_audit else 5
         raw_key = (
             f"{task_type}|{scope_key}|{mode}|{provider}|{model}"
-            f"|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}"
+            f"|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}|target_locale={target_locale or 'auto'}"
         )
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return digest, normalized_url, domain
@@ -95,6 +96,7 @@ class CacheService:
         payload: dict[str, Any],
         llm_config: LLMConfig | None = None,
         task_type: str = "site_geo_audit",
+        target_locale: str | None = None,
     ) -> CachedAuditRecord:
         """将审计结果写入缓存文件（JSON 格式，缩进 2 格）"""
         now = datetime.now(timezone.utc)
@@ -111,6 +113,7 @@ class CacheService:
             # premium 模式记录 LLM 提供商和模型，便于缓存管理和调试
             llm_provider=llm_config.provider if llm_config and mode == "premium" else None,
             llm_model=llm_config.model if llm_config and mode == "premium" else None,
+            target_locale=target_locale,
             created_at=now,
             expires_at=now + timedelta(days=self.ttl_days),
             payload=payload,

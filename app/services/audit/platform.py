@@ -85,6 +85,7 @@ class PlatformService(AuditBaseService):
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
         feedback_lang: str = "en",
+        target_locale: str | None = None,
     ) -> PlatformAuditResult:
         """执行平台适配审计
 
@@ -92,7 +93,7 @@ class PlatformService(AuditBaseService):
         加权求和得到综合平台优化分
         """
         started_at = time.perf_counter()
-        resolved = await self.ensure_discovery(url, discovery)
+        resolved = await self.ensure_discovery(url, discovery, target_locale=target_locale)
 
         # 计算各共享信号
         homepage_dict = resolved.homepage.model_dump()

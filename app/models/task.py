@@ -45,6 +45,7 @@ class AuditTask(BaseModel):
     task_type: TaskType = "site_geo_audit"
     mode: str = "standard"
     llm: LLMConfig | None = None
+    target_locale: str | None = None
     feedback_lang: str = "en"
     observation: ObservationInput | None = None
     full_audit: bool = False
@@ -81,6 +82,7 @@ class CachedAuditRecord(BaseModel):
     max_pages: int = 12
     llm_provider: str | None = None
     llm_model: str | None = None
+    target_locale: str | None = None
     created_at: datetime
     expires_at: datetime     # TTL 过期时间，超过后缓存失效
     payload: dict[str, Any]  # 完整的审计结果 dict

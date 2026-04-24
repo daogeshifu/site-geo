@@ -463,6 +463,15 @@ class SummarizerService:
         notices: list[str] = []
         if discovery.input_scope_warning:
             notices.append(f"Non-homepage input detected: {discovery.input_scope_warning}")
+        if discovery.requested_target_locale:
+            if discovery.locale_match_status == "exact":
+                notices.append(
+                    f"Requested locale {discovery.requested_target_locale} matched the input scope directly."
+                )
+            else:
+                notices.append(
+                    f"Requested locale {discovery.requested_target_locale} was resolved via {discovery.locale_resolution_source} to {discovery.scope_root_url}."
+                )
         if discovery.full_audit_enabled:
             notices.append(
                 f"Full audit mode sampled {discovery.profiled_page_count} pages and produced page-level diagnostics without changing the site-level scoring weights."

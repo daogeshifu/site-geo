@@ -39,13 +39,14 @@ class SchemaService(AuditBaseService):
         discovery=None,
         mode: str = "standard",
         llm_config: LLMConfig | None = None,
+        target_locale: str | None = None,
     ) -> SchemaAuditResult:
         """执行结构化数据审计
 
         合并首页和所有关键页的 JSON-LD 块，统一提取 Schema 类型和 sameAs 引用
         """
         started_at = time.perf_counter()
-        resolved = await self.ensure_discovery(url, discovery)
+        resolved = await self.ensure_discovery(url, discovery, target_locale=target_locale)
 
         summary = resolved.schema_summary or extract_schema_summary(list(resolved.homepage.json_ld_blocks))
         checks = {

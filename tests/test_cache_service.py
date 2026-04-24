@@ -7,6 +7,7 @@ def test_cache_key_changes_with_mode() -> None:
     premium_key, _, _ = service.build_cache_key("https://example.com", "premium", None)
     full_audit_key, _, _ = service.build_cache_key("https://example.com", "standard", None, True, 12)
     zh_key, _, _ = service.build_cache_key("https://example.com", "standard", None, False, 12, "zh")
+    nl_target_key, _, _ = service.build_cache_key("https://example.com", "standard", None, False, 12, "en", "site_geo_audit", "nl")
     content_key, _, _ = service.build_cache_key(
         "https://example.com/blog/post",
         "standard",
@@ -20,4 +21,5 @@ def test_cache_key_changes_with_mode() -> None:
     assert standard_key != premium_key
     assert standard_key != full_audit_key
     assert standard_key != zh_key
+    assert standard_key != nl_target_key
     assert standard_key != content_key

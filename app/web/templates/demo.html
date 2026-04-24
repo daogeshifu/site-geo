@@ -125,6 +125,18 @@
             </div>
           </div>
           <div class="field">
+            <label>目标站点语言</label>
+            <select id="target-locale">
+              <option value="">自动识别</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="nl">Nederlands</option>
+              <option value="fr">Français</option>
+              <option value="zh">简体中文</option>
+            </select>
+            <div class="field-hint">用于解析并锁定诊断 scope；与“反馈语言”分离。</div>
+          </div>
+          <div class="field">
             <label for="force" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
               <input id="force" type="checkbox" />
               <span class="toggle-lbl">强制刷新缓存</span>
@@ -430,7 +442,8 @@
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
             <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
             <div class="param-row"><span class="param-key">force_refresh</span><span class="param-type">boolean</span><span class="param-desc">true 则跳过 7 天缓存强制重新审计</span></div>
-            <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；选择 <code>zh</code> 时，JSON key 保持英文，问题、建议、摘要、维度展示名和大部分用户可读 value 尽量返回中文</span></div>
+            <div class="param-row"><span class="param-key">target_locale</span><span class="param-type">string</span><span class="param-desc">可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</span></div>
+            <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；仅控制报告返回语言，不控制目标站点语言版本</span></div>
             <div class="param-row"><span class="param-key">full_audit</span><span class="param-type">boolean</span><span class="param-desc">可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></span></div>
             <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">仅 full audit 生效，范围 5-50，默认 12</span></div>
             <div class="param-row"><span class="param-key">build_knowledge_graph</span><span class="param-type">boolean</span><span class="param-desc">是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>true</code>，失败不会中断审计</span></div>
@@ -441,6 +454,7 @@
           <div class="code-snippet"><pre>{
   "url": "https://example.com",
   "mode": "premium",
+  "target_locale": "nl",
   "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12,
@@ -465,7 +479,7 @@
             <div class="param-row"><span class="param-key">progress_percent</span><span class="param-type">int</span><span class="param-desc">0–100，按完成步骤数计算</span></div>
             <div class="param-row"><span class="param-key">cached</span><span class="param-type">boolean</span><span class="param-desc">命中缓存时为 true，直接返回历史结果</span></div>
             <div class="param-row"><span class="param-key">llm_model_used</span><span class="param-type">boolean</span><span class="param-desc">只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</span></div>
-            <div class="param-row"><span class="param-key">result</span><span class="param-type">object</span><span class="param-desc">completed 后包含完整的 visibility / technical / content / schema / platform / observation / summary；full audit 时额外返回 <code>page_diagnostics</code>，并在 <code>discovery.scope_root_url</code> 标明抓取边界</span></div>
+          <div class="param-row"><span class="param-key">result</span><span class="param-type">object</span><span class="param-desc">completed 后包含完整的 visibility / technical / content / schema / platform / observation / summary；full audit 时额外返回 <code>page_diagnostics</code>，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</span></div>
           </div>
           <div class="code-snippet"><pre>// 响应结构示意
 {

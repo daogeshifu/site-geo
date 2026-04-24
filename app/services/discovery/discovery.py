@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import httpx
+from bs4 import BeautifulSoup
 
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -41,11 +42,17 @@ from app.utils.text_analyzer import (
 )
 from app.utils.url_classifier import classify_url_type
 from app.utils.url_utils import (
+    base_locale,
+    build_locale_path_url,
+    build_locale_subdomain_url,
+    detect_explicit_locale,
     entry_url_candidates,
+    ensure_absolute_url,
     get_scope_root,
     get_site_root,
     is_internal_url,
     is_likely_homepage_url,
+    locales_match,
     normalize_url,
     registered_domain,
 )
@@ -58,9 +65,9 @@ class DiscoveryService:
 
     SNAPSHOT_VERSION = "snapshot-v3"
     EXTRA_PAGE_PATTERNS = {
-        "product": ["product", "products", "item", "sku", "shop"],
-        "faq": ["faq", "help", "support"],
-        "documentation": ["docs", "documentation", "guide", "manual"],
+        "product": ["product", "products", "item", "sku", "shop", "produit", "produits", "produkt"],
+        "faq": ["faq", "help", "support", "fragen", "vragen", "aide"],
+        "documentation": ["docs", "documentation", "guide", "manual", "gids", "handleiding", "dokumentation"],
         "comparison": ["compare", "comparison", "vs"],
     }
 
@@ -76,6 +83,7 @@ class DiscoveryService:
         parsed: dict,
     ) -> PageProfile:
         """将 HTML 解析结果构建为 PageProfile 对象。"""
+        page_locale = base_locale(parsed.get("lang") or detect_explicit_locale(final_url))
         schema_summary = extract_schema_summary(parsed["json_ld_blocks"], visible_text=parsed["text_content"])
         entity_signals = detect_site_signals(
             text=parsed["text_content"],
@@ -86,25 +94,25 @@ class DiscoveryService:
         heading_quality = evaluate_heading_quality(parsed["headings"])
         information_density = estimate_information_density(parsed["text_content"], parsed["headings"])
         chunk_structure = evaluate_chunk_structure(parsed["text_content"], parsed["headings"])
-        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"])
+        link_context = assess_link_context(parsed["internal_links"], parsed["external_links"], locale=page_locale)
         return PageProfile(
             page_type=page_type,
             final_url=final_url,
             title=parsed["title"],
             meta_description=parsed["meta_description"],
             canonical=parsed["canonical"],
-            lang=parsed["lang"],
+            lang=page_locale or parsed["lang"],
             headings=parsed["headings"],
             word_count=parsed["word_count"],
-            has_faq=contains_faq(parsed["text_content"], parsed["headings"]),
-            has_author=has_author_signals(parsed["text_content"]),
-            has_publish_date=has_publish_date(parsed["text_content"]),
+            has_faq=contains_faq(parsed["text_content"], parsed["headings"], locale=page_locale),
+            has_author=has_author_signals(parsed["text_content"], locale=page_locale),
+            has_publish_date=has_publish_date(parsed["text_content"], locale=page_locale),
             has_quantified_data=has_quantified_data(parsed["text_content"]),
-            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"]),
+            has_reference_section=has_reference_section(parsed["text_content"], parsed["headings"], locale=page_locale),
             has_inline_citations=has_inline_citations(parsed["text_content"]),
-            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"]),
-            has_update_log=has_update_log(parsed["text_content"], parsed["headings"]),
-            answer_first=is_answer_first(parsed["text_content"]),
+            has_tldr=has_tldr_summary(parsed["text_content"], parsed["headings"], locale=page_locale),
+            has_update_log=has_update_log(parsed["text_content"], parsed["headings"], locale=page_locale),
+            answer_first=is_answer_first(parsed["text_content"], locale=page_locale),
             heading_quality_score=heading_quality["score"],
             information_density_score=information_density["score"],
             chunk_structure_score=chunk_structure["score"],
@@ -334,45 +342,163 @@ class DiscoveryService:
             },
         )
 
-    async def discover(self, url: str, *, full_audit: bool = False, max_pages: int = 12, force_refresh: bool = False) -> DiscoveryResult:
+    def _extract_hreflang_candidates(self, base_url: str, html: str, target_locale: str) -> list[str]:
+        soup = BeautifulSoup(html or "", "lxml")
+        matches: list[str] = []
+        seen: set[str] = set()
+        for link in soup.find_all("link", href=True, hreflang=True):
+            hreflang = base_locale(link.get("hreflang"))
+            if not locales_match(hreflang, target_locale):
+                continue
+            candidate = normalize_url(ensure_absolute_url(base_url, link.get("href", "")))
+            if candidate not in seen:
+                seen.add(candidate)
+                matches.append(candidate)
+        return matches
+
+    def _extract_html_lang(self, html: str) -> str | None:
+        soup = BeautifulSoup(html or "", "lxml")
+        html_tag = soup.find("html")
+        if not html_tag:
+            return None
+        return base_locale(html_tag.get("lang"))
+
+    def _extract_locale_link_candidates(self, base_url: str, html: str, target_locale: str) -> list[str]:
+        soup = BeautifulSoup(html or "", "lxml")
+        matches: list[str] = []
+        seen: set[str] = set()
+        for link in soup.find_all("a", href=True):
+            candidate = normalize_url(ensure_absolute_url(base_url, link.get("href", "")))
+            candidate_locale = detect_explicit_locale(candidate)
+            if not locales_match(candidate_locale, target_locale):
+                continue
+            if candidate not in seen:
+                seen.add(candidate)
+                matches.append(candidate)
+        return matches
+
+    async def _resolve_target_scope(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        target_locale: str | None,
+    ) -> dict[str, str | None | object]:
+        requested_locale = base_locale(target_locale)
+        explicit_locale = detect_explicit_locale(url)
+        if requested_locale and explicit_locale and not locales_match(explicit_locale, requested_locale):
+            raise AppError(
+                400,
+                "target locale conflicts with input URL",
+                {"url": url, "input_locale": explicit_locale, "target_locale": requested_locale},
+            )
+
+        initial_response = await self._fetch_entry_response(client, url)
+        html_locale = self._extract_html_lang(initial_response.text)
+        resolved_locale = base_locale(detect_explicit_locale(initial_response.final_url) or html_locale or explicit_locale)
+        if not requested_locale:
+            return {
+                "response": initial_response,
+                "requested_target_locale": None,
+                "resolved_target_locale": resolved_locale,
+                "locale_resolution_source": "input",
+                "locale_match_status": "not_requested",
+            }
+
+        if resolved_locale and locales_match(resolved_locale, requested_locale):
+            source = "input" if explicit_locale else "redirect" if detect_explicit_locale(initial_response.final_url) else "html_lang"
+            status = "exact" if source == "input" else "inferred"
+            return {
+                "response": initial_response,
+                "requested_target_locale": requested_locale,
+                "resolved_target_locale": requested_locale,
+                "locale_resolution_source": source,
+                "locale_match_status": status,
+            }
+
+        candidates: list[tuple[str, str]] = []
+        candidates.extend(("hreflang", item) for item in self._extract_hreflang_candidates(initial_response.final_url, initial_response.text, requested_locale))
+        candidates.extend(("internal_link", item) for item in self._extract_locale_link_candidates(initial_response.final_url, initial_response.text, requested_locale))
+        candidates.append(("locale_path", build_locale_path_url(initial_response.final_url, requested_locale)))
+        candidates.append(("locale_subdomain", build_locale_subdomain_url(initial_response.final_url, requested_locale)))
+
+        seen_candidates: set[str] = set()
+        for source, candidate in candidates:
+            if candidate in seen_candidates or candidate == normalize_url(initial_response.final_url):
+                continue
+            seen_candidates.add(candidate)
+            try:
+                candidate_response = await self._fetch_entry_response(client, candidate)
+            except AppError:
+                continue
+            candidate_locale = base_locale(
+                detect_explicit_locale(candidate_response.final_url) or self._extract_html_lang(candidate_response.text)
+            )
+            if candidate_locale and locales_match(candidate_locale, requested_locale):
+                return {
+                    "response": candidate_response,
+                    "requested_target_locale": requested_locale,
+                    "resolved_target_locale": requested_locale,
+                    "locale_resolution_source": source,
+                    "locale_match_status": "inferred",
+                }
+
+        raise AppError(
+            404,
+            "requested target locale could not be resolved",
+            {"url": url, "target_locale": requested_locale},
+        )
+
+    async def discover(
+        self,
+        url: str,
+        *,
+        full_audit: bool = False,
+        max_pages: int = 12,
+        force_refresh: bool = False,
+        target_locale: str | None = None,
+    ) -> DiscoveryResult:
         """执行完整的站点快照发现流程。"""
         try:
             normalized_url = normalize_url(url)
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
 
-        initial_site = await self.asset_store.ensure_site(normalized_url) if self.asset_store.available else None
-        if self.asset_store.available and initial_site and force_refresh:
-            await self.asset_store.clear_site_content(initial_site.site_id)
-        if self.asset_store.available and initial_site and not force_refresh:
-            cached_discovery = await self.asset_store.load_cached_discovery(
-                initial_site.site_id,
-                full_audit=full_audit,
-                max_pages=max_pages,
-            )
-            if cached_discovery:
-                logger.info(
-                    "Discovery loaded from MySQL cache",
-                    extra={
-                        "url": normalized_url,
-                        "site_id": initial_site.site_id,
-                        "full_audit": full_audit,
-                        "max_pages": max_pages,
-                    },
-                )
-                return cached_discovery
-
         asset_stats = {"reused": 0, "fetched": 0}
         source_map: dict[str, str] = {}
         cached_snapshots: dict[str, PageProfile] = {}
-        actual_site = initial_site
+        actual_site = None
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(settings.request_timeout_seconds),
             follow_redirects=True,
             headers={"User-Agent": settings.default_user_agent},
         ) as client:
-            homepage_response = await self._fetch_entry_response(client, normalized_url)
+            resolution = await self._resolve_target_scope(client, normalized_url, target_locale)
+            homepage_response = resolution["response"]
+            resolved_scope_input = normalize_url(str(homepage_response.final_url))
+            initial_site = await self.asset_store.ensure_site(resolved_scope_input) if self.asset_store.available else None
+            if self.asset_store.available and initial_site and force_refresh:
+                await self.asset_store.clear_site_content(initial_site.site_id)
+            if self.asset_store.available and initial_site and not force_refresh:
+                cached_discovery = await self.asset_store.load_cached_discovery(
+                    initial_site.site_id,
+                    full_audit=full_audit,
+                    max_pages=max_pages,
+                )
+                if cached_discovery:
+                    logger.info(
+                        "Discovery loaded from MySQL cache",
+                        extra={
+                            "url": normalized_url,
+                            "resolved_url": resolved_scope_input,
+                            "site_id": initial_site.site_id,
+                            "full_audit": full_audit,
+                            "max_pages": max_pages,
+                            "target_locale": target_locale,
+                        },
+                    )
+                    return cached_discovery
+
             scope_root_url = get_scope_root(homepage_response.final_url)
             parsed_homepage = parse_html(homepage_response.final_url, homepage_response.text, scope_url=scope_root_url)
 
@@ -535,6 +661,10 @@ class DiscoveryService:
             final_url=homepage_response.final_url,
             site_root_url=site_root_url,
             scope_root_url=scope_root_url,
+            requested_target_locale=resolution["requested_target_locale"],
+            resolved_target_locale=base_locale(parsed_homepage.get("lang") or resolution["resolved_target_locale"]),
+            locale_resolution_source=str(resolution["locale_resolution_source"] or "input"),
+            locale_match_status=str(resolution["locale_match_status"] or "not_requested"),
             domain=target_domain,
             fetch=FetchMetadata(
                 final_url=homepage_response.final_url,

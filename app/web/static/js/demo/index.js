@@ -593,6 +593,9 @@ async function loadKnowledgeGraph(task = currentTask) {
     if (task.feedback_lang && $('feedback-lang').value !== task.feedback_lang) {
       $('feedback-lang').value = task.feedback_lang;
     }
+    if ($('target-locale')) {
+      $('target-locale').value = task.target_locale || '';
+    }
     if (typeof task.build_knowledge_graph === 'boolean') {
       $('build-knowledge-graph').checked = task.build_knowledge_graph;
     }
@@ -790,6 +793,8 @@ async function loadKnowledgeGraph(task = currentTask) {
       feedback_lang: $('feedback-lang').value,
       build_knowledge_graph: $('build-knowledge-graph').checked
     };
+    const targetLocale = $('target-locale')?.value || '';
+    if (targetLocale) body.target_locale = targetLocale;
     if (!isContentAudit && $('full-audit').checked) {
       const parsedPages = Number($('max-pages').value || 12);
       body.max_pages = Math.max(5, Math.min(10000, Number.isFinite(parsedPages) ? parsedPages : 12));

@@ -52,6 +52,7 @@ async def audit_visibility(request: AuditModuleRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
         feedback_lang=request.feedback_lang,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
@@ -74,6 +75,7 @@ async def audit_technical(request: AuditModuleRequest) -> dict:
         request.discovery,
         mode=request.mode,
         llm_config=request.llm,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
@@ -97,6 +99,7 @@ async def audit_content(request: AuditModuleRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
         feedback_lang=request.feedback_lang,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
@@ -119,6 +122,7 @@ async def audit_schema(request: AuditModuleRequest) -> dict:
         request.discovery,
         mode=request.mode,
         llm_config=request.llm,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
@@ -142,6 +146,7 @@ async def audit_platform(request: AuditModuleRequest) -> dict:
         mode=request.mode,
         llm_config=request.llm,
         feedback_lang=request.feedback_lang,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))
 
@@ -168,6 +173,7 @@ async def audit_full(request: FullAuditRequest) -> dict:
         full_audit=request.full_audit,
         max_pages=request.max_pages,
         feedback_lang=request.feedback_lang,
+        target_locale=request.target_locale,
     )
     return success_response(localize_payload(result, request.feedback_lang))
 

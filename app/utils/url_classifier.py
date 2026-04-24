@@ -6,15 +6,15 @@ from app.utils.url_utils import normalize_url
 
 
 URL_TYPE_PATTERNS = {
-    "blog": ["blog", "news", "article", "insights", "posts"],
-    "product": ["product", "products", "item", "sku", "shop", "pricing"],
-    "docs": ["docs", "documentation", "guide", "manual", "kb", "knowledge-base"],
-    "faq": ["faq", "faqs", "help", "support"],
-    "about": ["about", "company", "team", "story", "关于"],
-    "contact": ["contact", "联系我们", "联系"],
-    "case_study": ["case", "study", "portfolio", "success", "案例"],
+    "blog": ["blog", "news", "article", "insights", "posts", "actualites", "nieuws", "artikel", "artikelen"],
+    "product": ["product", "products", "item", "sku", "shop", "pricing", "produit", "produits", "produkt", "winkel"],
+    "docs": ["docs", "documentation", "guide", "manual", "kb", "knowledge-base", "gids", "handleiding", "dokumentation"],
+    "faq": ["faq", "faqs", "help", "support", "vragen", "hilfe", "aide"],
+    "about": ["about", "company", "team", "story", "关于", "uber-uns", "ueber-uns", "a-propos", "apropos", "over-ons"],
+    "contact": ["contact", "联系我们", "联系", "kontakt", "contactez", "nous-contacter", "neem-contact"],
+    "case_study": ["case", "study", "portfolio", "success", "案例", "fallstudie", "referenz", "etude-de-cas", "klantverhaal"],
     "category": ["category", "categories", "collections", "topics", "tag"],
-    "landing": ["landing", "solution", "solutions", "service", "services"],
+    "landing": ["landing", "solution", "solutions", "service", "services", "dienst", "diensten", "leistung", "leistungen"],
 }
 
 

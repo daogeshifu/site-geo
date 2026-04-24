@@ -209,6 +209,10 @@ class DiscoveryResult(BaseModel):
     final_url: str        # 跟随重定向后的最终 URL
     site_root_url: str = ""  # 站点根 URL（scheme + host）
     scope_root_url: str = ""  # 实际抓取作用域根，如 /de/
+    requested_target_locale: str | None = None
+    resolved_target_locale: str | None = None
+    locale_resolution_source: str = "input"
+    locale_match_status: str = "not_requested"
     domain: str           # 注册域名（如 example.com）
     fetch: FetchMetadata  # 首页请求元数据
     homepage: HomepageExtract          # 首页解析结果
