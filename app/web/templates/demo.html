@@ -34,11 +34,11 @@
     </div>
     <div class="hdr-meta-card">
       <span class="hdr-meta-label">Demo Task</span>
-      <code class="hdr-meta-code">POST /api/v1/demo/tasks/audit</code>
+      <code class="hdr-meta-code">POST /api/v1/tasks/audit</code>
     </div>
     <div class="hdr-meta-card">
       <span class="hdr-meta-label">Task Status</span>
-      <code class="hdr-meta-code">GET /api/v1/demo/tasks/{task_id}</code>
+      <code class="hdr-meta-code">GET /api/v1/tasks/{task_id}</code>
     </div>
     <div class="hdr-meta-card">
       <span class="hdr-meta-label">Demo Guard</span>
@@ -440,7 +440,7 @@
           <span class="api-step-title">创建审计任务</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/demo/tasks/audit</div>
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/tasks/audit</div>
           <div class="api-desc">Demo 页面调用时默认附带请求头 <code>X-Demo-Token</code>，只有 token 验证通过后才允许提交任务。</div>
           <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
           <div class="api-params">
@@ -477,7 +477,7 @@
           <span class="api-step-title">轮询任务状态</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}</div>
           <div class="api-desc">每隔 1–2 秒轮询一次。<code>status</code> 为 <code>"completed"</code> 或 <code>"failed"</code> 时停止。<code>steps</code> 字段实时反映各模块状态（pending / running / completed / failed）。完成后，<code>summary.ai_perception</code> 还会返回 AI 对站点的认知百分比分布和 4 个认知标签。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">status</span><span class="param-type">string</span><span class="param-desc">queued → running → completed | failed</span></div>
@@ -527,9 +527,9 @@
           <span class="api-step-title">获取任务图谱结果（可选）</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/structure-graph</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/structure-graph</div>
           <div class="api-desc">返回当前任务的结构图谱，重点描述站点、页面、产品/服务、sameAs、内外链与证据关系。</div>
-          <div class="api-endpoint" style="margin-top:10px"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/entity-graph</div>
+          <div class="api-endpoint" style="margin-top:10px"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/entity-graph</div>
           <div class="api-desc">返回当前任务的实体图谱，重点描述品牌、产品名、产品特性、规格参数、使用场景与评价类文本实体。</div>
         </div>
       </div>
@@ -540,7 +540,7 @@
           <span class="api-step-title">导出 Markdown 报告（可选）</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/report</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/tasks/{task_id}/report</div>
           <div class="api-desc">任务完成后可拉取完整 Markdown 报告，直接在浏览器渲染或保存为文件。仅在 <code>status=completed</code> 时有效。</div>
         </div>
       </div>

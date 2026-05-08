@@ -27,6 +27,19 @@ def test_demo_static_assets_are_mounted() -> None:
     assert js_response.status_code == 200
 
 
+def test_openapi_hides_demo_task_routes_and_exposes_split_graph_routes() -> None:
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    payload = response.json()
+    paths = payload["paths"]
+    assert "/api/v1/tasks/{task_id}/knowledge-graph" in paths
+    assert "/api/v1/tasks/{task_id}/structure-graph" in paths
+    assert "/api/v1/tasks/{task_id}/entity-graph" in paths
+    assert "/api/v1/demo/tasks/audit" not in paths
+    assert "/api/v1/demo/tasks/{task_id}" not in paths
+    assert "/api/v1/demo/tasks/{task_id}/structure-graph" not in paths
+
+
 def test_demo_token_status_reports_enabled_flag() -> None:
     original = settings.demo_access_token
     object.__setattr__(settings, "demo_access_token", "demo-secret")

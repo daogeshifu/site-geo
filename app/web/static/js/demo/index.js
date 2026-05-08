@@ -55,6 +55,7 @@ let demoTokenRequired = true;
 let demoTokenVerified = false;
 const REPORT_CACHE_PREFIX = 'geo-audit-report:';
 const DEMO_API_PREFIX = '/api/v1/demo';
+const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
 const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token';
 const GRAPH_CONFIG = {
@@ -562,7 +563,7 @@ async function loadGraph(graphKind, task = currentTask) {
   }
   config.setLoading(true);
   try {
-    const res = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${task.task_id}/${config.endpoint}`);
+    const res = await demoApiFetch(`${API_PREFIX}/tasks/${task.task_id}/${config.endpoint}`);
     const payload = await res.json();
     if (!res.ok || !payload.success) {
       throw new Error(payload?.data?.note || payload?.message || `${label} load failed`);
@@ -738,7 +739,7 @@ async function loadEntityGraph(task = currentTask) {
 
   /* ── Poll ── */
   async function pollTask(taskId) {
-    const res     = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${taskId}`);
+    const res     = await demoApiFetch(`${API_PREFIX}/tasks/${taskId}`);
     const payload = await res.json();
     if (!payload.success) throw new Error(payload.message || '轮询失败');
     const task = payload.data;
@@ -815,7 +816,7 @@ async function loadEntityGraph(task = currentTask) {
       return;
     }
     try {
-      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${currentTaskId}/report`);
+      const response = await demoApiFetch(`${API_PREFIX}/tasks/${currentTaskId}/report`);
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, '报告导出失败'));
       }
@@ -886,7 +887,7 @@ async function loadEntityGraph(task = currentTask) {
     }
 
     try {
-      const res     = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/audit`, {
+      const res     = await demoApiFetch(`${API_PREFIX}/tasks/audit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
