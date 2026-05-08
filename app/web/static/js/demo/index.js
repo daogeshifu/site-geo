@@ -501,7 +501,9 @@ async function loadKnowledgeGraph(task = currentTask) {
   try {
     const res = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${task.task_id}/knowledge-graph`);
     const payload = await res.json();
-    if (!payload.success) throw new Error(payload.message || 'knowledge graph load failed');
+    if (!res.ok || !payload.success) {
+      throw new Error(payload?.data?.note || payload?.message || 'knowledge graph load failed');
+    }
     currentKnowledgeGraph = payload.data;
   } catch (err) {
     currentKnowledgeGraph = {
@@ -509,7 +511,7 @@ async function loadKnowledgeGraph(task = currentTask) {
       backend: getAssetSummary(task)?.backend || task.storage_backend || 'file',
       available: false,
       built: false,
-      note: tx(getReportLang(task), '知识图谱接口请求失败，请稍后重试。', 'Knowledge graph request failed. Please retry later.'),
+      note: err?.message || tx(getReportLang(task), '知识图谱接口请求失败，请稍后重试。', 'Knowledge graph request failed. Please retry later.'),
       task: {
         task_id: task.task_id,
         site_id: getAssetSummary(task)?.site_id || null,

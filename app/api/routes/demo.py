@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from app.api.demo_access import DEMO_TOKEN_HEADER, is_demo_token_enabled, require_demo_token
 from app.api.routes.report import build_task_report_response
-from app.api.routes.tasks import task_service
+from app.api.routes.tasks import build_pending_graph_payload, task_service
 from app.core.exceptions import AppError
 from app.models.responses import success_response
 from app.models.task import TaskAuditRequest
@@ -75,8 +75,16 @@ async def get_demo_audit_task(task_id: str, request: Request) -> dict:
 async def get_demo_task_knowledge_graph(task_id: str, request: Request) -> dict:
     """demo 页专用知识图谱查询入口，要求携带 demo token。"""
     require_demo_token(request)
-    graph_payload = await task_service.site_graph_service.load_task_graph(task_id)
+    task = await task_service.get_task(task_id)
+    try:
+        graph_payload = await task_service.site_graph_service.load_task_graph(task_id)
+    except Exception:
+        if task:
+            return success_response(build_pending_graph_payload(task, "Knowledge graph is still being prepared for this task."))
+        raise
     if graph_payload is None:
+        if task:
+            return success_response(build_pending_graph_payload(task, "Knowledge graph has not been built for this task yet."))
         raise AppError(404, "task knowledge graph not found")
     return success_response(graph_payload)
 
