@@ -73,20 +73,57 @@ async def get_demo_audit_task(task_id: str, request: Request) -> dict:
 
 @router.get("/api/v1/demo/tasks/{task_id}/knowledge-graph")
 async def get_demo_task_knowledge_graph(task_id: str, request: Request) -> dict:
-    """demo 页专用知识图谱查询入口，要求携带 demo token。"""
+    """兼容旧接口：demo 页返回结构图谱数据。"""
     require_demo_token(request)
+    return await _load_demo_graph(task_id, graph_kind="structure")
+
+
+async def _load_demo_graph(task_id: str, *, graph_kind: str) -> dict:
     task = await task_service.get_task(task_id)
+    graph_service = (
+        task_service.site_entity_graph_service
+        if graph_kind == "entity"
+        else task_service.site_graph_service
+    )
+    graph_label = "Entity graph" if graph_kind == "entity" else "Structure graph"
     try:
-        graph_payload = await task_service.site_graph_service.load_task_graph(task_id)
+        graph_payload = await graph_service.load_task_graph(task_id)
     except Exception:
         if task:
-            return success_response(build_pending_graph_payload(task, "Knowledge graph is still being prepared for this task."))
+            return success_response(
+                build_pending_graph_payload(
+                    task,
+                    f"{graph_label} is still being prepared for this task.",
+                    graph_kind=graph_kind,
+                )
+            )
         raise
     if graph_payload is None:
         if task:
-            return success_response(build_pending_graph_payload(task, "Knowledge graph has not been built for this task yet."))
-        raise AppError(404, "task knowledge graph not found")
+            return success_response(
+                build_pending_graph_payload(
+                    task,
+                    f"{graph_label} has not been built for this task yet.",
+                    graph_kind=graph_kind,
+                )
+            )
+        raise AppError(404, f"task {graph_kind} graph not found")
+    graph_payload["graph_kind"] = graph_kind
     return success_response(graph_payload)
+
+
+@router.get("/api/v1/demo/tasks/{task_id}/structure-graph")
+async def get_demo_task_structure_graph(task_id: str, request: Request) -> dict:
+    """demo 页专用结构图谱查询入口，要求携带 demo token。"""
+    require_demo_token(request)
+    return await _load_demo_graph(task_id, graph_kind="structure")
+
+
+@router.get("/api/v1/demo/tasks/{task_id}/entity-graph")
+async def get_demo_task_entity_graph(task_id: str, request: Request) -> dict:
+    """demo 页专用实体图谱查询入口，要求携带 demo token。"""
+    require_demo_token(request)
+    return await _load_demo_graph(task_id, graph_kind="entity")
 
 
 @router.get("/api/v1/demo/tasks/{task_id}/report", response_class=PlainTextResponse)

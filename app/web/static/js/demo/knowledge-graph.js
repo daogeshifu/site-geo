@@ -390,7 +390,7 @@ function renderMetaGrid(payload, task, lang, requestedTaskId, snapshotTaskId, sh
   `;
 }
 
-export function renderKnowledgeGraph({ task, graph, host, lang }) {
+export function renderStructureGraph({ task, graph, host, lang }) {
   const payload = graph || {};
   const summary = payload.summary || {};
   const built = payload.built === true;
@@ -531,4 +531,8 @@ export function renderKnowledgeGraph({ task, graph, host, lang }) {
       </div>
     </section>
   `;
+}
+
+export function renderKnowledgeGraph(args) {
+  renderStructureGraph(args);
 }

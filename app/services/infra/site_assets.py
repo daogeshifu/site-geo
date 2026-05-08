@@ -562,7 +562,7 @@ class SiteAssetStore:
                 """
                 SELECT entity_count, edge_count, evidence_count, source_snapshot_count, built_at, note
                 FROM geo_site_graph_snapshots
-                WHERE site_id=%s
+                WHERE site_id=%s AND graph_version='site-graph-v1'
                 ORDER BY built_at DESC, graph_snapshot_id DESC
                 LIMIT 1
                 """,

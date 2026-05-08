@@ -25,14 +25,19 @@ def _task_site_id(task: AuditTask) -> int | None:
     return None
 
 
-def build_pending_graph_payload(task: AuditTask, note: str) -> dict:
+def build_pending_graph_payload(task: AuditTask, note: str, *, graph_kind: str = "structure") -> dict:
+    graph_service = (
+        task_service.site_entity_graph_service
+        if graph_kind == "entity"
+        else task_service.site_graph_service
+    )
     site_id = _task_site_id(task)
     return {
         "task_id": task.task_id,
         "snapshot_task_id": None,
         "exact_task_match": False,
-        "backend": "mysql" if task_service.site_graph_service.enabled else (task.storage_backend or "file"),
-        "available": task.build_knowledge_graph and task_service.site_graph_service.enabled,
+        "backend": "mysql" if graph_service.enabled else (task.storage_backend or "file"),
+        "available": task.build_knowledge_graph and graph_service.enabled,
         "built": False,
         "note": note,
         "task": {
@@ -49,7 +54,8 @@ def build_pending_graph_payload(task: AuditTask, note: str) -> dict:
             "completed_at": task.completed_at,
         },
         "site_id": site_id,
-        "graph_version": task_service.site_graph_service.GRAPH_VERSION,
+        "graph_kind": graph_kind,
+        "graph_version": graph_service.GRAPH_VERSION,
         "built_at": None,
         "site": {},
         "summary": {
@@ -65,6 +71,40 @@ def build_pending_graph_payload(task: AuditTask, note: str) -> dict:
         "evidence": [],
         "source_pages": [],
     }
+
+
+async def _load_task_graph_response(task_id: str, *, graph_kind: str = "structure") -> dict:
+    task = await task_service.get_task(task_id)
+    graph_service = (
+        task_service.site_entity_graph_service
+        if graph_kind == "entity"
+        else task_service.site_graph_service
+    )
+    graph_label = "Entity graph" if graph_kind == "entity" else "Structure graph"
+    try:
+        graph_payload = await graph_service.load_task_graph(task_id)
+    except Exception:
+        if task:
+            return success_response(
+                build_pending_graph_payload(
+                    task,
+                    f"{graph_label} is still being prepared for this task.",
+                    graph_kind=graph_kind,
+                )
+            )
+        raise
+    if graph_payload is None:
+        if task:
+            return success_response(
+                build_pending_graph_payload(
+                    task,
+                    f"{graph_label} has not been built for this task yet.",
+                    graph_kind=graph_kind,
+                )
+            )
+        raise AppError(404, f"task {graph_kind} graph not found")
+    graph_payload["graph_kind"] = graph_kind
+    return success_response(graph_payload)
 
 
 @router.post("/audit")
@@ -111,16 +151,17 @@ async def get_audit_task(task_id: str) -> dict:
 
 @router.get("/{task_id}/knowledge-graph")
 async def get_task_knowledge_graph(task_id: str) -> dict:
-    """按任务 ID 返回对应的知识图谱结构数据。"""
-    task = await task_service.get_task(task_id)
-    try:
-        graph_payload = await task_service.site_graph_service.load_task_graph(task_id)
-    except Exception:
-        if task:
-            return success_response(build_pending_graph_payload(task, "Knowledge graph is still being prepared for this task."))
-        raise
-    if graph_payload is None:
-        if task:
-            return success_response(build_pending_graph_payload(task, "Knowledge graph has not been built for this task yet."))
-        raise AppError(404, "task knowledge graph not found")
-    return success_response(graph_payload)
+    """兼容旧接口：返回结构图谱数据。"""
+    return await _load_task_graph_response(task_id, graph_kind="structure")
+
+
+@router.get("/{task_id}/structure-graph")
+async def get_task_structure_graph(task_id: str) -> dict:
+    """按任务 ID 返回结构图谱数据。"""
+    return await _load_task_graph_response(task_id, graph_kind="structure")
+
+
+@router.get("/{task_id}/entity-graph")
+async def get_task_entity_graph(task_id: str) -> dict:
+    """按任务 ID 返回内容实体图谱数据。"""
+    return await _load_task_graph_response(task_id, graph_kind="entity")

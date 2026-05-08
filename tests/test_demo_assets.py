@@ -109,3 +109,47 @@ def test_demo_knowledge_graph_returns_pending_payload_when_snapshot_not_ready(mo
     assert payload["data"]["built"] is False
     assert payload["data"]["available"] is True
     assert "not been built" in payload["data"]["note"]
+    assert payload["data"]["graph_kind"] == "structure"
+
+
+def test_demo_entity_graph_returns_pending_payload_when_snapshot_not_ready(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    task = AuditTask(
+        task_id="task-pending-entity-graph",
+        url="https://example.com/",
+        normalized_url="https://example.com/",
+        domain="example.com",
+        cache_key="cache-key",
+        task_type="site_geo_audit",
+        mode="standard",
+        build_knowledge_graph=True,
+        storage_backend="mysql",
+        created_at=now,
+        updated_at=now,
+        step_order=[],
+        steps={},
+    )
+
+    async def fake_get_task(task_id: str):
+        return task
+
+    async def fake_load_task_graph(task_id: str):
+        return None
+
+    original = settings.demo_access_token
+    object.__setattr__(settings, "demo_access_token", "")
+    monkeypatch.setattr(demo_routes.task_service, "get_task", fake_get_task)
+    monkeypatch.setattr(demo_routes.task_service.site_entity_graph_service, "load_task_graph", fake_load_task_graph)
+    monkeypatch.setattr(demo_routes.task_service.site_entity_graph_service, "enabled", True)
+    try:
+        response = client.get("/api/v1/demo/tasks/task-pending-entity-graph/entity-graph")
+    finally:
+        object.__setattr__(settings, "demo_access_token", original)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["built"] is False
+    assert payload["data"]["available"] is True
+    assert payload["data"]["graph_kind"] == "entity"
+    assert "not been built" in payload["data"]["note"]

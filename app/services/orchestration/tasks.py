@@ -9,7 +9,7 @@ from app.core.exceptions import AppError
 from app.models.discovery import DiscoveryResult
 from app.models.task import AuditTask, TaskAuditRequest, TaskStep
 from app.services.infra.cache import CacheService
-from app.services.infra.site_graph import SiteKnowledgeGraphService
+from app.services.infra.site_graph import SiteEntityGraphService, SiteKnowledgeGraphService
 from app.services.audit.content import ContentService
 from app.services.discovery.discovery import DiscoveryService
 from app.services.reporting.observation import ObservationService
@@ -45,6 +45,7 @@ class TaskService:
         self.discovery_service = DiscoveryService()
         self.asset_store = self.discovery_service.asset_store
         self.site_graph_service = SiteKnowledgeGraphService()
+        self.site_entity_graph_service = SiteEntityGraphService()
         # 所有审计模块共享同一个 discovery_service 实例
         self.visibility_service = VisibilityService(self.discovery_service)
         self.technical_service = TechnicalService(self.discovery_service)
@@ -161,6 +162,7 @@ class TaskService:
                     pass
             if request.build_knowledge_graph:
                 await self._maybe_build_knowledge_graph_from_payload(task, cached_record.payload)
+                await self._maybe_build_entity_graph_from_payload(task, cached_record.payload)
             return task
 
         # 新任务：注册后在后台启动审计协程
@@ -333,6 +335,83 @@ class TaskService:
             except Exception:
                 pass
 
+    async def _maybe_build_entity_graph(self, task: AuditTask, discovery: DiscoveryResult) -> None:
+        if not task.build_knowledge_graph or not self.site_entity_graph_service.enabled:
+            logger.info(
+                "Entity graph build skipped",
+                extra={
+                    "task_id": task.task_id,
+                    "enabled": task.build_knowledge_graph,
+                    "mysql_enabled": self.site_entity_graph_service.enabled,
+                    "reason": "disabled_by_request_or_mysql",
+                },
+            )
+            return
+        site_id = discovery.asset_summary.site_id if discovery.asset_summary else None
+        if site_id is None:
+            logger.info(
+                "Entity graph build skipped",
+                extra={
+                    "task_id": task.task_id,
+                    "enabled": task.build_knowledge_graph,
+                    "mysql_enabled": self.site_entity_graph_service.enabled,
+                    "reason": "missing_site_id",
+                },
+            )
+            return
+        logger.info("Entity graph build started", extra={"task_id": task.task_id, "site_id": site_id})
+        graph_summary = await self.site_entity_graph_service.build(site_id=site_id, discovery=discovery, task_id=task.task_id)
+        logger.info(
+            "Entity graph build completed",
+            extra={
+                "task_id": task.task_id,
+                "site_id": site_id,
+                "built": graph_summary.built,
+                "entity_count": graph_summary.entity_count,
+                "edge_count": graph_summary.edge_count,
+                "evidence_count": graph_summary.evidence_count,
+                "note": graph_summary.note,
+            },
+        )
+
+    async def _maybe_build_entity_graph_from_payload(self, task: AuditTask, payload: dict | None) -> None:
+        if not task.build_knowledge_graph or not isinstance(payload, dict):
+            return
+        discovery_payload = payload.get("discovery")
+        if not isinstance(discovery_payload, dict):
+            return
+        try:
+            discovery = DiscoveryResult.model_validate(discovery_payload)
+        except Exception:
+            return
+        site_id = discovery.asset_summary.site_id if discovery.asset_summary else None
+        if site_id is not None and self.site_entity_graph_service.enabled:
+            graph_summary = await self.site_entity_graph_service.ensure_task_snapshot(task_id=task.task_id, site_id=site_id)
+            if not graph_summary.built:
+                await self._maybe_build_entity_graph(task, discovery)
+        else:
+            await self._maybe_build_entity_graph(task, discovery)
+
+    async def _run_structure_graph_job(self, task: AuditTask, discovery: DiscoveryResult) -> None:
+        try:
+            await self._maybe_build_knowledge_graph(task, discovery)
+            if self.asset_store.available:
+                await self.asset_store.save_task(task)
+        except Exception as exc:
+            logger.warning("Structure graph background job failed", extra={"task_id": task.task_id, "error": str(exc)})
+
+    async def _run_entity_graph_job(self, task: AuditTask, discovery: DiscoveryResult) -> None:
+        try:
+            await self._maybe_build_entity_graph(task, discovery)
+        except Exception as exc:
+            logger.warning("Entity graph background job failed", extra={"task_id": task.task_id, "error": str(exc)})
+
+    def _schedule_graph_jobs(self, task: AuditTask, discovery: DiscoveryResult) -> None:
+        if not task.build_knowledge_graph:
+            return
+        asyncio.create_task(self._run_structure_graph_job(task, discovery))
+        asyncio.create_task(self._run_entity_graph_job(task, discovery))
+
     async def _run_site_geo_task(self, task: AuditTask) -> dict:
         await self._update_step(task, "discovery", "running")
         discovery = await self.discovery_service.discover(
@@ -342,11 +421,16 @@ class TaskService:
             force_refresh=task.force_refresh,
             target_locale=task.target_locale,
         )
-        await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
+        self._schedule_graph_jobs(task, discovery)
 
         module_coroutines = {
             "visibility": self.visibility_service.audit(
@@ -449,11 +533,16 @@ class TaskService:
             force_refresh=task.force_refresh,
             target_locale=task.target_locale,
         )
-        await self._maybe_build_knowledge_graph(task, discovery)
         discovery_payload = discovery.model_dump()
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
+        self._schedule_graph_jobs(task, discovery)
 
         await self._update_step(task, "content", "running")
         content = await self.page_content_audit_service.audit(

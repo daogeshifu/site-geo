@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/demo.css?v=20260413-demo-token" />
+  <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
 </head>
 <body>
 
@@ -234,7 +234,8 @@
   <!-- 结果区 -->
   <div class="tabs-bar">
     <button class="tab-btn active" data-tab="summary">报告</button>
-    <button class="tab-btn" data-tab="graph">知识图谱</button>
+    <button class="tab-btn" data-tab="structure-graph">结构图谱</button>
+    <button class="tab-btn" data-tab="entity-graph">实体图谱</button>
     <button class="tab-btn" data-tab="llm">AI 增强</button>
     <button class="tab-btn" data-tab="compare">版本对比</button>
     <button class="tab-btn" data-tab="json">原始数据</button>
@@ -245,8 +246,12 @@
       <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、6 平台适配、可选 Observation Layer、非首页提示、full audit 逐页诊断、关键问题、行动计划与 snapshot 证据。</div>
     </div>
 
-    <div id="tab-graph" class="tab-panel">
-      <div id="graph-output" class="report-empty placeholder">等待任务完成后生成知识图谱。将展示站点、页面、产品/服务、外部引用、sameAs 关系及证据样本。</div>
+    <div id="tab-structure-graph" class="tab-panel">
+      <div id="structure-graph-output" class="report-empty placeholder">等待任务完成后生成结构图谱。将展示站点、页面、产品/服务、外部引用、sameAs 关系及证据样本。</div>
+    </div>
+
+    <div id="tab-entity-graph" class="tab-panel">
+      <div id="entity-graph-output" class="report-empty placeholder">等待任务完成后生成实体图谱。将展示品牌、产品名、特性、规格、使用场景与评价类文本实体。</div>
     </div>
 
     <div id="tab-llm" class="tab-panel">
@@ -305,7 +310,7 @@
     <div id="tab-json" class="tab-panel">
       <div class="json-shell">
         <div class="json-toolbar">
-          <span class="json-title">Task + Knowledge Graph JSON</span>
+          <span class="json-title">Task + Structure Graph + Entity Graph JSON</span>
           <button id="copy-json-btn" type="button" class="btn-json">复制原始数据</button>
         </div>
         <pre id="json-output" class="json-out">{}</pre>
@@ -437,7 +442,7 @@
         <div class="api-step-body">
           <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/demo/tasks/audit</div>
           <div class="api-desc">Demo 页面调用时默认附带请求头 <code>X-Demo-Token</code>，只有 token 验证通过后才允许提交任务。</div>
-          <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
+          <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
             <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
@@ -519,11 +524,13 @@
       <div class="api-step">
         <div class="api-step-hdr">
           <div class="api-num">3</div>
-          <span class="api-step-title">获取任务知识图谱（可选）</span>
+          <span class="api-step-title">获取任务图谱结果（可选）</span>
         </div>
         <div class="api-step-body">
-          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/knowledge-graph</div>
-          <div class="api-desc">返回当前任务对应的站点知识图谱结构数据，单个响应内包含 summary、site、entities、edges、evidence 与 source_pages，适合前端可视化或后续图分析。</div>
+          <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/structure-graph</div>
+          <div class="api-desc">返回当前任务的结构图谱，重点描述站点、页面、产品/服务、sameAs、内外链与证据关系。</div>
+          <div class="api-endpoint" style="margin-top:10px"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/entity-graph</div>
+          <div class="api-desc">返回当前任务的实体图谱，重点描述品牌、产品名、产品特性、规格参数、使用场景与评价类文本实体。</div>
         </div>
       </div>
 
@@ -574,6 +581,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260413-demo-token"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260508-graph-split"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@ from app.models.discovery import (
     SitemapResult,
     SiteSignals,
 )
-from app.services.infra.site_graph import SiteKnowledgeGraphService
+from app.services.infra.site_graph import SiteEntityGraphService, SiteKnowledgeGraphService
 
 
 def _discovery() -> DiscoveryResult:
@@ -114,6 +114,73 @@ def test_project_graph_builds_entities_edges_and_evidence() -> None:
     assert "cites" in relation_types
     assert any(item.evidence_type == "json_ld" for item in evidences)
     assert any(item.evidence_type == "anchor" for item in evidences)
+
+
+def test_project_entity_graph_extracts_content_entities() -> None:
+    service = SiteEntityGraphService()
+    discovery = _discovery()
+    snapshot_rows = [
+        {
+            "snapshot_id": 2,
+            "site_id": 1,
+            "url_id": 12,
+            "normalized_url": "https://example.com/products/widget/",
+            "final_url": "https://example.com/products/widget/",
+            "url_type": "product",
+            "title": "Widget 3000 Portable Power Station",
+            "text_excerpt": "Portable backup power with fast charging for camping and home backup.",
+            "page_profile_json": json.dumps(
+                {
+                    "title": "Widget 3000 Portable Power Station",
+                    "lang": "en",
+                    "word_count": 900,
+                    "page_type": "product",
+                }
+            ),
+            "parsed_json": json.dumps(
+                {
+                    "title": "Widget 3000 Portable Power Station",
+                    "headings": [{"text": "Fast Charging"}, {"text": "Portable Design"}],
+                }
+            ),
+            "text_content": (
+                "Widget 3000 offers fast charging and a portable design. "
+                "It delivers 768Wh capacity and 1200W output. "
+                "Ideal for camping trips and home backup. "
+                "Customers say it is easy to use and reliable."
+            ),
+            "fetched_at": None,
+        },
+    ]
+
+    entities, edges, evidences = service._project_entity_graph(discovery, snapshot_rows)
+    entity_types = {item.entity_type for item in entities}
+    relation_types = {item.relation_type for item in edges}
+
+    assert "brand" in entity_types
+    assert "source_page" in entity_types
+    assert "product_model" in entity_types
+    assert "feature" in entity_types
+    assert "specification" in entity_types
+    assert "use_case" in entity_types
+    assert "sentiment_claim" in entity_types
+    assert "offers" in relation_types
+    assert "has_feature" in relation_types
+    assert "has_spec" in relation_types
+    assert "suited_for" in relation_types
+    assert "backed_by_claim" in relation_types
+    assert any("768Wh" in (item.evidence_text or "") for item in evidences)
+    assert any("camping trips" in (item.evidence_text or "") for item in evidences)
+    payload = service._build_entity_graph_json(
+        site_id=1,
+        discovery=discovery,
+        snapshot_rows=snapshot_rows,
+        entities=entities,
+        edges=edges,
+        evidences=evidences,
+    )
+    assert payload["source_pages"]
+    assert payload["source_pages"][0]["page_type"] == "product"
 
 
 def test_build_snapshot_graph_json_is_self_contained() -> None:

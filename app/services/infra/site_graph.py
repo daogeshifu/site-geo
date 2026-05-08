@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -371,11 +372,11 @@ class SiteKnowledgeGraphService:
             SELECT graph_snapshot_id, site_id, task_id, graph_version, source_snapshot_count,
                    entity_count, edge_count, evidence_count, graph_json, note, built_at
             FROM geo_site_graph_snapshots
-            WHERE task_id=%s
+            WHERE task_id=%s AND graph_version=%s
             ORDER BY built_at DESC, graph_snapshot_id DESC
             LIMIT 1
             """,
-            (task_id,),
+            (task_id, self.GRAPH_VERSION),
         )
         exact_task_match = snapshot_row is not None
         if snapshot_row is None:
@@ -386,11 +387,11 @@ class SiteKnowledgeGraphService:
                     SELECT graph_snapshot_id, site_id, task_id, graph_version, source_snapshot_count,
                            entity_count, edge_count, evidence_count, graph_json, note, built_at
                     FROM geo_site_graph_snapshots
-                    WHERE site_id=%s
+                    WHERE site_id=%s AND graph_version=%s
                     ORDER BY built_at DESC, graph_snapshot_id DESC
                     LIMIT 1
                     """,
-                    (site_id,),
+                    (site_id, self.GRAPH_VERSION),
                 )
         if not task_row and not snapshot_row:
             return None
@@ -480,11 +481,11 @@ class SiteKnowledgeGraphService:
             SELECT graph_snapshot_id, site_id, task_id, graph_version, source_snapshot_count,
                    entity_count, edge_count, evidence_count, graph_json, note, built_at
             FROM geo_site_graph_snapshots
-            WHERE task_id=%s
+            WHERE task_id=%s AND graph_version=%s
             ORDER BY built_at DESC, graph_snapshot_id DESC
             LIMIT 1
             """,
-            (task_id,),
+            (task_id, self.GRAPH_VERSION),
         )
         if exact_row:
             return self._summary_from_snapshot_row(exact_row)
@@ -494,11 +495,11 @@ class SiteKnowledgeGraphService:
             SELECT graph_snapshot_id, site_id, task_id, graph_version, source_snapshot_count,
                    entity_count, edge_count, evidence_count, graph_json, note, built_at
             FROM geo_site_graph_snapshots
-            WHERE site_id=%s
+            WHERE site_id=%s AND graph_version=%s
             ORDER BY built_at DESC, graph_snapshot_id DESC
             LIMIT 1
             """,
-            (site_id,),
+            (site_id, self.GRAPH_VERSION),
         )
         if not latest_row:
             return KnowledgeGraphSummary(
@@ -1219,3 +1220,522 @@ class SiteKnowledgeGraphService:
             },
         )
         return summary
+
+
+class SiteEntityGraphService(SiteKnowledgeGraphService):
+    """基于页面正文与标题语义投影站点内容实体图谱。"""
+
+    GRAPH_VERSION = "entity-graph-v1"
+
+    def _token_count(self, value: str | None) -> int:
+        return len(re.findall(r"[A-Za-z0-9]+", value or ""))
+
+    def _normalize_space(self, value: str | None) -> str:
+        return re.sub(r"\s+", " ", str(value or "")).strip()
+
+    def _split_sentences(self, text: str) -> list[str]:
+        return [self._normalize_space(item) for item in re.split(r"(?<=[.!?])\s+|\n+", text) if self._normalize_space(item)]
+
+    def _clean_phrase(self, value: str | None) -> str | None:
+        candidate = self._normalize_space(value)
+        if not candidate:
+            return None
+        candidate = re.sub(r"^[\-\u2022\*\d\.\)\s]+", "", candidate)
+        candidate = re.sub(r"\s*[:|]\s*$", "", candidate)
+        candidate = candidate.strip(" -_,.;:()[]{}")
+        if len(candidate) < 3:
+            return None
+        lowered = candidate.lower()
+        generic = {
+            "learn more",
+            "read more",
+            "contact us",
+            "about us",
+            "features",
+            "benefits",
+            "overview",
+            "details",
+            "summary",
+            "specifications",
+        }
+        if lowered in generic:
+            return None
+        return candidate
+
+    def _extract_feature_candidates(self, title: str, headings: list[dict[str, Any]], text_excerpt: str) -> list[str]:
+        candidates: list[str] = []
+        for heading in headings[:12]:
+            phrase = self._clean_phrase((heading or {}).get("text"))
+            if not phrase:
+                continue
+            if self._token_count(phrase) > 8:
+                continue
+            candidates.append(phrase)
+        for match in re.finditer(
+            r"(?:features?|benefits?|advantages?|capabilities|supports?)[:\s]+([A-Za-z0-9][^.;,\n]{4,80})",
+            f"{title}. {text_excerpt}",
+            re.IGNORECASE,
+        ):
+            phrase = self._clean_phrase(match.group(1))
+            if phrase:
+                candidates.append(phrase)
+        return list(dict.fromkeys(candidates))[:10]
+
+    def _extract_spec_candidates(self, text: str) -> list[str]:
+        pattern = re.compile(
+            r"\b(?:[A-Za-z][A-Za-z0-9/\-]{1,18}\s+){0,2}\d+(?:\.\d+)?\s?(?:W|Wh|kW|mAh|Ah|V|A|%|kg|g|mm|cm|m|km|GB|TB|Hz|fps|inch|inches|hours?|hrs?|minutes?|mins?)\b",
+            re.IGNORECASE,
+        )
+        items = [self._clean_phrase(match.group(0)) for match in pattern.finditer(text[:8000])]
+        return [item for item in dict.fromkeys(items) if item][:10]
+
+    def _extract_use_cases(self, text: str) -> list[str]:
+        pattern = re.compile(
+            r"(?:ideal for|designed for|best for|great for|perfect for|built for|suited for)\s+([A-Za-z0-9][^.,;\n]{3,60})",
+            re.IGNORECASE,
+        )
+        items = [self._clean_phrase(match.group(1)) for match in pattern.finditer(text[:8000])]
+        return [item for item in dict.fromkeys(items) if item][:8]
+
+    def _extract_sentiment_claims(self, text: str) -> list[str]:
+        keywords = ("customers", "users", "review", "testimonial", "trusted", "reliable", "portable", "powerful", "easy")
+        rows: list[str] = []
+        for sentence in self._split_sentences(text[:6000]):
+            lowered = sentence.lower()
+            if not any(keyword in lowered for keyword in keywords):
+                continue
+            phrase = self._clean_phrase(sentence)
+            if phrase:
+                rows.append(phrase[:180])
+        return list(dict.fromkeys(rows))[:6]
+
+    def _project_entity_graph(
+        self,
+        discovery: DiscoveryResult,
+        snapshot_rows: list[dict[str, Any]],
+    ) -> tuple[list[_ProjectedEntity], list[_ProjectedEdge], list[_ProjectedEvidence]]:
+        entities: dict[str, _ProjectedEntity] = {}
+        edges: dict[str, _ProjectedEdge] = {}
+        evidences: list[_ProjectedEvidence] = []
+        brand_name = discovery.site_signals.detected_company_name or discovery.domain
+        brand_key = self._add_entity(
+            entities,
+            entity_type="brand",
+            canonical_name=brand_name,
+            canonical_url=discovery.site_root_url or discovery.scope_root_url or discovery.final_url,
+            source_snapshot_id=None,
+            confidence=92.0,
+            attributes={
+                "business_type": discovery.business_type,
+                "scope_root_url": discovery.scope_root_url,
+                "site_root_url": discovery.site_root_url,
+            },
+        )
+
+        for row in snapshot_rows:
+            profile = _json_loads(row.get("page_profile_json"))
+            parsed = _json_loads(row.get("parsed_json"))
+            text_content = self._normalize_space(row.get("text_content") or "")
+            text_excerpt = self._normalize_space(row.get("text_excerpt") or profile.get("text_excerpt") or "")
+            final_url = _safe_normalize_url(row.get("final_url")) or _safe_normalize_url(row.get("normalized_url"))
+            if not final_url:
+                continue
+            snapshot_id = int(row.get("snapshot_id") or 0)
+            url_id = int(row.get("url_id") or 0)
+            page_type = str(row.get("url_type") or profile.get("page_type") or "page")
+            title = self._normalize_space(row.get("title") or profile.get("title") or parsed.get("title") or final_url)
+            seen_at = row.get("fetched_at")
+            page_key = self._add_entity(
+                entities,
+                entity_type="source_page",
+                canonical_name=title,
+                canonical_url=final_url,
+                source_snapshot_id=snapshot_id,
+                confidence=100.0,
+                attributes={
+                    "page_type": page_type,
+                    "lang": profile.get("lang"),
+                    "text_excerpt": text_excerpt[:240],
+                    "word_count": int(profile.get("word_count") or row.get("word_count") or 0),
+                },
+            )
+
+            page_to_brand = self._add_edge(
+                edges,
+                from_entity_key=page_key,
+                to_entity_key=brand_key,
+                relation_type="mentions",
+                confidence=86.0,
+                attributes={"source_page_type": page_type},
+                seen_at=seen_at,
+            )
+            evidences.append(
+                _ProjectedEvidence(
+                    entity_key=brand_key,
+                    edge_key=page_to_brand,
+                    snapshot_id=snapshot_id,
+                    url_id=url_id,
+                    evidence_type="text",
+                    evidence_field="title",
+                    selector_or_path="page.title",
+                    evidence_text=title,
+                    confidence=86.0,
+                )
+            )
+
+            focus_key = brand_key
+            focus_type = None
+            if page_type == "product":
+                focus_type = "product_model"
+            elif page_type in {"service", "landing"}:
+                focus_type = "service_offer"
+            if focus_type:
+                focus_key = self._add_entity(
+                    entities,
+                    entity_type=focus_type,
+                    canonical_name=title,
+                    canonical_url=final_url,
+                    source_snapshot_id=snapshot_id,
+                    confidence=84.0,
+                    attributes={"page_type": page_type, "page_url": final_url},
+                )
+                owns_edge = self._add_edge(
+                    edges,
+                    from_entity_key=brand_key,
+                    to_entity_key=focus_key,
+                    relation_type="offers",
+                    confidence=88.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                page_edge = self._add_edge(
+                    edges,
+                    from_entity_key=page_key,
+                    to_entity_key=focus_key,
+                    relation_type="describes",
+                    confidence=92.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                evidences.extend(
+                    [
+                        _ProjectedEvidence(
+                            entity_key=focus_key,
+                            edge_key=owns_edge,
+                            snapshot_id=snapshot_id,
+                            url_id=url_id,
+                            evidence_type="heuristic",
+                            evidence_field="url_type",
+                            selector_or_path=page_type,
+                            evidence_text=title,
+                            confidence=88.0,
+                        ),
+                        _ProjectedEvidence(
+                            entity_key=focus_key,
+                            edge_key=page_edge,
+                            snapshot_id=snapshot_id,
+                            url_id=url_id,
+                            evidence_type="text",
+                            evidence_field="title",
+                            selector_or_path="page.title",
+                            evidence_text=title,
+                            confidence=92.0,
+                        ),
+                    ]
+                )
+
+            headings = parsed.get("headings") or profile.get("headings") or []
+            feature_candidates = self._extract_feature_candidates(title, headings, text_excerpt)
+            spec_candidates = self._extract_spec_candidates(text_content or text_excerpt)
+            use_case_candidates = self._extract_use_cases(text_content or text_excerpt)
+            claim_candidates = self._extract_sentiment_claims(text_content or text_excerpt)
+
+            for feature in feature_candidates:
+                feature_key = self._add_entity(
+                    entities,
+                    entity_type="feature",
+                    canonical_name=feature,
+                    canonical_url=None,
+                    source_snapshot_id=snapshot_id,
+                    confidence=70.0,
+                    attributes={"page_type": page_type},
+                )
+                edge_key = self._add_edge(
+                    edges,
+                    from_entity_key=focus_key,
+                    to_entity_key=feature_key,
+                    relation_type="has_feature",
+                    confidence=76.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                evidences.append(
+                    _ProjectedEvidence(
+                        entity_key=feature_key,
+                        edge_key=edge_key,
+                        snapshot_id=snapshot_id,
+                        url_id=url_id,
+                        evidence_type="heading",
+                        evidence_field="headings",
+                        selector_or_path="headings",
+                        evidence_text=feature,
+                        confidence=76.0,
+                    )
+                )
+
+            for spec in spec_candidates:
+                spec_key = self._add_entity(
+                    entities,
+                    entity_type="specification",
+                    canonical_name=spec,
+                    canonical_url=None,
+                    source_snapshot_id=snapshot_id,
+                    confidence=74.0,
+                    attributes={"page_type": page_type},
+                )
+                edge_key = self._add_edge(
+                    edges,
+                    from_entity_key=focus_key,
+                    to_entity_key=spec_key,
+                    relation_type="has_spec",
+                    confidence=78.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                evidences.append(
+                    _ProjectedEvidence(
+                        entity_key=spec_key,
+                        edge_key=edge_key,
+                        snapshot_id=snapshot_id,
+                        url_id=url_id,
+                        evidence_type="text",
+                        evidence_field="text_content",
+                        selector_or_path="page.text_content",
+                        evidence_text=spec,
+                        confidence=78.0,
+                    )
+                )
+
+            for use_case in use_case_candidates:
+                use_case_key = self._add_entity(
+                    entities,
+                    entity_type="use_case",
+                    canonical_name=use_case,
+                    canonical_url=None,
+                    source_snapshot_id=snapshot_id,
+                    confidence=68.0,
+                    attributes={"page_type": page_type},
+                )
+                edge_key = self._add_edge(
+                    edges,
+                    from_entity_key=focus_key,
+                    to_entity_key=use_case_key,
+                    relation_type="suited_for",
+                    confidence=72.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                evidences.append(
+                    _ProjectedEvidence(
+                        entity_key=use_case_key,
+                        edge_key=edge_key,
+                        snapshot_id=snapshot_id,
+                        url_id=url_id,
+                        evidence_type="text",
+                        evidence_field="text_content",
+                        selector_or_path="page.text_content",
+                        evidence_text=use_case,
+                        confidence=72.0,
+                    )
+                )
+
+            for claim in claim_candidates:
+                claim_key = self._add_entity(
+                    entities,
+                    entity_type="sentiment_claim",
+                    canonical_name=claim,
+                    canonical_url=None,
+                    source_snapshot_id=snapshot_id,
+                    confidence=66.0,
+                    attributes={"page_type": page_type},
+                )
+                edge_key = self._add_edge(
+                    edges,
+                    from_entity_key=page_key,
+                    to_entity_key=claim_key,
+                    relation_type="mentions",
+                    confidence=68.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                focus_edge = self._add_edge(
+                    edges,
+                    from_entity_key=focus_key,
+                    to_entity_key=claim_key,
+                    relation_type="backed_by_claim",
+                    confidence=64.0,
+                    attributes={"source_page_type": page_type},
+                    seen_at=seen_at,
+                )
+                evidences.extend(
+                    [
+                        _ProjectedEvidence(
+                            entity_key=claim_key,
+                            edge_key=edge_key,
+                            snapshot_id=snapshot_id,
+                            url_id=url_id,
+                            evidence_type="text",
+                            evidence_field="text_content",
+                            selector_or_path="page.text_content",
+                            evidence_text=claim,
+                            confidence=68.0,
+                        ),
+                        _ProjectedEvidence(
+                            entity_key=claim_key,
+                            edge_key=focus_edge,
+                            snapshot_id=snapshot_id,
+                            url_id=url_id,
+                            evidence_type="text",
+                            evidence_field="text_content",
+                            selector_or_path="page.text_content",
+                            evidence_text=claim,
+                            confidence=64.0,
+                        ),
+                    ]
+                )
+
+        edge_evidence_counts: dict[str, int] = {}
+        for evidence in evidences:
+            if evidence.edge_key:
+                edge_evidence_counts[evidence.edge_key] = edge_evidence_counts.get(evidence.edge_key, 0) + 1
+        for edge_key, edge in edges.items():
+            edge.evidence_count = edge_evidence_counts.get(edge_key, 0)
+
+        return list(entities.values()), list(edges.values()), evidences
+
+    def _build_entity_graph_json(
+        self,
+        *,
+        site_id: int,
+        discovery: DiscoveryResult,
+        snapshot_rows: list[dict[str, Any]],
+        entities: list[_ProjectedEntity],
+        edges: list[_ProjectedEdge],
+        evidences: list[_ProjectedEvidence],
+    ) -> dict[str, Any]:
+        payload = self._build_snapshot_graph_json(
+            site_id=site_id,
+            discovery=discovery,
+            snapshot_rows=snapshot_rows,
+            entities=entities,
+            edges=edges,
+            evidences=evidences,
+        )
+        payload["site"]["brand_name"] = discovery.site_signals.detected_company_name or discovery.domain
+        payload["source_pages"] = [
+            {
+                "entity_key": item["entity_key"],
+                "canonical_name": item["canonical_name"],
+                "canonical_url": item["canonical_url"],
+                "page_type": (item.get("attributes") or {}).get("page_type"),
+                "word_count": (item.get("attributes") or {}).get("word_count"),
+                "text_excerpt": (item.get("attributes") or {}).get("text_excerpt"),
+                "source_snapshot_id": item.get("source_snapshot_id"),
+                "confidence": item.get("confidence"),
+            }
+            for item in payload.get("entities", [])
+            if item.get("entity_type") == "source_page"
+        ]
+        return payload
+
+    async def build(
+        self,
+        *,
+        site_id: int,
+        discovery: DiscoveryResult,
+        task_id: str | None = None,
+    ) -> KnowledgeGraphSummary:
+        if not self.enabled:
+            return KnowledgeGraphSummary(enabled=False, built=False, note="MySQL is not enabled.")
+
+        try:
+            snapshot_rows = await self.client.fetchall(
+                """
+                SELECT snapshot_id, site_id, url_id, normalized_url, final_url, url_type, title, text_excerpt,
+                       page_profile_json, parsed_json, text_content, fetched_at
+                FROM geo_page_snapshots
+                WHERE site_id=%s
+                ORDER BY fetched_at ASC, snapshot_id ASC
+                """,
+                (site_id,),
+            )
+        except Exception as exc:
+            logger.warning("Entity graph build skipped while loading snapshots", extra={"site_id": site_id, "error": str(exc)})
+            return KnowledgeGraphSummary(
+                enabled=True,
+                built=False,
+                site_id=site_id,
+                note="Failed to load page snapshots for entity graph build.",
+            )
+
+        if not snapshot_rows:
+            return KnowledgeGraphSummary(
+                enabled=True,
+                built=False,
+                site_id=site_id,
+                note="No page snapshots were available for entity graph build.",
+            )
+
+        entities, edges, evidences = self._project_entity_graph(discovery, snapshot_rows)
+        graph_json = self._build_entity_graph_json(
+            site_id=site_id,
+            discovery=discovery,
+            snapshot_rows=snapshot_rows,
+            entities=entities,
+            edges=edges,
+            evidences=evidences,
+        )
+        graph_built_at = datetime.now(timezone.utc)
+        try:
+            await self.client.execute(
+                """
+                INSERT INTO geo_site_graph_snapshots (
+                  site_id, task_id, graph_version, source_snapshot_count,
+                  entity_count, edge_count, evidence_count, graph_json, note, built_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    site_id,
+                    task_id,
+                    self.GRAPH_VERSION,
+                    len(snapshot_rows),
+                    len(entities),
+                    len(edges),
+                    len(evidences),
+                    _json_dumps(graph_json),
+                    "Projected from page text, headings, and content signals.",
+                    graph_built_at,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Entity graph build failed", extra={"site_id": site_id, "error": str(exc)})
+            return KnowledgeGraphSummary(
+                enabled=True,
+                built=False,
+                site_id=site_id,
+                source_snapshot_count=len(snapshot_rows),
+                note="Entity graph build failed while writing snapshots.",
+            )
+
+        return KnowledgeGraphSummary(
+            enabled=True,
+            built=True,
+            site_id=site_id,
+            entity_count=len(entities),
+            edge_count=len(edges),
+            evidence_count=len(evidences),
+            source_snapshot_count=len(snapshot_rows),
+            last_built_at=graph_built_at,
+            note="Entity graph projection stored in MySQL.",
+        )

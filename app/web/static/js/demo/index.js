@@ -1,5 +1,6 @@
 import { renderContentAuditReport } from './content-report.js';
-import { renderKnowledgeGraph } from './knowledge-graph.js';
+import { renderEntityGraph } from './entity-graph.js';
+import { renderStructureGraph } from './knowledge-graph.js';
 import { renderSiteAuditReport } from './site-report.js';
 import {
   getTaskStepOrder,
@@ -18,8 +19,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     $(`tab-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'graph' && currentTask?.task_id && currentTask?.build_knowledge_graph !== false) {
-      loadKnowledgeGraph(currentTask).catch(() => {});
+    if (btn.dataset.tab === 'structure-graph' && currentTask?.task_id && currentTask?.build_knowledge_graph !== false) {
+      loadStructureGraph(currentTask).catch(() => {});
+    }
+    if (btn.dataset.tab === 'entity-graph' && currentTask?.task_id && currentTask?.build_knowledge_graph !== false) {
+      loadEntityGraph(currentTask).catch(() => {});
     }
   });
 });
@@ -38,18 +42,49 @@ $('toast-close').addEventListener('click', () => $('toast').classList.remove('sh
 
 /* ── State ── */
 let pollTimer = null;
-let knowledgeGraphPollTimer = null;
+let structureGraphPollTimer = null;
+let entityGraphPollTimer = null;
 let currentTaskId = null;
 let currentTaskStatus = 'idle';
 let currentTask = null;
-let currentKnowledgeGraph = null;
-let knowledgeGraphLoading = false;
+let currentStructureGraph = null;
+let currentEntityGraph = null;
+let structureGraphLoading = false;
+let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const REPORT_CACHE_PREFIX = 'geo-audit-report:';
 const DEMO_API_PREFIX = '/api/v1/demo';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
 const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token';
+const GRAPH_CONFIG = {
+  structure: {
+    graphKind: 'structure',
+    label: { zh: '结构图谱', en: 'Structure graph' },
+    endpoint: 'structure-graph',
+    hostId: 'structure-graph-output',
+    getCurrent: () => currentStructureGraph,
+    setCurrent: value => { currentStructureGraph = value; },
+    getLoading: () => structureGraphLoading,
+    setLoading: value => { structureGraphLoading = value; },
+    getTimer: () => structureGraphPollTimer,
+    setTimer: value => { structureGraphPollTimer = value; },
+    render: ({ task, graph, host, lang }) => renderStructureGraph({ task, graph, host, lang }),
+  },
+  entity: {
+    graphKind: 'entity',
+    label: { zh: '实体图谱', en: 'Entity graph' },
+    endpoint: 'entity-graph',
+    hostId: 'entity-graph-output',
+    getCurrent: () => currentEntityGraph,
+    setCurrent: value => { currentEntityGraph = value; },
+    getLoading: () => entityGraphLoading,
+    setLoading: value => { entityGraphLoading = value; },
+    getTimer: () => entityGraphPollTimer,
+    setTimer: value => { entityGraphPollTimer = value; },
+    render: ({ task, graph, host, lang }) => renderEntityGraph({ task, graph, host, lang }),
+  },
+};
 
 function getSelectedDemoToken() {
   return $('demo-token')?.value?.trim() || '';
@@ -154,7 +189,7 @@ function handleDemoAuthFailure(message = 'Demo token required or invalid') {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  clearKnowledgeGraphPolling();
+  clearAllGraphPolling();
   setDemoAccessState({
     badgeText: '验证失败',
     badgeClass: 'b-danger',
@@ -389,37 +424,49 @@ function renderReport(task) {
   renderSiteAuditReport({ task, host, lang, setCachedReportHtml });
 }
 
-function buildRawPayload(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
+function buildRawPayload(
+  task = currentTask,
+  structureGraph = currentStructureGraph,
+  entityGraph = currentEntityGraph,
+) {
   return {
     task: task || null,
-    knowledge_graph: knowledgeGraph || null
+    structure_graph: structureGraph || null,
+    entity_graph: entityGraph || null,
   };
 }
 
-function renderRawPayload(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
-  $('json-output').textContent = JSON.stringify(buildRawPayload(task, knowledgeGraph), null, 2);
+function renderRawPayload(
+  task = currentTask,
+  structureGraph = currentStructureGraph,
+  entityGraph = currentEntityGraph,
+) {
+  $('json-output').textContent = JSON.stringify(buildRawPayload(task, structureGraph, entityGraph), null, 2);
 }
 
-function renderKnowledgeGraphPanel(task = currentTask, knowledgeGraph = currentKnowledgeGraph) {
-  renderKnowledgeGraph({
+function renderGraphPanel(graphKind, task = currentTask, graph = GRAPH_CONFIG[graphKind].getCurrent()) {
+  const config = GRAPH_CONFIG[graphKind];
+  config.render({
     task,
-    graph: knowledgeGraph,
-    host: $('graph-output'),
-    lang: getReportLang(task)
+    graph,
+    host: $(config.hostId),
+    lang: getReportLang(task),
   });
 }
 
-function setKnowledgeGraphPlaceholder(task = currentTask, note = null) {
+function setGraphPlaceholder(graphKind, task = currentTask, note = null) {
+  const config = GRAPH_CONFIG[graphKind];
   const lang = getReportLang(task);
-  currentKnowledgeGraph = {
+  const label = tx(lang, config.label.zh, config.label.en);
+  const placeholder = {
     task_id: task?.task_id || null,
     backend: task?.storage_backend || getAssetSummary(task)?.backend || 'file',
     available: Boolean(task?.build_knowledge_graph),
     built: false,
     note: note || (
       task?.build_knowledge_graph === false
-        ? tx(lang, '当前任务未开启知识图谱构建。', 'Knowledge graph build is disabled for this task.')
-        : tx(lang, '等待任务完成后返回知识图谱结构。', 'Waiting for the task to finish before loading the knowledge graph.')
+        ? tx(lang, `当前任务未开启${label}构建。`, `${label} build is disabled for this task.`)
+        : tx(lang, `等待任务完成后返回${label}结构。`, `Waiting for the task to finish before loading the ${label.toLowerCase()}.`)
     ),
     task: task ? {
       task_id: task.task_id,
@@ -435,6 +482,7 @@ function setKnowledgeGraphPlaceholder(task = currentTask, note = null) {
       completed_at: task.completed_at
     } : null,
     site_id: getAssetSummary(task)?.site_id || null,
+    graph_kind: graphKind,
     graph_version: null,
     built_at: null,
     summary: {
@@ -451,67 +499,82 @@ function setKnowledgeGraphPlaceholder(task = currentTask, note = null) {
     evidence: [],
     source_pages: []
   };
-  renderKnowledgeGraphPanel(task, currentKnowledgeGraph);
-  renderRawPayload(task, currentKnowledgeGraph);
+  config.setCurrent(placeholder);
+  renderGraphPanel(graphKind, task, placeholder);
+  renderRawPayload(task, currentStructureGraph, currentEntityGraph);
 }
 
-function clearKnowledgeGraphPolling() {
-  if (knowledgeGraphPollTimer) {
-    clearInterval(knowledgeGraphPollTimer);
-    knowledgeGraphPollTimer = null;
+function clearGraphPolling(graphKind) {
+  const timer = GRAPH_CONFIG[graphKind].getTimer();
+  if (timer) {
+    clearInterval(timer);
+    GRAPH_CONFIG[graphKind].setTimer(null);
   }
 }
 
-function shouldPollKnowledgeGraph(task = currentTask, graph = currentKnowledgeGraph) {
+function clearAllGraphPolling() {
+  clearGraphPolling('structure');
+  clearGraphPolling('entity');
+}
+
+function shouldPollGraph(graphKind, task = currentTask, graph = GRAPH_CONFIG[graphKind].getCurrent()) {
   if (!task?.task_id || task?.build_knowledge_graph === false) return false;
   if (task.status === 'failed') return false;
   return graph?.built !== true;
 }
 
-function ensureKnowledgeGraphPolling(task = currentTask) {
-  if (!shouldPollKnowledgeGraph(task, currentKnowledgeGraph)) {
-    clearKnowledgeGraphPolling();
+function ensureGraphPolling(graphKind, task = currentTask) {
+  if (!shouldPollGraph(graphKind, task, GRAPH_CONFIG[graphKind].getCurrent())) {
+    clearGraphPolling(graphKind);
     return;
   }
-  if (knowledgeGraphPollTimer) return;
-  knowledgeGraphPollTimer = setInterval(() => {
-    if (!shouldPollKnowledgeGraph(currentTask, currentKnowledgeGraph)) {
-      clearKnowledgeGraphPolling();
+  if (GRAPH_CONFIG[graphKind].getTimer()) return;
+  GRAPH_CONFIG[graphKind].setTimer(setInterval(() => {
+    if (!shouldPollGraph(graphKind, currentTask, GRAPH_CONFIG[graphKind].getCurrent())) {
+      clearGraphPolling(graphKind);
       return;
     }
-    loadKnowledgeGraph(currentTask).catch(() => {});
-  }, 1500);
+    loadGraph(graphKind, currentTask).catch(() => {});
+  }, 1500));
 }
 
-async function loadKnowledgeGraph(task = currentTask) {
+function ensureAllGraphPolling(task = currentTask) {
+  ensureGraphPolling('structure', task);
+  ensureGraphPolling('entity', task);
+}
+
+async function loadGraph(graphKind, task = currentTask) {
+  const config = GRAPH_CONFIG[graphKind];
+  const lang = getReportLang(task);
+  const label = tx(lang, config.label.zh, config.label.en);
   if (!task?.task_id) {
-    setKnowledgeGraphPlaceholder(task, tx(getReportLang(task), '尚未生成任务 ID。', 'Task ID is not available yet.'));
-    clearKnowledgeGraphPolling();
+    setGraphPlaceholder(graphKind, task, tx(lang, '尚未生成任务 ID。', 'Task ID is not available yet.'));
+    clearGraphPolling(graphKind);
     return;
   }
   if (task.build_knowledge_graph === false) {
-    setKnowledgeGraphPlaceholder(task);
-    clearKnowledgeGraphPolling();
+    setGraphPlaceholder(graphKind, task);
+    clearGraphPolling(graphKind);
     return;
   }
-  if (knowledgeGraphLoading) {
+  if (config.getLoading()) {
     return;
   }
-  knowledgeGraphLoading = true;
+  config.setLoading(true);
   try {
-    const res = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${task.task_id}/knowledge-graph`);
+    const res = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${task.task_id}/${config.endpoint}`);
     const payload = await res.json();
     if (!res.ok || !payload.success) {
-      throw new Error(payload?.data?.note || payload?.message || 'knowledge graph load failed');
+      throw new Error(payload?.data?.note || payload?.message || `${label} load failed`);
     }
-    currentKnowledgeGraph = payload.data;
+    config.setCurrent(payload.data);
   } catch (err) {
-    currentKnowledgeGraph = {
+    config.setCurrent({
       task_id: task.task_id,
       backend: getAssetSummary(task)?.backend || task.storage_backend || 'file',
       available: false,
       built: false,
-      note: err?.message || tx(getReportLang(task), '知识图谱接口请求失败，请稍后重试。', 'Knowledge graph request failed. Please retry later.'),
+      note: err?.message || tx(lang, `${label}接口请求失败，请稍后重试。`, `${label} request failed. Please retry later.`),
       task: {
         task_id: task.task_id,
         site_id: getAssetSummary(task)?.site_id || null,
@@ -526,6 +589,7 @@ async function loadKnowledgeGraph(task = currentTask) {
         completed_at: task.completed_at
       },
       site_id: getAssetSummary(task)?.site_id || null,
+      graph_kind: graphKind,
       graph_version: null,
       built_at: null,
       summary: {
@@ -541,13 +605,21 @@ async function loadKnowledgeGraph(task = currentTask) {
       edges: [],
       evidence: [],
       source_pages: []
-    };
+    });
   } finally {
-    knowledgeGraphLoading = false;
+    config.setLoading(false);
   }
-  renderKnowledgeGraphPanel(task, currentKnowledgeGraph);
-  renderRawPayload(task, currentKnowledgeGraph);
-  ensureKnowledgeGraphPolling(task);
+  renderGraphPanel(graphKind, task, config.getCurrent());
+  renderRawPayload(task, currentStructureGraph, currentEntityGraph);
+  ensureGraphPolling(graphKind, task);
+}
+
+async function loadStructureGraph(task = currentTask) {
+  await loadGraph('structure', task);
+}
+
+async function loadEntityGraph(task = currentTask) {
+  await loadGraph('entity', task);
 }
 
   function renderTimeline(steps) {
@@ -679,11 +751,14 @@ async function loadKnowledgeGraph(task = currentTask) {
       el.classList.remove('placeholder');
     }
     renderReport(task);
-    await loadKnowledgeGraph(task);
+    await Promise.all([
+      loadStructureGraph(task),
+      loadEntityGraph(task),
+    ]);
     if (task.status === 'completed' || task.status === 'failed') {
       resetBtn();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      if (task.status === 'failed') clearKnowledgeGraphPolling();
+      if (task.status === 'failed') clearAllGraphPolling();
       if (task.status === 'failed') showToast(task.error || '任务执行失败');
       else showToast('审计已完成', 'success');
     }
@@ -759,16 +834,18 @@ async function loadKnowledgeGraph(task = currentTask) {
       return;
     }
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    clearKnowledgeGraphPolling();
+    clearAllGraphPolling();
 
     setSubmitBusy('提交中…');
     const taskType = getSelectedTaskType();
     const isContentAudit = taskType === 'site_content_audit';
     currentTask = { task_type: taskType, status: 'queued' };
-    currentKnowledgeGraph = null;
+    currentStructureGraph = null;
+    currentEntityGraph = null;
     currentTaskId = null;
     currentTaskStatus = 'queued';
-    knowledgeGraphLoading = false;
+    structureGraphLoading = false;
+    entityGraphLoading = false;
     applyTaskTypeUi(taskType);
 
     const summaryEl = $('summary-text');
@@ -781,7 +858,8 @@ async function loadKnowledgeGraph(task = currentTask) {
       ? '任务已创建，等待后台返回内容审计结果……<br />报告将在结果完成后自动生成。'
       : '任务已创建，等待后台返回各阶段结果……<br />报告将在结果完成后自动生成。';
     $('llm-notes').textContent = '等待会员增强状态。';
-    setKnowledgeGraphPlaceholder(currentTask);
+    setGraphPlaceholder('structure', currentTask);
+    setGraphPlaceholder('entity', currentTask);
     $('export-btn').disabled = true;
     renderTimeline({});
 
@@ -822,7 +900,10 @@ async function loadKnowledgeGraph(task = currentTask) {
       renderTimeline(task.steps);
       renderLlmStatus(task);
       renderReport(task);
-      await loadKnowledgeGraph(task);
+      await Promise.all([
+        loadStructureGraph(task),
+        loadEntityGraph(task),
+      ]);
 
       if (task.status === 'completed') {
         resetBtn();
@@ -835,11 +916,11 @@ async function loadKnowledgeGraph(task = currentTask) {
         return;
       }
 
-      ensureKnowledgeGraphPolling(task);
+      ensureAllGraphPolling(task);
       pollTimer = setInterval(() => {
         pollTask(task.task_id).catch(err => {
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          clearKnowledgeGraphPolling();
+          clearAllGraphPolling();
           resetBtn();
           showToast(err.message);
         });
@@ -888,12 +969,14 @@ async function loadKnowledgeGraph(task = currentTask) {
     $('model').style.opacity = isPremium ? '1' : '0.45';
   });
   $('task-type').addEventListener('change', () => {
-    clearKnowledgeGraphPolling();
+    clearAllGraphPolling();
     currentTask = { task_type: getSelectedTaskType(), status: 'idle' };
-    currentKnowledgeGraph = null;
+    currentStructureGraph = null;
+    currentEntityGraph = null;
     currentTaskId = null;
     currentTaskStatus = 'idle';
-    knowledgeGraphLoading = false;
+    structureGraphLoading = false;
+    entityGraphLoading = false;
     $('task-id').textContent = '—';
     $('current-step').textContent = '—';
     $('progress').textContent = '0%';
@@ -909,7 +992,8 @@ async function loadKnowledgeGraph(task = currentTask) {
     setStatusBadge('idle');
     applyTaskTypeUi();
     renderTimeline({});
-    setKnowledgeGraphPlaceholder(currentTask, tx(getReportLang(currentTask), '等待任务开始后展示知识图谱。', 'Knowledge graph will appear after the task starts.'));
+    setGraphPlaceholder('structure', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示结构图谱。', 'Structure graph will appear after the task starts.'));
+    setGraphPlaceholder('entity', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示实体图谱。', 'Entity graph will appear after the task starts.'));
   });
   $('feedback-lang').addEventListener('change', () => {
     applyTaskTypeUi();
@@ -920,8 +1004,9 @@ async function loadKnowledgeGraph(task = currentTask) {
       return;
     }
     renderReport(currentTask);
-    renderKnowledgeGraphPanel(currentTask, currentKnowledgeGraph);
-    renderRawPayload(currentTask, currentKnowledgeGraph);
+    renderGraphPanel('structure', currentTask, currentStructureGraph);
+    renderGraphPanel('entity', currentTask, currentEntityGraph);
+    renderRawPayload(currentTask, currentStructureGraph, currentEntityGraph);
   });
   $('full-audit').addEventListener('change', () => {
     const enabled = $('full-audit').checked;
@@ -932,7 +1017,8 @@ async function loadKnowledgeGraph(task = currentTask) {
   /* ── Init ── */
   applyTaskTypeUi();
   renderTimeline({});
-  setKnowledgeGraphPlaceholder(currentTask, tx(getReportLang(currentTask), '等待任务开始后展示知识图谱。', 'Knowledge graph will appear after the task starts.'));
+  setGraphPlaceholder('structure', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示结构图谱。', 'Structure graph will appear after the task starts.'));
+  setGraphPlaceholder('entity', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示实体图谱。', 'Entity graph will appear after the task starts.'));
   syncSubmitButtonState();
   initDemoAccess().catch(err => {
     showToast(err?.message || '初始化 demo token 失败');
