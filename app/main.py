@@ -61,3 +61,7 @@ app.include_router(discovery_router)   # 站点快照
 app.include_router(audit_router)       # 各审计模块
 app.include_router(task_router)        # 异步任务管理
 app.include_router(report_router)      # 报告导出
+if __name__ == "__main__":
+    import uvicorn
+    # 注意这里要写 "app.main:app" 而不是 "main:app"
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8023, reload=True)
