@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+if __name__ == "__main__":
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+
 import logging
 from pathlib import Path
 
