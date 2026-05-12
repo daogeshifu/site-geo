@@ -54,10 +54,65 @@ async def fetch_url(
     """
     # 若未注入 client，创建临时 client（finally 中关闭）
     owns_client = client is None
-    request_client = client or httpx.AsyncClient(
-        timeout=httpx.Timeout(settings.request_timeout_seconds),
+    DEFAULT_HEADERS = {
+        # 基础浏览器身份
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+
+        # 内容协商
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,"
+            "image/avif,image/webp,image/apng,*/*;q=0.8"
+        ),
+
+        "Accept-Language": "en-US,en;q=0.9",
+
+        # 注意：httpx 会自动处理 gzip/br
+        # 不建议手动写
+        # "Accept-Encoding": "gzip, deflate, br",
+
+        # Chrome 常见
+        "Cache-Control": "max-age=0",
+        "Upgrade-Insecure-Requests": "1",
+
+        # sec-ch-* 非常重要
+        "sec-ch-ua": (
+            '"Chromium";v="124", '
+            '"Google Chrome";v="124", '
+            '"Not-A.Brand";v="99"'
+        ),
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+
+        # fetch metadata
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+
+        # keep alive
+        "Connection": "keep-alive",
+    }
+
+    request_client = httpx.AsyncClient(
+        headers=DEFAULT_HEADERS,
+        http2=True,
         follow_redirects=True,
-        headers={"User-Agent": settings.default_user_agent},
+        timeout=httpx.Timeout(
+            connect=10.0,
+            read=20.0,
+            write=20.0,
+            pool=20.0,
+        ),
+        limits=httpx.Limits(
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=30,
+        ),
+        verify=True,
     )
     started_at = time.perf_counter()
     try:
