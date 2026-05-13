@@ -13,6 +13,7 @@ from app.models.storage import SiteAssetSummary
 TaskStatus = Literal["queued", "running", "completed", "failed"]
 # 步骤状态枚举
 StepStatus = Literal["pending", "running", "completed", "failed"]
+GraphJobState = Literal["pending", "running", "completed", "failed", "skipped"]
 
 
 class TaskAuditRequest(UrlRequest):
@@ -32,6 +33,19 @@ class TaskStep(BaseModel):
     completed_at: datetime | None = None    # 步骤完成时间
     error: str | None = None               # 失败时的错误信息
     data: Any = None                        # 步骤执行结果数据
+
+
+class GraphJobStatus(BaseModel):
+    """结构图谱 / 实体图谱的后台构建状态。"""
+
+    kind: Literal["structure", "entity"]
+    status: GraphJobState = "pending"
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+    note: str | None = None
+    built: bool = False
+    graph_version: str | None = None
 
 
 class AuditTask(BaseModel):
@@ -65,6 +79,7 @@ class AuditTask(BaseModel):
     error: str | None = None              # 任务失败时的全局错误信息
     step_order: list[str] = Field(default_factory=list)
     steps: dict[str, TaskStep] = Field(default_factory=dict)  # 各步骤状态
+    graph_jobs: dict[str, GraphJobStatus] = Field(default_factory=dict)
     result: dict[str, Any] | None = None  # 任务完成后的全量结果
 
 

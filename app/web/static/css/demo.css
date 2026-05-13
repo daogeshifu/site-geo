@@ -443,6 +443,7 @@
     .tl-dot.running  { border-color: var(--warn);   color: var(--warn);   background: var(--warn-dim);   animation: glow-warn 1.5s ease-in-out infinite; }
     .tl-dot.completed{ border-color: var(--accent);  color: var(--accent);  background: var(--accent-dim); }
     .tl-dot.failed   { border-color: var(--danger); color: var(--danger); background: var(--danger-dim); }
+    .tl-dot.skipped  { border-color: #94a3b8; color: #94a3b8; background: rgba(148,163,184,0.12); }
     @keyframes glow-warn {
       0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.45); }
       50%      { box-shadow: 0 0 0 4px rgba(245,158,11,0); }
@@ -455,6 +456,7 @@
     .s-running   { color: var(--warn); }
     .s-completed { color: var(--accent); }
     .s-failed    { color: var(--danger); }
+    .s-skipped   { color: #94a3b8; }
     .tl-preview { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 
     /* ── Tabs ── */
@@ -1127,6 +1129,77 @@
       color: var(--muted);
       font-weight: 600;
     }
+    .graph-map-shell,
+    .entity-map-shell {
+      border-radius: 18px;
+      border: 1px solid rgba(148,163,184,0.18);
+      background:
+        radial-gradient(circle at top left, rgba(14,165,233,0.07), transparent 30%),
+        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      padding: 12px;
+      overflow-x: auto;
+    }
+    .graph-map-svg,
+    .entity-map-svg {
+      width: 100%;
+      min-width: 880px;
+      display: block;
+    }
+    .graph-map-edge path,
+    .entity-map-edge line {
+      fill: none;
+      stroke: #94a3b8;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .graph-map-shell marker path,
+    .entity-map-shell marker path {
+      fill: #94a3b8;
+    }
+    .graph-map-edge-label,
+    .entity-map-edge-label {
+      font-size: 11px;
+      font-weight: 700;
+      fill: #475569;
+    }
+    .graph-map-node rect {
+      fill: #fff;
+      stroke: rgba(148,163,184,0.25);
+      stroke-width: 1.2;
+      filter: drop-shadow(0 10px 18px rgba(15,23,42,0.05));
+    }
+    .graph-map-node.tone-site rect { fill: rgba(224,242,254,0.9); stroke: rgba(14,165,233,0.28); }
+    .graph-map-node.tone-organization rect { fill: rgba(236,253,245,0.95); stroke: rgba(16,185,129,0.28); }
+    .graph-map-node.tone-page rect { fill: rgba(248,250,252,0.98); stroke: rgba(100,116,139,0.24); }
+    .graph-map-node.tone-offering rect { fill: rgba(255,247,237,0.96); stroke: rgba(245,158,11,0.28); }
+    .graph-map-node.tone-profile rect { fill: rgba(239,246,255,0.96); stroke: rgba(59,130,246,0.28); }
+    .graph-map-node.tone-source rect { fill: rgba(254,242,242,0.96); stroke: rgba(239,68,68,0.28); }
+    .graph-map-node-kicker,
+    .entity-map-kicker {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      fill: #64748b;
+    }
+    .graph-map-node-label,
+    .entity-map-label {
+      font-size: 13px;
+      font-weight: 800;
+      fill: #0f172a;
+    }
+    .graph-map-node-meta {
+      font-size: 11px;
+      font-weight: 600;
+      fill: #64748b;
+    }
+    .graph-map-node-index,
+    .entity-map-index {
+      font-size: 10px;
+      font-weight: 800;
+      fill: #94a3b8;
+    }
     .graph-bar-list {
       display: flex;
       flex-direction: column;
@@ -1675,6 +1748,16 @@
       font-size: 11px;
       color: var(--muted);
     }
+    .entity-map-node circle {
+      fill: #fff;
+      stroke-width: 1.4;
+      filter: drop-shadow(0 10px 20px rgba(15,23,42,0.06));
+    }
+    .entity-map-node.tone-brand circle { fill: rgba(224,242,254,0.95); stroke: rgba(14,165,233,0.3); }
+    .entity-map-node.tone-offer circle { fill: rgba(255,247,237,0.95); stroke: rgba(245,158,11,0.3); }
+    .entity-map-node.tone-detail circle { fill: rgba(240,253,244,0.95); stroke: rgba(16,185,129,0.28); }
+    .entity-map-node.tone-case circle { fill: rgba(243,232,255,0.95); stroke: rgba(139,92,246,0.28); }
+    .entity-map-node.tone-claim circle { fill: rgba(254,242,242,0.95); stroke: rgba(239,68,68,0.28); }
 
     /* ── JSON tab ── */
     .json-shell { background: #0d1117; border-radius: 9px; padding: 16px; overflow: hidden; }

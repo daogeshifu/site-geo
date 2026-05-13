@@ -8,7 +8,9 @@ export const STEP_ICON = {
   schema: '🏷️',
   platform: '🌐',
   observation: '📎',
-  summary: '📊'
+  summary: '📊',
+  structure_graph: '🕸️',
+  entity_graph: '🧩'
 };
 
 export const TASK_TYPE_CONFIG = {

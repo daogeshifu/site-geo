@@ -312,6 +312,174 @@ function renderTopology(payload, task, lang) {
   `;
 }
 
+function splitSvgLabel(value, maxChars = 18, maxLines = 2) {
+  const text = String(value || '-').trim();
+  if (!text) return ['-'];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = word;
+    if (lines.length >= maxLines - 1) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  if (lines.length === 0) lines.push(text.slice(0, maxChars));
+  if (text.length > lines.join(' ').length) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, Math.max(3, maxChars - 1))}…`;
+  }
+  return lines.slice(0, maxLines);
+}
+
+function renderSvgNode(node, index) {
+  const lines = splitSvgLabel(node.label, 18, 2);
+  const meta = node.meta ? splitSvgLabel(node.meta, 22, 1) : [];
+  return `
+    <g class="graph-map-node ${escapeHtml(node.tone)}">
+      <rect x="${node.x}" y="${node.y}" rx="18" ry="18" width="${node.width}" height="${node.height}"></rect>
+      <text x="${node.x + 16}" y="${node.y + 24}" class="graph-map-node-kicker">${escapeHtml(node.kicker)}</text>
+      ${lines.map((line, lineIndex) => `
+        <text x="${node.x + 16}" y="${node.y + 48 + (lineIndex * 18)}" class="graph-map-node-label">${escapeHtml(line)}</text>
+      `).join('')}
+      ${meta.map((line, lineIndex) => `
+        <text x="${node.x + 16}" y="${node.y + node.height - 18 + (lineIndex * 14)}" class="graph-map-node-meta">${escapeHtml(line)}</text>
+      `).join('')}
+      <text x="${node.x + node.width - 18}" y="${node.y + 24}" text-anchor="end" class="graph-map-node-index">${index + 1}</text>
+    </g>
+  `;
+}
+
+function renderSvgEdge(edge) {
+  return `
+    <g class="graph-map-edge">
+      <path d="M ${edge.x1} ${edge.y1} C ${edge.cx1} ${edge.cy1}, ${edge.cx2} ${edge.cy2}, ${edge.x2} ${edge.y2}" marker-end="url(#graph-map-arrow)"></path>
+      <text x="${edge.labelX}" y="${edge.labelY}" class="graph-map-edge-label">${escapeHtml(edge.label)}</text>
+    </g>
+  `;
+}
+
+function buildStructureGraphMap(payload, task, lang) {
+  const entities = payload.entities || [];
+  const summary = payload.summary || {};
+  const siteNode = entities.find(item => item.entity_type === 'site');
+  const orgNode = entities.find(item => item.entity_type === 'organization');
+  const pageNodes = entities.filter(item => item.entity_type === 'page').slice(0, 3);
+  const offeringNodes = entities.filter(item => item.entity_type === 'product' || item.entity_type === 'service').slice(0, 3);
+  const externalNodes = entities.filter(item => item.entity_type === 'external_profile' || item.entity_type === 'external_source').slice(0, 3);
+  const width = 980;
+  const height = 430;
+  const nodeWidth = 182;
+  const nodeHeight = 92;
+  const centerNode = {
+    x: 48,
+    y: 168,
+    width: 210,
+    height: 104,
+    label: orgNode?.canonical_name || siteNode?.canonical_name || (payload.site || {}).domain || task?.domain || '-',
+    meta: summarizeUrl((payload.site || {}).scope_root_url || task?.normalized_url || task?.url || '-'),
+    kicker: tx(lang, '站点核心', 'Site core'),
+    tone: orgNode ? 'tone-organization' : 'tone-site',
+  };
+  const pageLayout = pageNodes.map((item, index) => ({
+    x: 314,
+    y: 46 + (index * 114),
+    width: nodeWidth,
+    height: nodeHeight,
+    label: item.canonical_name || item.canonical_url || '-',
+    meta: `${item.attributes?.page_type || 'page'} · ${tx(lang, '词数', 'Words')} ${Number(item.attributes?.word_count || 0)}`,
+    kicker: tx(lang, '页面', 'Page'),
+    tone: 'tone-page',
+  }));
+  const offeringLayout = offeringNodes.map((item, index) => ({
+    x: 560,
+    y: 94 + (index * 114),
+    width: nodeWidth,
+    height: nodeHeight,
+    label: item.canonical_name || item.canonical_url || '-',
+    meta: item.entity_type === 'product' ? tx(lang, '产品实体', 'Product entity') : tx(lang, '服务实体', 'Service entity'),
+    kicker: item.entity_type === 'product' ? tx(lang, '产品', 'Product') : tx(lang, '服务', 'Service'),
+    tone: 'tone-offering',
+  }));
+  const externalLayout = externalNodes.map((item, index) => ({
+    x: 806,
+    y: 94 + (index * 114),
+    width: nodeWidth - 10,
+    height: nodeHeight,
+    label: item.canonical_name || item.canonical_url || '-',
+    meta: summarizeUrl(item.canonical_url || '-'),
+    kicker: item.entity_type === 'external_profile' ? 'sameAs' : tx(lang, '引用源', 'Source'),
+    tone: item.entity_type === 'external_profile' ? 'tone-profile' : 'tone-source',
+  }));
+  const edges = [];
+  pageLayout.forEach((node, index) => {
+    edges.push({
+      x1: centerNode.x + centerNode.width,
+      y1: centerNode.y + 28 + (index * 18),
+      cx1: 272,
+      cy1: node.y + 20,
+      cx2: 292,
+      cy2: node.y + 38,
+      x2: node.x,
+      y2: node.y + 40,
+      labelX: 278,
+      labelY: node.y + 30,
+      label: index === 0 ? `has_page · ${summary.relation_type_counts?.has_page || 0}` : '',
+    });
+  });
+  offeringLayout.forEach((node, index) => {
+    edges.push({
+      x1: pageLayout[Math.min(index, Math.max(pageLayout.length - 1, 0))]?.x + nodeWidth || 496,
+      y1: pageLayout[Math.min(index, Math.max(pageLayout.length - 1, 0))]?.y + 44 || 158,
+      cx1: 510,
+      cy1: node.y + 12,
+      cx2: 528,
+      cy2: node.y + 36,
+      x2: node.x,
+      y2: node.y + 40,
+      labelX: 500,
+      labelY: node.y + 30,
+      label: index === 0 ? `offers/about · ${(summary.relation_type_counts?.offers || 0) + (summary.relation_type_counts?.about || 0)}` : '',
+    });
+  });
+  externalLayout.forEach((node, index) => {
+    edges.push({
+      x1: offeringLayout[Math.min(index, Math.max(offeringLayout.length - 1, 0))]?.x + nodeWidth || 742,
+      y1: offeringLayout[Math.min(index, Math.max(offeringLayout.length - 1, 0))]?.y + 44 || 158,
+      cx1: 760,
+      cy1: node.y + 12,
+      cx2: 780,
+      cy2: node.y + 36,
+      x2: node.x,
+      y2: node.y + 40,
+      labelX: 752,
+      labelY: node.y + 30,
+      label: index === 0 ? `same_as/cites · ${(summary.relation_type_counts?.same_as || 0) + (summary.relation_type_counts?.cites || 0) + (summary.relation_type_counts?.references || 0)}` : '',
+    });
+  });
+  const allNodes = [centerNode, ...pageLayout, ...offeringLayout, ...externalLayout];
+  if (!allNodes.length) {
+    return `<div class="graph-empty-note">${escapeHtml(tx(lang, '暂无可视化结构节点。', 'No structure nodes are available for the map yet.'))}</div>`;
+  }
+  return `
+    <div class="graph-map-shell">
+      <svg class="graph-map-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(tx(lang, '结构图谱关系图', 'Structure graph relationship map'))}">
+        <defs>
+          <marker id="graph-map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        ${edges.map(renderSvgEdge).join('')}
+        ${allNodes.map(renderSvgNode).join('')}
+      </svg>
+    </div>
+  `;
+}
+
 function renderInsightTiles(payload, lang) {
   const summary = payload.summary || {};
   const entityTypeCounts = summary.entity_type_counts || {};
@@ -436,6 +604,16 @@ export function renderStructureGraph({ task, graph, host, lang }) {
     </div>
 
     <div class="graph-overview-grid">
+      <section class="graph-section">
+        <div class="graph-section-hdr">
+          <h4>${escapeHtml(tx(lang, '关系图谱', 'Relationship map'))}</h4>
+          <span>${escapeHtml(tx(lang, '用分层结构图看站点、页面、供给和外部信号是如何连接的', 'Read the site, page, offering, and external-signal layers as a connected structure map'))}</span>
+        </div>
+        <div class="graph-section-body">
+          ${buildStructureGraphMap(payload, task, lang)}
+        </div>
+      </section>
+
       <section class="graph-section">
         <div class="graph-section-hdr">
           <h4>${escapeHtml(tx(lang, '拓扑总览', 'Topology overview'))}</h4>
