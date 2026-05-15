@@ -214,3 +214,4 @@ tmp/
 config.py
 config*
 **/*cache*/
+nohup.out
