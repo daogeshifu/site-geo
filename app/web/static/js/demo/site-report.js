@@ -174,6 +174,99 @@ function formatKeyPages(keyPages, lang = 'zh') {
   `).join('');
 }
 
+function polarPoint(cx, cy, radius, angleDeg) {
+  const rad = (Math.PI / 180) * angleDeg;
+  return {
+    x: cx + radius * Math.cos(rad),
+    y: cy + radius * Math.sin(rad)
+  };
+}
+
+function buildRadarChartHtml({ dimensionMeta, weighted, summary, lang = 'zh' }) {
+  const size = 208;
+  const cx = size / 2;
+  const cy = size / 2;
+  const maxRadius = 64;
+  const baseAngle = -90;
+  const labelRadius = maxRadius + 22;
+  const levels = 5;
+  const labelMap = lang === 'zh'
+    ? {
+        'AI Citability & Visibility': '可见',
+        'Brand Authority Signals': '权威',
+        'Content Quality & E-E-A-T': '内容',
+        'Technical Foundations': '技术',
+        'Structured Data': '结构',
+        'Platform Optimization': '平台'
+      }
+    : {
+        'AI Citability & Visibility': 'Cite',
+        'Brand Authority Signals': 'Auth',
+        'Content Quality & E-E-A-T': 'E-E-A-T',
+        'Technical Foundations': 'Tech',
+        'Structured Data': 'Schema',
+        'Platform Optimization': 'Platform'
+      };
+
+  const axes = dimensionMeta.map((meta, index) => {
+    const score = Math.max(0, Math.min(100, Number(weighted?.[meta.key]?.raw_score ?? 0)));
+    const angle = baseAngle + index * (360 / dimensionMeta.length);
+    const outer = polarPoint(cx, cy, maxRadius, angle);
+    const value = polarPoint(cx, cy, (maxRadius * score) / 100, angle);
+    const label = polarPoint(cx, cy, labelRadius, angle);
+    const displayName = summary?.dimensions?.[meta.key]?.display_name || meta.defaultName;
+    return {
+      key: meta.key,
+      displayName,
+      shortLabel: labelMap[meta.key] || displayName.slice(0, 8),
+      score,
+      outer,
+      value,
+      label
+    };
+  });
+
+  const gridPolygons = Array.from({ length: levels }, (_, i) => {
+    const ratio = (i + 1) / levels;
+    const points = axes.map((_, axisIndex) => {
+      const p = polarPoint(cx, cy, maxRadius * ratio, baseAngle + axisIndex * (360 / axes.length));
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(' ');
+    return `<polygon points="${points}" class="report-radar-grid" />`;
+  }).join('');
+
+  const axisLines = axes.map(axis => `
+    <line x1="${cx}" y1="${cy}" x2="${axis.outer.x.toFixed(1)}" y2="${axis.outer.y.toFixed(1)}" class="report-radar-axis" />
+  `).join('');
+
+  const valuePoints = axes.map(axis => `${axis.value.x.toFixed(1)},${axis.value.y.toFixed(1)}`).join(' ');
+
+  const valueDots = axes.map(axis => `
+    <circle cx="${axis.value.x.toFixed(1)}" cy="${axis.value.y.toFixed(1)}" r="2.8" class="report-radar-dot">
+      <title>${escapeHtml(axis.displayName)}: ${escapeHtml(String(axis.score))}</title>
+    </circle>
+  `).join('');
+
+  const labels = axes.map(axis => `
+    <text x="${axis.label.x.toFixed(1)}" y="${axis.label.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" class="report-radar-label">
+      ${escapeHtml(axis.shortLabel)}
+    </text>
+  `).join('');
+
+  return `
+    <div class="report-score-radar">
+      <div class="report-score-radar-title">${escapeHtml(tx(lang, '六维能力图', '6-Dimension Radar'))}</div>
+      <svg viewBox="0 0 ${size} ${size}" class="report-radar-svg" aria-label="radar chart">
+        ${gridPolygons}
+        ${axisLines}
+        <polygon points="${valuePoints}" class="report-radar-value" />
+        ${valueDots}
+        ${labels}
+      </svg>
+    </div>
+  `;
+}
+
 export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml }) {
   const result = task?.result || {};
   const summary = result.summary || {};
@@ -288,6 +381,7 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
   const additionalProfiles = Array.isArray(discovery.additional_page_profiles) ? discovery.additional_page_profiles : [];
   const fallbackPages = Object.values(content.page_analyses || {});
   const dimensionMeta = getDimensionMeta(lang);
+  const radarHtml = buildRadarChartHtml({ dimensionMeta, weighted, summary, lang });
   const pageSamples = pageProfiles.length
     ? [
         ...pageProfiles.map(([key, page]) => ({ key, source: 'core', ...page })),
@@ -509,6 +603,7 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
           <div class="report-score-value">${escapeHtml(String(summary.composite_geo_score ?? 0))}</div>
           <div class="report-score-sub">${escapeHtml(formatStatus(summary.status, lang))} · ${escapeHtml(labels.reportBasis)}</div>
         </div>
+        ${radarHtml}
         <div class="report-badges">
           <span class="r-badge ${escapeHtml(statusTone(summary.status))}">${escapeHtml(formatStatus(summary.status, lang))}</span>
           <span class="r-badge">${task.mode === 'premium' ? labels.premiumBadge : labels.standardBadge}</span>
