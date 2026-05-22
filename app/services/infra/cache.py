@@ -70,6 +70,7 @@ class CacheService:
 
     def get(self, cache_key: str) -> CachedAuditRecord | None:
         """读取缓存记录，过期或解析失败时返回 None"""
+        print(cache_key)
         path = self._cache_path(cache_key)
         if not path.exists():
             return None
