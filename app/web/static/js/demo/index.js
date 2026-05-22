@@ -459,6 +459,7 @@ function setGraphPlaceholder(graphKind, task = currentTask, note = null) {
   const config = GRAPH_CONFIG[graphKind];
   const lang = getReportLang(task);
   const label = tx(lang, config.label.zh, config.label.en);
+  const job = task?.graph_jobs?.[graphKind] || null;
   const placeholder = {
     task_id: task?.task_id || null,
     backend: task?.storage_backend || getAssetSummary(task)?.backend || 'file',
@@ -467,7 +468,7 @@ function setGraphPlaceholder(graphKind, task = currentTask, note = null) {
     note: note || (
       task?.build_knowledge_graph === false
         ? tx(lang, `当前任务未开启${label}构建。`, `${label} build is disabled for this task.`)
-        : tx(lang, `等待任务完成后返回${label}结构。`, `Waiting for the task to finish before loading the ${label.toLowerCase()}.`)
+        : (job?.error || job?.note || tx(lang, `等待任务完成后返回${label}结构。`, `Waiting for the task to finish before loading the ${label.toLowerCase()}.`))
     ),
     task: task ? {
       task_id: task.task_id,
@@ -482,6 +483,7 @@ function setGraphPlaceholder(graphKind, task = currentTask, note = null) {
       updated_at: task.updated_at,
       completed_at: task.completed_at
     } : null,
+    job,
     site_id: getAssetSummary(task)?.site_id || null,
     graph_kind: graphKind,
     graph_version: null,
@@ -521,6 +523,8 @@ function clearAllGraphPolling() {
 function shouldPollGraph(graphKind, task = currentTask, graph = GRAPH_CONFIG[graphKind].getCurrent()) {
   if (!task?.task_id || task?.build_knowledge_graph === false) return false;
   if (task.status === 'failed') return false;
+  const jobStatus = graph?.job?.status || task?.graph_jobs?.[graphKind]?.status;
+  if (jobStatus === 'failed' || jobStatus === 'skipped' || jobStatus === 'completed') return false;
   return graph?.built !== true;
 }
 
@@ -589,6 +593,7 @@ async function loadGraph(graphKind, task = currentTask) {
         updated_at: task.updated_at,
         completed_at: task.completed_at
       },
+      job: task?.graph_jobs?.[graphKind] || null,
       site_id: getAssetSummary(task)?.site_id || null,
       graph_kind: graphKind,
       graph_version: null,
@@ -623,7 +628,7 @@ async function loadEntityGraph(task = currentTask) {
   await loadGraph('entity', task);
 }
 
-  function renderTimeline(steps) {
+function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';
     getTaskStepOrder(currentTask?.task_type || getSelectedTaskType()).forEach((name, i) => {
@@ -645,6 +650,28 @@ async function loadEntityGraph(task = currentTask) {
         </div>`;
       el.appendChild(item);
     });
+    const graphJobs = currentTask?.graph_jobs || {};
+    if (currentTask?.build_knowledge_graph !== false) {
+      [
+        { key: 'structure', name: 'structure_graph' },
+        { key: 'entity', name: 'entity_graph' },
+      ].forEach((item, i) => {
+        const step = graphJobs[item.key] || { status: 'pending' };
+        const preview = step.note || step.error || '等待图谱构建';
+        const row = document.createElement('div');
+        row.className = 'tl-item';
+        row.innerHTML = `
+          <div class="tl-dot ${step.status}">${STEP_ICON[item.name] || i + 1}</div>
+          <div class="tl-body">
+            <div class="tl-head">
+              <span class="tl-name">${item.name}</span>
+              <span class="tl-st s-${step.status}">${step.status}</span>
+            </div>
+            <div class="tl-preview">${preview}</div>
+          </div>`;
+        el.appendChild(row);
+      });
+    }
   }
 
   /* ── Update status badge ── */

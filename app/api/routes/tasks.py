@@ -25,6 +25,15 @@ def _task_site_id(task: AuditTask) -> int | None:
     return None
 
 
+def _graph_job_payload(task: AuditTask | None, graph_kind: str) -> dict | None:
+    if task is None:
+        return None
+    job = (task.graph_jobs or {}).get(graph_kind)
+    if job is None:
+        return None
+    return job.model_dump(mode="json")
+
+
 def build_pending_graph_payload(task: AuditTask, note: str, *, graph_kind: str = "structure") -> dict:
     graph_service = (
         task_service.site_entity_graph_service
@@ -53,6 +62,7 @@ def build_pending_graph_payload(task: AuditTask, note: str, *, graph_kind: str =
             "updated_at": task.updated_at,
             "completed_at": task.completed_at,
         },
+        "job": _graph_job_payload(task, graph_kind),
         "site_id": site_id,
         "graph_kind": graph_kind,
         "graph_version": graph_service.GRAPH_VERSION,
@@ -81,29 +91,43 @@ async def _load_task_graph_response(task_id: str, *, graph_kind: str = "structur
         else task_service.site_graph_service
     )
     graph_label = "Entity graph" if graph_kind == "entity" else "Structure graph"
+    graph_job = _graph_job_payload(task, graph_kind)
     try:
         graph_payload = await graph_service.load_task_graph(task_id)
     except Exception:
         if task:
+            note = f"{graph_label} is still being prepared for this task."
+            if graph_job and graph_job.get("status") == "failed":
+                note = graph_job.get("error") or graph_job.get("note") or f"{graph_label} failed for this task."
+            elif graph_job and graph_job.get("status") == "skipped":
+                note = graph_job.get("note") or f"{graph_label} was skipped for this task."
             return success_response(
                 build_pending_graph_payload(
                     task,
-                    f"{graph_label} is still being prepared for this task.",
+                    note,
                     graph_kind=graph_kind,
                 )
             )
         raise
     if graph_payload is None:
         if task:
+            note = f"{graph_label} has not been built for this task yet."
+            if graph_job and graph_job.get("status") == "running":
+                note = graph_job.get("note") or f"{graph_label} is still being prepared for this task."
+            elif graph_job and graph_job.get("status") == "failed":
+                note = graph_job.get("error") or graph_job.get("note") or f"{graph_label} failed for this task."
+            elif graph_job and graph_job.get("status") == "skipped":
+                note = graph_job.get("note") or f"{graph_label} was skipped for this task."
             return success_response(
                 build_pending_graph_payload(
                     task,
-                    f"{graph_label} has not been built for this task yet.",
+                    note,
                     graph_kind=graph_kind,
                 )
             )
         raise AppError(404, f"task {graph_kind} graph not found")
     graph_payload["graph_kind"] = graph_kind
+    graph_payload["job"] = graph_job
     return success_response(graph_payload)
 
 

@@ -110,6 +110,199 @@ function renderEntityNarrative(graph, lang) {
   `;
 }
 
+function splitSvgLabel(value, maxChars = 16, maxLines = 2) {
+  const text = String(value || '-').trim();
+  if (!text) return ['-'];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = word;
+    if (lines.length >= maxLines - 1) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  if (lines.length === 0) lines.push(text.slice(0, maxChars));
+  if (text.length > lines.join(' ').length) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, Math.max(3, maxChars - 1))}…`;
+  }
+  return lines.slice(0, maxLines);
+}
+
+function renderEntitySvgNode(node, index) {
+  const lines = splitSvgLabel(node.label, node.maxChars || 15, 2);
+  return `
+    <g class="entity-map-node ${escapeHtml(node.tone)}">
+      <circle cx="${node.x}" cy="${node.y}" r="${node.r}"></circle>
+      <text x="${node.x}" y="${node.y - 8}" text-anchor="middle" class="entity-map-kicker">${escapeHtml(node.kicker)}</text>
+      ${lines.map((line, lineIndex) => `
+        <text x="${node.x}" y="${node.y + 12 + (lineIndex * 14)}" text-anchor="middle" class="entity-map-label">${escapeHtml(line)}</text>
+      `).join('')}
+      <text x="${node.x}" y="${node.y - node.r + 18}" text-anchor="middle" class="entity-map-index">${index + 1}</text>
+    </g>
+  `;
+}
+
+function renderEntitySvgEdge(edge) {
+  return `
+    <g class="entity-map-edge">
+      <line x1="${edge.x1}" y1="${edge.y1}" x2="${edge.x2}" y2="${edge.y2}" marker-end="url(#entity-map-arrow)"></line>
+      <text x="${edge.labelX}" y="${edge.labelY}" class="entity-map-edge-label">${escapeHtml(edge.label)}</text>
+    </g>
+  `;
+}
+
+function buildEntityGraphMap(graph, lang) {
+  const entities = graph.entities || [];
+  const brand = byType(entities, 'brand')[0];
+  const offerings = [...byType(entities, 'product_model'), ...byType(entities, 'service_offer')].slice(0, 4);
+  const details = [...byType(entities, 'feature'), ...byType(entities, 'specification')].slice(0, 4);
+  const useCases = byType(entities, 'use_case').slice(0, 3);
+  const claims = byType(entities, 'sentiment_claim').slice(0, 3);
+  const width = 960;
+  const height = 520;
+  const center = {
+    x: 480,
+    y: 250,
+    r: 66,
+    label: brand?.canonical_name || (graph.site || {}).brand_name || (graph.site || {}).domain || '-',
+    kicker: tx(lang, '品牌', 'Brand'),
+    tone: 'tone-brand',
+    maxChars: 18,
+  };
+  const nodes = [center];
+  const edges = [];
+  const offerPositions = [
+    { x: 700, y: 120 },
+    { x: 760, y: 250 },
+    { x: 700, y: 380 },
+    { x: 610, y: 460 },
+  ];
+  offerings.forEach((item, index) => {
+    const pos = offerPositions[index];
+    const node = {
+      ...pos,
+      r: 50,
+      label: item.canonical_name || '-',
+      kicker: item.entity_type === 'product_model' ? tx(lang, '产品', 'Product') : tx(lang, '服务', 'Service'),
+      tone: 'tone-offer',
+      maxChars: 14,
+    };
+    nodes.push(node);
+    edges.push({
+      x1: center.x + 48,
+      y1: center.y + ((index - 1.5) * 10),
+      x2: node.x - 44,
+      y2: node.y,
+      labelX: (center.x + node.x) / 2 - 8,
+      labelY: (center.y + node.y) / 2 - 8,
+      label: index === 0 ? tx(lang, 'offers', 'offers') : '',
+    });
+  });
+  const detailPositions = [
+    { x: 270, y: 410 },
+    { x: 395, y: 460 },
+    { x: 535, y: 470 },
+    { x: 665, y: 430 },
+  ];
+  details.forEach((item, index) => {
+    const pos = detailPositions[index];
+    const node = {
+      ...pos,
+      r: 42,
+      label: item.canonical_name || '-',
+      kicker: item.entity_type === 'feature' ? tx(lang, '特性', 'Feature') : tx(lang, '规格', 'Spec'),
+      tone: 'tone-detail',
+      maxChars: 13,
+    };
+    nodes.push(node);
+    const sourceOffer = offerings[index % Math.max(offerings.length, 1)];
+    const sourcePos = offerPositions[index % Math.max(offerPositions.length, 1)];
+    edges.push({
+      x1: sourceOffer ? sourcePos.x - 18 : center.x - 20,
+      y1: sourceOffer ? sourcePos.y + 26 : center.y + 30,
+      x2: node.x,
+      y2: node.y - 38,
+      labelX: sourceOffer ? (sourcePos.x + node.x) / 2 : (center.x + node.x) / 2,
+      labelY: sourceOffer ? (sourcePos.y + node.y) / 2 : (center.y + node.y) / 2,
+      label: index === 0 ? tx(lang, 'has_feature/spec', 'has_feature/spec') : '',
+    });
+  });
+  const useCasePositions = [
+    { x: 210, y: 135 },
+    { x: 170, y: 250 },
+    { x: 210, y: 365 },
+  ];
+  useCases.forEach((item, index) => {
+    const pos = useCasePositions[index];
+    const node = {
+      ...pos,
+      r: 42,
+      label: item.canonical_name || '-',
+      kicker: tx(lang, '场景', 'Use case'),
+      tone: 'tone-case',
+      maxChars: 13,
+    };
+    nodes.push(node);
+    edges.push({
+      x1: center.x - 54,
+      y1: center.y + ((index - 1) * 12),
+      x2: node.x + 36,
+      y2: node.y,
+      labelX: (center.x + node.x) / 2 - 4,
+      labelY: (center.y + node.y) / 2 - 8,
+      label: index === 0 ? tx(lang, 'suited_for', 'suited_for') : '',
+    });
+  });
+  const claimPositions = [
+    { x: 360, y: 78 },
+    { x: 490, y: 54 },
+    { x: 620, y: 84 },
+  ];
+  claims.forEach((item, index) => {
+    const pos = claimPositions[index];
+    const node = {
+      ...pos,
+      r: 38,
+      label: item.canonical_name || '-',
+      kicker: tx(lang, '评价', 'Claim'),
+      tone: 'tone-claim',
+      maxChars: 12,
+    };
+    nodes.push(node);
+    edges.push({
+      x1: center.x + ((index - 1) * 18),
+      y1: center.y - 58,
+      x2: node.x,
+      y2: node.y + 34,
+      labelX: (center.x + node.x) / 2,
+      labelY: (center.y + node.y) / 2 - 10,
+      label: index === 0 ? tx(lang, 'claim', 'claim') : '',
+    });
+  });
+  if (!nodes.length) {
+    return `<div class="graph-empty-note">${escapeHtml(tx(lang, '暂无可视化实体节点。', 'No entity nodes are available for the map yet.'))}</div>`;
+  }
+  return `
+    <div class="entity-map-shell">
+      <svg class="entity-map-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(tx(lang, '实体图谱关系图', 'Entity graph relationship map'))}">
+        <defs>
+          <marker id="entity-map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z"></path>
+          </marker>
+        </defs>
+        ${edges.map(renderEntitySvgEdge).join('')}
+        ${nodes.map(renderEntitySvgNode).join('')}
+      </svg>
+    </div>
+  `;
+}
+
 function renderSourcePages(sourcePages, lang) {
   const rows = (sourcePages || []).slice(0, 8);
   if (!rows.length) {
@@ -241,6 +434,16 @@ export function renderEntityGraph({ task, graph, host, lang }) {
     </div>
 
     ${renderStatCards(summary, lang)}
+
+    <section class="graph-section">
+      <div class="graph-section-hdr">
+        <h4>${escapeHtml(tx(lang, '实体关系图', 'Entity relationship map'))}</h4>
+        <span>${escapeHtml(tx(lang, '以品牌为中心，看产品、特性、场景和评价类实体如何展开', 'Read products, attributes, use cases, and claims around the brand hub'))}</span>
+      </div>
+      <div class="graph-section-body">
+        ${buildEntityGraphMap(payload, lang)}
+      </div>
+    </section>
 
     <section class="graph-section">
       <div class="graph-section-hdr">
