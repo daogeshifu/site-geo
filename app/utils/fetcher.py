@@ -34,7 +34,7 @@ async def _send_request(client: httpx.AsyncClient, method: str, url: str) -> htt
     return await client.request(method, url)
 
 
-async def fetch_url(
+async def fetch_url_old(
     url: str,
     client: httpx.AsyncClient | None = None,
     method: str = "GET",
@@ -130,6 +130,37 @@ async def fetch_url(
         final_url=str(response.url),
         status_code=response.status_code,
         headers={key: value for key, value in response.headers.items()},
+        text=response.text,
+        response_time_ms=elapsed_ms,
+    )
+
+
+async def fetch_url(
+    url: str,
+    client: httpx.AsyncClient | None = None,
+    method: str = "GET",
+) -> FetchedResponse:
+    import cloudscraper
+    import asyncio
+
+    started_at = time.perf_counter()
+
+    def _sync_fetch():
+        scraper = cloudscraper.create_scraper(
+        )
+        req_method = getattr(scraper, method.lower())
+        return req_method(url, timeout=30)
+
+    try:
+        response = await asyncio.to_thread(_sync_fetch)
+    except Exception as exc:
+        raise AppError(502, f"Failed to fetch URL: {url}", str(exc)) from exc
+
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    return FetchedResponse(
+        final_url=response.url,
+        status_code=response.status_code,
+        headers=dict(response.headers),
         text=response.text,
         response_time_ms=elapsed_ms,
     )
