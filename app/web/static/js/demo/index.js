@@ -1,6 +1,7 @@
 import { renderContentAuditReport } from './content-report.js';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
+import { renderSeoAuditReport } from './seo-report.js';
 import { renderSiteAuditReport } from './site-report.js';
 import {
   getTaskStepOrder,
@@ -422,6 +423,10 @@ function renderReport(task) {
     renderContentAuditReport({ task, host, lang, setCachedReportHtml });
     return;
   }
+  if (task?.task_type === 'site_seo_audit') {
+    renderSeoAuditReport({ task, host, lang, setCachedReportHtml });
+    return;
+  }
   renderSiteAuditReport({ task, host, lang, setCachedReportHtml });
 }
 
@@ -728,7 +733,9 @@ function renderTimeline(steps) {
     const result  = task.result || {};
     const modules = task.task_type === 'site_content_audit'
       ? ['content', 'summary']
-      : ['visibility', 'content', 'platform', 'summary'];
+      : task.task_type === 'site_seo_audit'
+        ? ['seo', 'summary']
+        : ['visibility', 'content', 'platform', 'summary'];
     const available = modules.filter(n => result?.[n]);
     const enhanced  = modules.filter(n => result?.[n]?.llm_enhanced);
     const notes = [];
@@ -750,7 +757,9 @@ function renderTimeline(steps) {
       llmStatus.innerHTML = '<span class="badge b-warn">等待执行</span>';
       notesEl.textContent = task.task_type === 'site_content_audit'
         ? '会员版已提交，等待 content / summary 返回增强结果。'
-        : '会员版已提交，等待 visibility / content / platform / summary 返回增强结果。';
+        : task.task_type === 'site_seo_audit'
+          ? '会员版已提交，等待 seo / summary 返回增强结果。'
+          : '会员版已提交，等待 visibility / content / platform / summary 返回增强结果。';
       return;
     }
     if (enhanced.length > 0) {
@@ -897,13 +906,13 @@ function renderTimeline(steps) {
       url: $('url').value.trim(),
       mode,
       force_refresh: $('force').checked,
-      full_audit: !isContentAudit && $('full-audit').checked,
+      full_audit: taskType !== 'site_content_audit' && $('full-audit').checked,
       feedback_lang: $('feedback-lang').value,
       build_knowledge_graph: $('build-knowledge-graph').checked
     };
     const targetLocale = $('target-locale')?.value || '';
     if (targetLocale) body.target_locale = targetLocale;
-    if (!isContentAudit && $('full-audit').checked) {
+    if (taskType !== 'site_content_audit' && $('full-audit').checked) {
       const parsedPages = Number($('max-pages').value || 12);
       body.max_pages = Math.max(5, Math.min(10000, Number.isFinite(parsedPages) ? parsedPages : 12));
     }

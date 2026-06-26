@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.models.requests import AuditModuleRequest, FullAuditRequest, SummarizeRequest
+from app.models.requests import AuditModuleRequest, FullAuditRequest, SeoSummarizeRequest, SummarizeRequest
 from app.models.responses import success_response
 from app.services.audit.base import FullAuditService
 from app.services.audit.content import ContentService
@@ -10,6 +10,7 @@ from app.services.discovery.discovery import DiscoveryService
 from app.services.reporting.observation import ObservationService
 from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
+from app.services.audit.seo import SeoAuditService
 from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
@@ -27,6 +28,7 @@ technical_service = TechnicalService(shared_discovery_service)
 content_service = ContentService(shared_discovery_service)
 schema_service = SchemaService(shared_discovery_service)
 platform_service = PlatformService(shared_discovery_service)
+seo_service = SeoAuditService(shared_discovery_service)
 full_audit_service = FullAuditService(shared_discovery_service)
 # Summarizer 不依赖 Discovery，独立实例化
 summarizer_service = SummarizerService()
@@ -178,6 +180,29 @@ async def audit_full(request: FullAuditRequest) -> dict:
     return success_response(localize_payload(result, request.feedback_lang))
 
 
+@router.post("/audit/seo")
+async def audit_seo(request: FullAuditRequest) -> dict:
+    """Run the full-site SEO audit."""
+    discovery = request.discovery
+    if discovery is None:
+        discovery = await shared_discovery_service.discover(
+            request.url,
+            full_audit=request.full_audit,
+            max_pages=request.max_pages,
+            target_locale=request.target_locale,
+        )
+    result = await seo_service.audit(
+        request.url,
+        discovery,
+        mode=request.mode,
+        llm_config=request.llm,
+        feedback_lang=request.feedback_lang,
+        target_locale=request.target_locale,
+        max_pages=request.max_pages if request.full_audit else min(request.max_pages, 8),
+    )
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
+
+
 @router.post("/audit/summarize")
 async def summarize_audit(request: SummarizeRequest) -> dict:
     """生成 GEO 审计摘要和行动计划
@@ -205,4 +230,10 @@ async def summarize_audit(request: SummarizeRequest) -> dict:
         llm_config=request.llm,
         feedback_lang=request.feedback_lang,
     )
+    return success_response(localize_payload(result.model_dump(), request.feedback_lang))
+
+
+@router.post("/audit/seo/summarize")
+async def summarize_seo_audit(request: SeoSummarizeRequest) -> dict:
+    result = request.summary or seo_service.summarize(request.seo, feedback_lang=request.feedback_lang)
     return success_response(localize_payload(result.model_dump(), request.feedback_lang))

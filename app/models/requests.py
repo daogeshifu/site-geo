@@ -9,6 +9,8 @@ from app.models.audit import (
     ObservationInput,
     ObservationResult,
     PlatformAuditResult,
+    SeoAuditResult,
+    SeoSummaryResult,
     SchemaAuditResult,
     TechnicalAuditResult,
     VisibilityAuditResult,
@@ -19,7 +21,7 @@ from app.models.discovery import DiscoveryResult
 AuditMode = Literal["standard", "premium"]
 FeedbackLang = Literal["en", "zh"]
 TargetLocale = Literal["en", "de", "nl", "fr", "zh"]
-TaskType = Literal["site_geo_audit", "site_content_audit"]
+TaskType = Literal["site_geo_audit", "site_content_audit", "site_seo_audit"]
 # 目前仅支持 OpenRouter 作为 LLM 提供商
 LLMProvider = Literal["openrouter"]
 
@@ -71,3 +73,11 @@ class SummarizeRequest(UrlRequest):
     schema_result: SchemaAuditResult = Field(alias="schema")  # 字段别名适配 JSON 中的 "schema" 键
     platform: PlatformAuditResult
     observation_result: ObservationResult | None = Field(default=None, alias="observationResult")
+
+
+class SeoSummarizeRequest(UrlRequest):
+    """SEO audit summary request."""
+
+    discovery: DiscoveryResult
+    seo: SeoAuditResult
+    summary: SeoSummaryResult | None = None

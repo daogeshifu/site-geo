@@ -97,7 +97,7 @@ async def fetch_url(
         "Connection": "keep-alive",
     }
 
-    request_client = httpx.AsyncClient(
+    request_client = client or httpx.AsyncClient(
         headers=DEFAULT_HEADERS,
         http2=True,
         follow_redirects=True,
@@ -116,9 +116,7 @@ async def fetch_url(
     )
     started_at = time.perf_counter()
     try:
-        print("started at:", started_at)
         response = await _send_request(request_client, method, url)
-        print("response:", response.text)
     except (httpx.RequestError, httpx.TimeoutException) as exc:
         raise AppError(502, f"Failed to fetch URL: {url}", str(exc)) from exc
     finally:

@@ -9,6 +9,8 @@ from app.models.audit import (
     ObservationResult,
     PageDiagnosticResult,
     PlatformAuditResult,
+    SeoAuditResult,
+    SeoSummaryResult,
     SchemaAuditResult,
     SummaryResult,
     TechnicalAuditResult,
@@ -19,12 +21,14 @@ from app.models.report import ReportExportRequest
 from app.models.responses import success_response
 from app.services.reporting.observation import ObservationService
 from app.services.reporting.report import ReportService
+from app.services.reporting.seo_report import SeoReportService
 from app.services.audit.summarizer import SummarizerService
 from app.api.routes.tasks import task_service  # 复用 tasks 路由中的 task_service 单例
 
 # 报告导出路由，挂载在 /api/v1 前缀下
 router = APIRouter(prefix="/api/v1", tags=["report"])
 report_service = ReportService()
+seo_report_service = SeoReportService()
 summarizer_service = SummarizerService()
 observation_service = ObservationService()
 
@@ -103,8 +107,21 @@ async def build_task_report_response(task_id: str) -> PlainTextResponse:
     # 任务未完成时拒绝导出，返回 409 Conflict
     if task.status != "completed" or not task.result:
         raise AppError(409, "task is not completed yet")
+    if task.task_type == "site_seo_audit":
+        discovery = DiscoveryResult.model_validate(task.result["discovery"])
+        seo = SeoAuditResult.model_validate(task.result["seo"])
+        summary = SeoSummaryResult.model_validate(task.result["summary"])
+        markdown = seo_report_service.render_markdown(
+            url=task.url,
+            discovery=discovery,
+            seo=seo,
+            summary=summary,
+        )
+        filename = seo_report_service.build_filename(discovery)
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return PlainTextResponse(content=markdown, media_type="text/markdown; charset=utf-8", headers=headers)
     if task.task_type != "site_geo_audit":
-        raise AppError(409, "report export is only available for site GEO audits")
+        raise AppError(409, "report export is only available for site GEO or SEO audits")
 
     # 从任务结果字典中反序列化各模块 Pydantic 模型
     discovery = DiscoveryResult.model_validate(task.result["discovery"])

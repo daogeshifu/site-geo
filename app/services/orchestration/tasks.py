@@ -17,6 +17,7 @@ from app.services.audit.page_content import PageContentAuditService
 from app.services.audit.page_diagnostics import PageDiagnosticsService
 from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
+from app.services.audit.seo import SeoAuditService
 from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
@@ -39,6 +40,7 @@ class TaskService:
     # 任务步骤的执行顺序
     SITE_GEO_STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
     SITE_CONTENT_STEP_ORDER = ["discovery", "content", "summary"]
+    SITE_SEO_STEP_ORDER = ["discovery", "seo", "summary"]
 
     def __init__(self) -> None:
         self.cache_service = CacheService()
@@ -54,6 +56,7 @@ class TaskService:
         self.platform_service = PlatformService(self.discovery_service)
         self.observation_service = ObservationService()
         self.page_content_audit_service = PageContentAuditService(self.discovery_service)
+        self.seo_audit_service = SeoAuditService(self.discovery_service)
         self.page_diagnostics_service = PageDiagnosticsService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
@@ -62,6 +65,8 @@ class TaskService:
     def _step_order_for(self, task_type: str) -> list[str]:
         if task_type == "site_content_audit":
             return list(self.SITE_CONTENT_STEP_ORDER)
+        if task_type == "site_seo_audit":
+            return list(self.SITE_SEO_STEP_ORDER)
         return list(self.SITE_GEO_STEP_ORDER)
 
     def _new_steps(self, step_order: list[str]) -> dict[str, TaskStep]:
@@ -279,6 +284,8 @@ class TaskService:
         try:
             if task.task_type == "site_content_audit":
                 task.result = await self._run_site_content_task(task)
+            elif task.task_type == "site_seo_audit":
+                task.result = await self._run_site_seo_task(task)
             else:
                 task.result = await self._run_site_geo_task(task)
             task.result = localize_payload(task.result, task.feedback_lang)
@@ -769,5 +776,53 @@ class TaskService:
             "url": task.url,
             "discovery": discovery_payload,
             "content": content_payload,
+            "summary": summary_payload,
+        }
+
+    async def _run_site_seo_task(self, task: AuditTask) -> dict:
+        await self._update_step(task, "discovery", "running")
+        discovery = await self.discovery_service.discover(
+            task.url,
+            full_audit=task.full_audit,
+            max_pages=task.max_pages,
+            force_refresh=task.force_refresh,
+            target_locale=task.target_locale,
+        )
+        discovery_payload = discovery.model_dump()
+        task.site_asset_summary = discovery.asset_summary
+        task.storage_backend = discovery.asset_summary.backend
+        await self._update_step(task, "discovery", "completed", discovery_payload)
+        if self.asset_store.available:
+            try:
+                await self.asset_store.save_task(task)
+            except Exception:
+                pass
+        self._schedule_graph_jobs(task, discovery)
+
+        await self._update_step(task, "seo", "running")
+        seo = await self.seo_audit_service.audit(
+            task.url,
+            discovery,
+            mode=task.mode,
+            llm_config=task.llm,
+            feedback_lang=task.feedback_lang,
+            target_locale=task.target_locale,
+            max_pages=task.max_pages if task.full_audit else min(task.max_pages, 8),
+        )
+        seo_payload = seo.model_dump()
+        await self._update_step(task, "seo", "completed", seo_payload)
+
+        await self._update_step(task, "summary", "running")
+        summary = self.seo_audit_service.summarize(
+            seo,
+            feedback_lang=task.feedback_lang,
+        )
+        summary_payload = summary.model_dump()
+        await self._update_step(task, "summary", "completed", summary_payload)
+
+        return {
+            "url": task.url,
+            "discovery": discovery_payload,
+            "seo": seo_payload,
             "summary": summary_payload,
         }

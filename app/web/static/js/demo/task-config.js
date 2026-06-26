@@ -1,10 +1,12 @@
 export const SITE_GEO_STEP_ORDER = ['discovery', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
 export const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
+export const SITE_SEO_STEP_ORDER = ['discovery', 'seo', 'summary'];
 export const STEP_ICON = {
   discovery: '🔍',
   visibility: '👁',
   technical: '⚙️',
   content: '📝',
+  seo: '📈',
   schema: '🏷️',
   platform: '🌐',
   observation: '📎',
@@ -35,6 +37,17 @@ export const TASK_TYPE_CONFIG = {
     placeholder: 'https://example.com/blog/example-post',
     fullAuditVisible: false,
     exportable: false
+  },
+  site_seo_audit: {
+    heading: { zh: '网站 SEO 审计', en: 'Website SEO Audit' },
+    subtitle: {
+      zh: '基于 Google SEO 审计模板输出站点级检查清单、问题总表与 30/60/90 路线图。',
+      en: 'Run a site-level Google SEO audit with a coverage checklist, issue backlog, and 30/60/90 roadmap.'
+    },
+    urlLabel: { zh: '站点 URL', en: 'Site URL' },
+    placeholder: 'https://example.com',
+    fullAuditVisible: true,
+    exportable: true
   }
 };
 
@@ -63,5 +76,7 @@ export function getTaskTypeConfig(taskType = 'site_geo_audit') {
 }
 
 export function getTaskStepOrder(taskType = 'site_geo_audit') {
-  return taskType === 'site_content_audit' ? SITE_CONTENT_STEP_ORDER : SITE_GEO_STEP_ORDER;
+  if (taskType === 'site_content_audit') return SITE_CONTENT_STEP_ORDER;
+  if (taskType === 'site_seo_audit') return SITE_SEO_STEP_ORDER;
+  return SITE_GEO_STEP_ORDER;
 }

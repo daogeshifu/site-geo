@@ -294,3 +294,129 @@ class PageContentSummaryResult(BaseModel):
     quick_wins: list[str] = Field(default_factory=list)
     prioritized_action_plan: list[ActionPlanItem] = Field(default_factory=list)
     processing_notes: list[str] = Field(default_factory=list)
+
+
+class SeoCheckResult(BaseModel):
+    """SEO audit coverage checklist item."""
+
+    id: str
+    category: str
+    check: str
+    scope: str = "sitewide"
+    status: str = "pass"  # pass / fail / na
+    summary: str = ""
+    evidence: str = ""
+    seo_impact: str = ""
+    severity: str = "low"
+    priority: str = "P2"
+
+
+class SeoIssueResult(BaseModel):
+    """SEO issue backlog row."""
+
+    issue_id: str
+    priority: str
+    severity: str
+    category: str
+    scope: str
+    description: str
+    evidence: str = ""
+    seo_impact: str = ""
+    recommendation: str = ""
+    estimated_effort: str = ""
+    implementation_difficulty: str = ""
+    owner_team: str = ""
+    acceptance_criteria: str = ""
+    status: str = "todo"
+
+
+class SeoDimensionResult(BaseModel):
+    """Weighted SEO dimension score card."""
+
+    key: str
+    label: str
+    weight: float
+    score: int
+    status: str
+    summary: str = ""
+    highlights: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class SeoRoadmapItem(BaseModel):
+    """30-60-90 day SEO roadmap item."""
+
+    phase: str
+    priority: str
+    task: str
+    related_issue_ids: list[str] = Field(default_factory=list)
+    scope: str = ""
+    owner_team: str = ""
+    estimated_effort: str = ""
+    acceptance_criteria: str = ""
+    expected_impact: str = ""
+    status: str = "todo"
+
+
+class SeoSamplePageResult(BaseModel):
+    """Sampled page snapshot used in SEO auditing."""
+
+    url: str
+    page_type: str = "page"
+    status_code: int = 0
+    final_url: str = ""
+    redirected: bool = False
+    title: str | None = None
+    title_length: int = 0
+    meta_description: str | None = None
+    meta_description_length: int = 0
+    canonical: str | None = None
+    lang: str | None = None
+    viewport_present: bool = False
+    h1_count: int = 0
+    word_count: int = 0
+    html_length: int = 0
+    image_count: int = 0
+    alt_coverage_ratio: float = 0.0
+    lazyload_ratio: float = 0.0
+    noindex_detected: bool = False
+    nofollow_internal_links: int = 0
+    open_graph_present: bool = False
+    twitter_card_present: bool = False
+
+
+class SeoAuditResult(BaseAuditResult):
+    """Full-site Google SEO audit result."""
+
+    overall_score: int
+    dimensions: dict[str, SeoDimensionResult] = Field(default_factory=dict)
+    weighted_scores: dict[str, Any] = Field(default_factory=dict)
+    coverage_checks: list[SeoCheckResult] = Field(default_factory=list)
+    issues_table: list[SeoIssueResult] = Field(default_factory=list)
+    roadmap: list[SeoRoadmapItem] = Field(default_factory=list)
+    sampled_pages: list[SeoSamplePageResult] = Field(default_factory=list)
+    coverage_summary: dict[str, Any] = Field(default_factory=dict)
+    measurements: dict[str, Any] = Field(default_factory=dict)
+    supporting_scores: dict[str, int] = Field(default_factory=dict)
+
+
+class SeoSummaryResult(BaseModel):
+    """SEO audit summary used by task output and report rendering."""
+
+    overall_score: int
+    status: str
+    scoring_version: str = "seo-audit-v1"
+    audit_mode: str = "standard"
+    llm_enhanced: bool = False
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    summary: str
+    score_breakdown: dict[str, Any] = Field(default_factory=dict)
+    dimensions: dict[str, Any] = Field(default_factory=dict)
+    top_issues: list[str] = Field(default_factory=list)
+    quick_wins: list[str] = Field(default_factory=list)
+    prioritized_action_plan: list[ActionPlanItem] = Field(default_factory=list)
+    coverage_summary: dict[str, Any] = Field(default_factory=dict)
+    roadmap_by_phase: dict[str, list[SeoRoadmapItem]] = Field(default_factory=dict)
+    processing_notes: list[str] = Field(default_factory=list)
