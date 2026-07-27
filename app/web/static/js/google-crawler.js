@@ -137,6 +137,10 @@ function renderGooglebot(result) {
   const indexability = result.indexability || {};
   const content = result.content || {};
   const usedBrowserFallback = result.access?.browser_fallback_used === true;
+  const controlRequest = result.control_request || {};
+  const analyzedHtmlBytes = usedBrowserFallback
+    ? controlRequest.html_bytes
+    : request.html_bytes;
   return `
     <div class="panel-head">
       <div><h3>Googlebot Smartphone</h3><p>${usedBrowserFallback
@@ -152,7 +156,7 @@ function renderGooglebot(result) {
       [usedBrowserFallback ? '初始内容（浏览器对照）' : '初始内容', valueOrDash(content.word_count, ' 词/字符')],
       ['内部链接', valueOrDash(content.internal_link_count)],
       ['重定向', valueOrDash(request.redirect_count)],
-      ['HTML 体积', request.html_bytes ? `${Math.round(request.html_bytes / 1024)} KB` : '—']
+      [usedBrowserFallback ? 'Raw HTML（浏览器对照）' : 'HTML 体积', analyzedHtmlBytes ? `${Math.round(analyzedHtmlBytes / 1024)} KB` : '—']
     ])}
     <h4 class="section-title">检查项 <span>${(result.checks || []).length} 项</span></h4>
     ${renderChecks(result.checks)}

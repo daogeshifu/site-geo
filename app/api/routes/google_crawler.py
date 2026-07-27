@@ -27,10 +27,19 @@ def _render_fallback_options(googlebot_result: dict) -> dict:
     }
 
 
+def _render_target_url(googlebot_result: dict) -> str:
+    access = googlebot_result.get("access") or {}
+    control_request = googlebot_result.get("control_request") or {}
+    request = googlebot_result.get("request") or {}
+    if access.get("browser_fallback_used") and control_request.get("final_url"):
+        return str(control_request["final_url"])
+    return str(request["final_url"])
+
+
 async def _run_full_test(url: str) -> dict:
     googlebot_run = await googlebot_service.run(url)
     render_result = await google_render_service.test(
-        googlebot_run.result["request"]["final_url"],
+        _render_target_url(googlebot_run.result),
         initial_html=googlebot_run.html,
         crawl_allowed=googlebot_run.result["crawlability"]["allowed"],
         **_render_fallback_options(googlebot_run.result),
@@ -74,7 +83,7 @@ async def test_google_render(payload: GoogleCrawlerTestRequest) -> dict:
     """运行抓取前置检查与 Chromium 渲染检测。"""
     googlebot_run = await googlebot_service.run(payload.url)
     result = await google_render_service.test(
-        googlebot_run.result["request"]["final_url"],
+        _render_target_url(googlebot_run.result),
         initial_html=googlebot_run.html,
         crawl_allowed=googlebot_run.result["crawlability"]["allowed"],
         **_render_fallback_options(googlebot_run.result),

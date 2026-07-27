@@ -256,19 +256,29 @@ class GooglebotService:
         issues: list[dict[str, str]] = []
         score = 100
         if access_challenge:
-            score -= 15
             fallback_status = (
                 fallback_response.status_code if fallback_response is not None else None
             )
+            fallback_succeeded = fallback_status == 200
+            score -= 5 if fallback_succeeded else 15
             issues.append(
                 issue(
                     "googlebot_access_challenge",
-                    "high",
-                    "模拟 Googlebot 请求被 WAF 或反爬策略拦截",
+                    "medium" if fallback_succeeded else "high",
+                    (
+                        "模拟 Googlebot UA 被 WAF 拦截（浏览器对照成功）"
+                        if fallback_succeeded
+                        else "模拟 Googlebot 请求被 WAF 或反爬策略拦截"
+                    ),
                     (
                         f"Googlebot UA 返回 HTTP {response.status_code}；"
                         f"普通浏览器 UA 对照请求返回 HTTP {fallback_status or 'unknown'}。"
-                        "由于请求并非来自 Google 官方 IP，不能据此断言真实 Googlebot 被阻止。"
+                        + (
+                            "已通过浏览器对照响应取得 Raw HTML，可继续判断页面内容与渲染方式；"
+                            if fallback_succeeded
+                            else "未能通过浏览器对照响应取得可用 Raw HTML；"
+                        )
+                        + "由于请求并非来自 Google 官方 IP，不能据此断言真实 Googlebot 被阻止。"
                     ),
                     "使用 Search Console URL Inspection 确认真实 Googlebot；同时检查 CDN/WAF 是否按 Google 官方 IP 范围验证爬虫。",
                 )

@@ -326,6 +326,14 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
     assert run.result["indexability"]["state"] == "unknown_googlebot_access"
     assert run.result["content"]["h1"] == "Browser content"
     assert "Browser content" in run.html
+    challenge = next(
+        item
+        for item in run.result["issues"]
+        if item["code"] == "googlebot_access_challenge"
+    )
+    assert challenge["severity"] == "medium"
+    assert "浏览器对照成功" in challenge["title"]
+    assert run.result["score"] == 83
 
 
 def test_crawler_overview_does_not_call_waf_challenge_not_indexable() -> None:
