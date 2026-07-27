@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API 文档 · GEO Audit</title>
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727" />
+  <link rel="stylesheet" href="/static/css/api-doc.css?v=20260727" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">G</span>
+      <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
+    </a>
+    <nav aria-label="主导航">
+      <a href="/">网站诊断</a>
+      <a href="/google-crawler-test">Google 爬虫测试</a>
+      <a class="active" href="/api-doc">API 文档</a>
+    </nav>
+  </header>
+
+  <main class="api-doc-main">
+    <section class="api-doc-hero">
+      <div class="api-doc-copy">
+        <div class="eyebrow"><span class="live-dot"></span> Developer API</div>
+        <h1>把 GEO 诊断能力<br /><span>接入你的工作流</span></h1>
+        <p>从异步站点审计、任务轮询到 Googlebot 与渲染测试，这里集中说明请求流程、关键参数和返回结构。</p>
+        <div class="api-doc-actions">
+          <a class="try-api-button" href="/docs" target="_blank" rel="noreferrer">
+            立即测试 API
+            <span>↗</span>
+          </a>
+          <a class="back-button" href="/">返回网站诊断</a>
+        </div>
+      </div>
+      <div class="api-console-card" aria-label="API 快速信息">
+        <div class="console-dots"><i></i><i></i><i></i></div>
+        <span>API BASE</span>
+        <code>/api/v1</code>
+        <span>AUTH</span>
+        <code>X-Demo-Token · Demo routes only</code>
+        <span>FORMAT</span>
+        <code>application/json</code>
+      </div>
+    </section>
+
+    <section class="api-summary-grid">
+      <article><b>01</b><div><strong>创建任务</strong><small>提交 URL 和审计选项</small></div></article>
+      <article><b>02</b><div><strong>轮询状态</strong><small>跟踪阶段与进度</small></div></article>
+      <article><b>03</b><div><strong>读取结果</strong><small>报告、图谱与原始数据</small></div></article>
+    </section>
+
+    {{API_DOC_CONTENT}}
+
+    <section class="crawler-api-section">
+      <div class="section-hdr">
+        <h2>Google 爬虫测试 API</h2>
+        <span>独立运行抓取、渲染或一次返回两项结果</span>
+      </div>
+      <div class="crawler-endpoint-grid">
+        <article>
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/googlebot</div>
+          <p>检查 robots.txt、HTTP、索引指令和初始 HTML。</p>
+        </article>
+        <article>
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/google-render</div>
+          <p>运行抓取前置检查与 Chromium JavaScript 渲染诊断。</p>
+        </article>
+        <article>
+          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/test</div>
+          <p>一次返回 Googlebot 和 Google Render 两个结果。</p>
+        </article>
+      </div>
+      <div class="code-snippet"><pre>{
+  "url": "https://example.com/"
+}</pre></div>
+    </section>
+
+    <section class="api-final-cta">
+      <div>
+        <span>Ready to test?</span>
+        <h2>在交互式 OpenAPI 中发送第一个请求</h2>
+      </div>
+      <a href="/docs" target="_blank" rel="noreferrer">立即测试 <span>↗</span></a>
+    </section>
+  </main>
+
+  <footer>
+    <p>GEO Audit API · FastAPI powered</p>
+    <a href="/health" target="_blank" rel="noreferrer">服务状态 ↗</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,40 @@
+name: site-geo
+
+services:
+  geo-audit-service:
+    container_name: geo-audit-service
+    image: geo-audit-service:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Google Render 必须启用；这里覆盖 .env 中可能遗留的 false。
+      ALLOW_PLAYWRIGHT: "true"
+    ports:
+      - "8023:8023"
+    volumes:
+      # 保留原容器的挂载方式，服务器目录为 /home/html/site-geo 时，
+      # 等价于 /home/html/site-geo/app:/app/app。
+      - ./app:/app/app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8023"
+      - --reload
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8023/health', timeout=5)"
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 20s
+

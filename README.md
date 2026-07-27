@@ -301,14 +301,24 @@ http://127.0.0.1:8023
 
 ### Docker
 
+推荐使用 Compose。服务器首次部署和以后更新均执行：
+
 ```bash
-docker build -t geo-audit-service .
-docker run -d \
-  --name geo-audit-service \
-  -p 8023:8023 \
-  --env-file .env \
-  --restart unless-stopped \
-  geo-audit-service:latest
+chmod +x deploy.sh
+./deploy.sh
+```
+
+`deploy.sh` 会依次拉取最新代码、重建镜像、重建容器并等待健康检查。
+容器参数统一维护在 `compose.yaml` 中；Google Render 的 Playwright 开关由
+Compose 强制启用，镜像构建时会安装 Chromium。
+
+常用维护命令：
+
+```bash
+docker compose ps
+docker compose logs -f --tail 100 geo-audit-service
+docker compose restart geo-audit-service
+docker compose down
 ```
 
 ---

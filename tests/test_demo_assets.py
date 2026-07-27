@@ -15,16 +15,28 @@ def test_demo_page_serves_template_assets() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert '/static/css/demo.css' in response.text
+    assert '/static/css/audit-refresh.css' in response.text
     assert '/static/js/demo/index.js' in response.text
-    assert 'href="/docs"' in response.text
-    assert 'href="/health"' in response.text
+    assert 'href="/api-doc"' in response.text
+    assert 'API 调用步骤' not in response.text
 
 
 def test_demo_static_assets_are_mounted() -> None:
     css_response = client.get("/static/css/demo.css")
+    refresh_css_response = client.get("/static/css/audit-refresh.css")
     js_response = client.get("/static/js/demo/index.js")
     assert css_response.status_code == 200
+    assert refresh_css_response.status_code == 200
     assert js_response.status_code == 200
+
+
+def test_api_doc_is_separate_and_links_to_interactive_docs() -> None:
+    response = client.get("/api-doc")
+    assert response.status_code == 200
+    assert "API 调用步骤" in response.text
+    assert "Google 爬虫测试 API" in response.text
+    assert 'href="/docs"' in response.text
+    assert "立即测试 API" in response.text
 
 
 def test_openapi_hides_demo_task_routes_and_exposes_split_graph_routes() -> None:

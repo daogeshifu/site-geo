@@ -3,56 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GEO Audit Console</title>
+  <title>网站 GEO 诊断 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
+  <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727" />
 </head>
 <body>
 
-<header class="hdr">
-  <div class="hdr-inner">
-    <div class="hdr-brand">
-      <div class="hdr-logo">G</div>
-      <div class="hdr-copy">
-        <div class="hdr-eyebrow">FastAPI Console</div>
-        <div class="hdr-title-row">
-          <span class="hdr-name">GEO Audit Console</span>
-          <span class="hdr-pill">v3</span>
-        </div>
-        <div class="hdr-sub">FastAPI-powered workspace for GEO site audits, content reviews, and async task execution.</div>
-      </div>
-    </div>
-    <div class="hdr-actions">
-      <a class="hdr-link hdr-link-primary" href="/">网站诊断</a>
-      <a class="hdr-link" href="/google-crawler-test">Google 爬虫测试</a>
-      <a class="hdr-link" href="/health" target="_blank" rel="noreferrer">Health API</a>
-      <a class="hdr-link" href="/docs" target="_blank" rel="noreferrer">OpenAPI Docs</a>
-    </div>
-  </div>
-  <div class="hdr-meta">
-    <div class="hdr-meta-card">
-      <span class="hdr-meta-label">API Base</span>
-      <code class="hdr-meta-code">/api/v1</code>
-    </div>
-    <div class="hdr-meta-card">
-      <span class="hdr-meta-label">Demo Task</span>
-      <code class="hdr-meta-code">POST /api/v1/tasks/audit</code>
-    </div>
-    <div class="hdr-meta-card">
-      <span class="hdr-meta-label">Task Status</span>
-      <code class="hdr-meta-code">GET /api/v1/tasks/{task_id}</code>
-    </div>
-    <div class="hdr-meta-card">
-      <span class="hdr-meta-label">Demo Guard</span>
-      <code class="hdr-meta-code">Header: X-Demo-Token</code>
-    </div>
-  </div>
+<header class="audit-topbar">
+  <a class="audit-brand" href="/">
+    <span class="audit-brand-mark">G</span>
+    <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
+  </a>
+  <nav class="audit-nav" aria-label="主导航">
+    <a class="active" href="/">网站诊断</a>
+    <a href="/google-crawler-test">Google 爬虫测试</a>
+    <a href="/api-doc">API 文档</a>
+  </nav>
 </header>
 
 <div class="wrap">
-  <div class="page-title">
+  <section class="page-title audit-hero">
+    <div class="audit-eyebrow"><span></span> AI Search Readiness</div>
     <h1 id="page-heading">网站 GEO 审计</h1>
     <p id="page-subtitle">提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
-  </div>
+    <div class="audit-feature-row" aria-label="审计能力">
+      <span><b>01</b> 站点快照</span>
+      <i></i>
+      <span><b>02</b> 六维诊断</span>
+      <i></i>
+      <span><b>03</b> 行动建议</span>
+    </div>
+  </section>
 
   <section class="access-panel" id="demo-access-panel">
     <div class="access-copy">
@@ -429,6 +410,7 @@
   <div class="biz-card" style="margin-top:10px"><h4>会员 AI 增强 · 机制说明</h4><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div>
 </div>
 
+  <!-- API_DOC_START -->
   <div style="margin-top:28px;margin-bottom:48px">
     <div class="section-hdr">
       <h2>API 调用步骤</h2>
@@ -573,6 +555,7 @@
 
     </div><!-- /api-steps -->
   </div>
+  <!-- API_DOC_END -->
 
 </div><!-- /wrap -->
 

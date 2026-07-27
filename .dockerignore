@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.py[cod]
+.cache
+.pytest_cache
+nohup.out
+server.pid
+tests
+
