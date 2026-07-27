@@ -129,6 +129,167 @@ h1 span { color: var(--blue); }
 .status-warning, .status-skipped { color: var(--amber); background: #fff5df; }
 .status-failed { color: var(--red); background: #ffedef; }
 .disclaimer { margin: 0; padding: 12px 30px; border-bottom: 1px solid var(--line); color: #6b788a; background: #f7f9fb; font-size: 11px; }
+.diagnostic-overview {
+  padding: 30px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(22, 119, 255, .075), transparent 28%),
+    #fff;
+  border-bottom: 1px solid var(--line);
+}
+.overview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.overview-heading h3,
+.detail-heading h3 {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  letter-spacing: -.35px;
+}
+.overview-summary {
+  margin: 15px 0 20px;
+  padding: 14px 16px;
+  color: #27415f;
+  background: #edf5ff;
+  border: 1px solid #d4e7ff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+.overview-card {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-top: 3px solid #aeb8c5;
+  border-radius: 11px;
+  background: #fbfcfd;
+}
+.overview-card.status-passed { border-top-color: var(--green); }
+.overview-card.status-warning,
+.overview-card.status-skipped { border-top-color: var(--amber); }
+.overview-card.status-failed { border-top-color: var(--red); }
+.overview-card-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.overview-card-icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #68778a;
+  background: #edf0f4;
+  font-size: 10px;
+  font-weight: 900;
+}
+.overview-card.status-passed .overview-card-icon { color: var(--green); background: #e7f8f1; }
+.overview-card.status-warning .overview-card-icon,
+.overview-card.status-skipped .overview-card-icon { color: var(--amber); background: #fff3dc; }
+.overview-card.status-failed .overview-card-icon { color: var(--red); background: #ffeaed; }
+.overview-card-top small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.overview-card-top em {
+  min-width: 0;
+  overflow: hidden;
+  color: #94a0af;
+  font-size: 9px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overview-card > strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.overview-card > p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.overview-issues-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 24px 0 11px;
+}
+.overview-issues-head h4 { margin: 0; font-size: 13px; }
+.overview-issues-head span { color: var(--muted); font-size: 10px; }
+.overview-issues { display: flex; flex-direction: column; gap: 8px; }
+.overview-issue {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 15px;
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-left: 3px solid #a7b1bd;
+  border-radius: 9px;
+  background: #fff;
+}
+.overview-issue.severity-critical,
+.overview-issue.severity-high { border-left-color: var(--red); }
+.overview-issue.severity-medium { border-left-color: var(--amber); }
+.overview-issue-source {
+  padding-top: 3px;
+  color: #768599;
+  font-size: 10px;
+  font-weight: 750;
+}
+.overview-issue .issue-head { margin-bottom: 5px; }
+.overview-issue p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.overview-issue .fix { margin-top: 5px; color: #38526e; }
+.overview-clear {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  color: #087e59;
+  background: #f3fbf8;
+  border: 1px dashed #b8dfd1;
+  border-radius: 9px;
+}
+.overview-clear > span {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--green);
+  background: #e4f7ef;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+}
+.overview-clear strong { display: block; font-size: 12px; }
+.overview-clear p { margin: 3px 0 0; color: #5e8074; font-size: 10px; }
+.detail-heading {
+  padding: 25px 30px 18px;
+  background: #f5f7fa;
+}
 .result-tabs { display: grid; grid-template-columns: 1fr 1fr; background: #f5f7fa; border-bottom: 1px solid var(--line); }
 .result-tab {
   border: 0; border-right: 1px solid var(--line); padding: 18px 24px;
@@ -207,6 +368,12 @@ footer a { color: var(--blue); text-decoration: none; }
   .flow small { display: none; }
   .loading-grid, .checks, .metric-grid { grid-template-columns: 1fr; }
   .result-overview, .panel-head { flex-direction: column; }
+  .diagnostic-overview { padding: 22px 20px; }
+  .overview-heading { align-items: flex-start; }
+  .overview-cards { grid-template-columns: 1fr; }
+  .overview-issue { grid-template-columns: 1fr; gap: 6px; }
+  .overview-issues-head { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .detail-heading { padding: 22px 20px 15px; }
   .result-tabs { grid-template-columns: 1fr; }
   .result-tab { border-right: 0; border-bottom: 1px solid var(--line); }
   .result-panel { padding: 20px; }

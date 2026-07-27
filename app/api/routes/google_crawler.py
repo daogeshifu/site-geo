@@ -5,7 +5,11 @@ from fastapi import APIRouter, Request
 from app.api.demo_access import require_demo_token
 from app.models.requests import GoogleCrawlerTestRequest
 from app.models.responses import success_response
-from app.services.google_crawler import GoogleRenderService, GooglebotService
+from app.services.google_crawler import (
+    GoogleRenderService,
+    GooglebotService,
+    build_crawler_overview,
+)
 
 
 router = APIRouter(tags=["google-crawler"])
@@ -35,6 +39,10 @@ async def _run_full_test(url: str) -> dict:
             else "passed"
         ),
         "score": round(sum(scores) / len(scores)) if scores else None,
+        "overview": build_crawler_overview(
+            googlebot_run.result,
+            render_result,
+        ),
         "googlebot": googlebot_run.result,
         "google_render": render_result,
         "disclaimer": (

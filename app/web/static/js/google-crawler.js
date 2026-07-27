@@ -56,6 +56,81 @@ function renderMetrics(items) {
   `).join('')}</div>`;
 }
 
+function overviewToneIcon(status) {
+  return status === 'passed' ? '✓' : status === 'failed' ? '!' : '•';
+}
+
+function renderOverviewIssues(issues = []) {
+  if (!issues.length) {
+    return '<div class="overview-clear"><span>✓</span><div><strong>未发现主要技术问题</strong><p>抓取、索引与渲染结果符合本次模拟检测的基础标准。</p></div></div>';
+  }
+  return issues.map(item => `
+    <article class="overview-issue severity-${escapeHtml(item.severity)}">
+      <div class="overview-issue-source">${escapeHtml(item.source || '检测结果')}</div>
+      <div>
+        <div class="issue-head">
+          <span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
+          <b>${escapeHtml(item.title)}</b>
+        </div>
+        <p>${escapeHtml(item.detail)}</p>
+        <p class="fix"><strong>优先建议：</strong>${escapeHtml(item.recommendation)}</p>
+      </div>
+    </article>
+  `).join('');
+}
+
+function renderOverview(overview = {}) {
+  const rendering = overview.rendering || {};
+  const seo = overview.seo || {};
+  const crawl = overview.crawl || {};
+  const indexing = overview.indexing || {};
+  const cards = [
+    {
+      eyebrow: '页面渲染方式',
+      label: rendering.label || '无法判定',
+      detail: rendering.detail || '本次返回数据不足，无法确认页面渲染方式。',
+      status: rendering.status || 'warning',
+      metric: rendering.rendered_word_count === null || rendering.rendered_word_count === undefined
+        ? '初始内容 ' + valueOrDash(rendering.initial_word_count)
+        : `${valueOrDash(rendering.initial_word_count)} → ${valueOrDash(rendering.rendered_word_count)}`
+    },
+    {
+      eyebrow: 'SEO 技术结论',
+      label: seo.label || '等待结论',
+      detail: seo.detail || '请查看 Googlebot 与 Google Render 检测细项。',
+      status: seo.status || overview.status || 'warning',
+      metric: '抓取与渲染标准'
+    },
+    {
+      eyebrow: '抓取 / 索引状态',
+      label: `${crawl.label || '未知'} · ${indexing.label || '未知'}`,
+      detail: `${crawl.detail || ''} ${indexing.detail || ''}`.trim(),
+      status: crawl.status === 'failed' || indexing.status === 'failed'
+        ? 'failed'
+        : crawl.status === 'warning'
+          ? 'warning'
+          : 'passed',
+      metric: 'Googlebot Smartphone'
+    }
+  ];
+
+  $('overview-summary').textContent = overview.summary || '本次检测未返回总览结论，请查看下方模式细项。';
+  $('overview-verdict').textContent = statusLabel(overview.status || seo.status);
+  $('overview-verdict').className = `status-pill status-${overview.status || seo.status || 'warning'}`;
+  $('overview-cards').innerHTML = cards.map(card => `
+    <article class="overview-card status-${escapeHtml(card.status)}">
+      <div class="overview-card-top">
+        <span class="overview-card-icon">${overviewToneIcon(card.status)}</span>
+        <small>${escapeHtml(card.eyebrow)}</small>
+        <em>${escapeHtml(card.metric)}</em>
+      </div>
+      <strong>${escapeHtml(card.label)}</strong>
+      <p>${escapeHtml(card.detail)}</p>
+    </article>
+  `).join('');
+  $('overview-issues').innerHTML = renderOverviewIssues(overview.major_issues || []);
+}
+
 function renderGooglebot(result) {
   const request = result.request || {};
   const crawl = result.crawlability || {};
@@ -151,6 +226,7 @@ function showResults(data) {
   $('overall-status').textContent = statusLabel(data.status);
   $('overall-status').className = `status-pill status-${data.status}`;
   $('disclaimer').textContent = data.disclaimer || '';
+  renderOverview(data.overview || {});
   $('googlebot-tab-status').className = data.googlebot?.status || '';
   $('render-tab-status').className = data.google_render?.status || '';
   $('panel-googlebot').innerHTML = renderGooglebot(data.googlebot || {});

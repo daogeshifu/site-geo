@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Google 爬虫测试 · GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727" />
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727-overview" />
 </head>
 <body>
   <header class="topbar">
@@ -87,6 +87,27 @@
       </div>
       <p id="disclaimer" class="disclaimer"></p>
 
+      <section id="overview-panel" class="diagnostic-overview" aria-labelledby="overview-heading">
+        <div class="overview-heading">
+          <div>
+            <span class="section-kicker">Overview</span>
+            <h3 id="overview-heading">页面渲染与 SEO 结论</h3>
+          </div>
+          <span id="overview-verdict" class="status-pill">—</span>
+        </div>
+        <p id="overview-summary" class="overview-summary"></p>
+        <div id="overview-cards" class="overview-cards"></div>
+        <div class="overview-issues-head">
+          <h4>主要问题</h4>
+          <span>按严重程度排序，最多展示 5 项</span>
+        </div>
+        <div id="overview-issues" class="overview-issues"></div>
+      </section>
+
+      <div class="detail-heading">
+        <span class="section-kicker">Detailed diagnostics</span>
+        <h3>两种 Google 模式检测细项</h3>
+      </div>
       <div class="result-tabs" role="tablist" aria-label="检测结果">
         <button class="result-tab active" type="button" role="tab" aria-selected="true" data-tab="googlebot">
           <span class="tab-number">01</span>
@@ -115,6 +136,6 @@
     <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">最终确认请使用 Google Search Console ↗</a>
   </footer>
 
-  <script type="module" src="/static/js/google-crawler.js?v=20260727"></script>
+  <script type="module" src="/static/js/google-crawler.js?v=20260727-overview"></script>
 </body>
 </html>
