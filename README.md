@@ -310,7 +310,9 @@ chmod +x deploy.sh
 
 `deploy.sh` 会依次拉取最新代码、重建镜像、重建容器并等待健康检查。
 容器参数统一维护在 `compose.yaml` 中；Google Render 的 Playwright 开关由
-Compose 强制启用，镜像构建时会安装 Chromium。
+Compose 强制启用，镜像构建时会安装 Chromium。脚本同时兼容新版
+`docker compose` 和旧版 `docker-compose`；两者均未安装时会自动使用纯
+Docker 命令，不需要另外安装 Compose。
 
 常用维护命令：
 

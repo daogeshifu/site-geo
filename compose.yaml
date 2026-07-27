@@ -1,4 +1,4 @@
-name: site-geo
+version: "3.8"
 
 services:
   geo-audit-service:
@@ -37,4 +37,3 @@ services:
       timeout: 6s
       retries: 5
       start_period: 20s
-
