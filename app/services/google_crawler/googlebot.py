@@ -10,6 +10,10 @@ import httpx
 
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.services.google_crawler.browser_raw import (
+    BrowserRawHtmlService,
+    BrowserRawResponse,
+)
 from app.services.google_crawler.common import inspect_html, issue, status_from_issues
 from app.utils.public_url import normalize_public_url
 
@@ -18,11 +22,6 @@ GOOGLEBOT_SMARTPHONE_UA = (
     "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile "
     "Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
-)
-BROWSER_FALLBACK_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
 )
 ACCESS_CHALLENGE_STATUS_CODES = {401, 403, 406, 418, 429, 446, 451}
 ACCESS_CHALLENGE_MARKERS = (
@@ -60,9 +59,14 @@ class GooglebotService:
 
     def __init__(self, *, timeout_seconds: float | None = None) -> None:
         self.timeout_seconds = timeout_seconds or settings.request_timeout_seconds
+        self.browser_raw_service = BrowserRawHtmlService(
+            timeout_seconds=self.timeout_seconds
+        )
 
     @staticmethod
-    def _is_access_challenge(response: _HttpResult) -> bool:
+    def _is_access_challenge(
+        response: _HttpResult | BrowserRawResponse,
+    ) -> bool:
         if response.status_code in ACCESS_CHALLENGE_STATUS_CODES:
             return True
         if response.status_code not in {400, 503}:
@@ -76,26 +80,6 @@ class GooglebotService:
             )
         ).lower()
         return any(marker in evidence for marker in ACCESS_CHALLENGE_MARKERS)
-
-    @staticmethod
-    def _fallback_user_agent() -> str:
-        configured = settings.default_user_agent.strip()
-        if configured.startswith("Mozilla/5.0") and "googlebot" not in configured.lower():
-            return configured
-        return BROWSER_FALLBACK_UA
-
-    @staticmethod
-    def _browser_headers(user_agent: str) -> dict[str, str]:
-        return {
-            "User-Agent": user_agent,
-            "Accept": (
-                "text/html,application/xhtml+xml,application/xml;q=0.9,"
-                "image/avif,image/webp,*/*;q=0.8"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "max-age=0",
-            "Upgrade-Insecure-Requests": "1",
-        }
 
     async def _fetch(
         self,
@@ -163,6 +147,15 @@ class GooglebotService:
                 "detail": "robots.txt could not be fetched; Google may use a cached copy or temporarily pause crawling.",
             }
 
+        return self._robots_result(response, url=url, robots_url=robots_url)
+
+    def _robots_result(
+        self,
+        response: _HttpResult | BrowserRawResponse,
+        *,
+        url: str,
+        robots_url: str,
+    ) -> dict[str, Any]:
         if self._is_access_challenge(response):
             return {
                 "url": robots_url,
@@ -222,32 +215,32 @@ class GooglebotService:
                 raise AppError(502, f"Googlebot simulation failed: {exc}") from exc
 
         access_challenge = self._is_access_challenge(response)
-        fallback_response: _HttpResult | None = None
+        fallback_response: BrowserRawResponse | None = None
         fallback_user_agent: str | None = None
         analysis_response = response
         if access_challenge:
-            fallback_user_agent = self._fallback_user_agent()
-            fallback_headers = self._browser_headers(fallback_user_agent)
-            async with httpx.AsyncClient(
-                headers=fallback_headers,
-                timeout=timeout,
-                http2=True,
-            ) as fallback_client:
-                try:
-                    fallback_response = await self._fetch(
-                        normalized,
-                        client=fallback_client,
-                    )
-                    fallback_robots = await self._inspect_robots(
-                        normalized,
-                        client=fallback_client,
-                    )
-                except (AppError, httpx.RequestError, httpx.TimeoutException):
-                    fallback_response = None
-                else:
-                    if fallback_response.status_code == 200:
-                        analysis_response = fallback_response
-                        robots = fallback_robots
+            fallback_user_agent = self.browser_raw_service.user_agent
+            parsed = urlparse(normalized)
+            robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+            try:
+                fallback_response = await self.browser_raw_service.fetch(normalized)
+            except AppError:
+                fallback_response = None
+            else:
+                if fallback_response.status_code == 200:
+                    analysis_response = fallback_response
+                    try:
+                        fallback_robots_response = (
+                            await self.browser_raw_service.fetch(robots_url)
+                        )
+                    except AppError:
+                        pass
+                    else:
+                        robots = self._robots_result(
+                            fallback_robots_response,
+                            url=normalized,
+                            robots_url=robots_url,
+                        )
 
         content = inspect_html(analysis_response.text, analysis_response.final_url)
         header_directives = [
@@ -360,6 +353,17 @@ class GooglebotService:
                     and fallback_response.status_code == 200
                 ),
                 "fallback_user_agent": fallback_user_agent,
+                "control_transport": (
+                    "curl_cffi_chrome"
+                    if fallback_response is not None
+                    else None
+                ),
+                "raw_html_source": (
+                    "browser_control"
+                    if fallback_response is not None
+                    and fallback_response.status_code == 200
+                    else "googlebot"
+                ),
                 "detail": (
                     "模拟 Googlebot UA 来自非 Google IP，被目标站点的 WAF/反爬策略拦截。"
                     if access_challenge

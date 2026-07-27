@@ -287,10 +287,12 @@ ALLOW_PLAYWRIGHT=true ./start.sh
 ### 本地运行
 
 ```bash
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8023
+python -m venv .venv     //启用配置文件
+.venv\\Scripts\\activate  //启用虚拟环境
+pip install -r requirements.txt  //安装相关依赖
+uvicorn app.main:app --reload --port 8023  //指定端口启动脚本
+
+然后浏览器打开  http://127.0.0.1:8023 就可以访问了
 ```
 
 访问：

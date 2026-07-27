@@ -6,8 +6,13 @@ from fastapi.testclient import TestClient
 from app.api.routes import google_crawler as crawler_routes
 from app.core.exceptions import AppError
 from app.main import app
-from app.services.google_crawler.common import inspect_html
+from app.services.google_crawler import browser_raw as browser_raw_module
 from app.services.google_crawler import googlebot as googlebot_module
+from app.services.google_crawler.browser_raw import (
+    BrowserRawHtmlService,
+    BrowserRawResponse,
+)
+from app.services.google_crawler.common import inspect_html
 from app.services.google_crawler.googlebot import (
     GooglebotRun,
     GooglebotService,
@@ -188,6 +193,68 @@ def test_googlebot_access_challenge_recognizes_waf_response() -> None:
 
 
 @pytest.mark.asyncio
+async def test_browser_raw_html_fetches_unrendered_html_and_validates_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = BrowserRawHtmlService(timeout_seconds=2)
+    normalized_urls: list[str] = []
+    responses = iter(
+        [
+            type(
+                "Response",
+                (),
+                {
+                    "status_code": 302,
+                    "headers": {"location": "/final"},
+                    "content": b"",
+                    "encoding": "utf-8",
+                    "url": "https://example.com/start",
+                },
+            )(),
+            type(
+                "Response",
+                (),
+                {
+                    "status_code": 200,
+                    "headers": {"content-type": "text/html"},
+                    "content": b"<html><body><div id='app'></div></body></html>",
+                    "encoding": "utf-8",
+                    "url": "https://example.com/final",
+                },
+            )(),
+        ]
+    )
+
+    async def fake_normalize(url: str) -> str:
+        normalized_urls.append(url)
+        return url
+
+    def fake_request_once(url: str) -> object:
+        del url
+        return next(responses)
+
+    monkeypatch.setattr(browser_raw_module, "normalize_public_url", fake_normalize)
+    monkeypatch.setattr(service, "_request_once", fake_request_once)
+
+    result = await service.fetch("https://example.com/start")
+
+    assert result.status_code == 200
+    assert result.final_url == "https://example.com/final"
+    assert result.redirect_chain == [
+        {
+            "status_code": 302,
+            "from": "https://example.com/start",
+            "to": "https://example.com/final",
+        }
+    ]
+    assert normalized_urls == [
+        "https://example.com/start",
+        "https://example.com/final",
+    ]
+    assert "<div id='app'>" in result.text
+
+
+@pytest.mark.asyncio
 async def test_googlebot_waf_challenge_uses_browser_control_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -203,21 +270,21 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
         validate_url: bool = True,
     ) -> _HttpResult:
         del validate_url
-        user_agent = client.headers.get("user-agent", "")  # type: ignore[attr-defined]
-        is_googlebot = "Googlebot" in user_agent
-        if is_googlebot:
-            return _HttpResult(
-                requested_url=url,
-                final_url=url,
-                status_code=446,
-                headers={"server": "AkamaiGHost", "content-type": "text/html"},
-                text="<h1>Access Denied</h1>",
-                response_time_ms=10,
-                redirect_chain=[],
-                truncated=False,
-            )
+        del client
+        return _HttpResult(
+            requested_url=url,
+            final_url=url,
+            status_code=446,
+            headers={"server": "AkamaiGHost", "content-type": "text/html"},
+            text="<h1>Access Denied</h1>",
+            response_time_ms=10,
+            redirect_chain=[],
+            truncated=False,
+        )
+
+    async def fake_browser_fetch(url: str) -> BrowserRawResponse:
         if url.endswith("/robots.txt"):
-            return _HttpResult(
+            return BrowserRawResponse(
                 requested_url=url,
                 final_url=url,
                 status_code=200,
@@ -227,7 +294,7 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
                 redirect_chain=[],
                 truncated=False,
             )
-        return _HttpResult(
+        return BrowserRawResponse(
             requested_url=url,
             final_url=url,
             status_code=200,
@@ -244,6 +311,7 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
 
     monkeypatch.setattr(googlebot_module, "normalize_public_url", fake_normalize)
     monkeypatch.setattr(service, "_fetch", fake_fetch)
+    monkeypatch.setattr(service.browser_raw_service, "fetch", fake_browser_fetch)
 
     run = await service.run("https://example.com/app")
 
@@ -251,6 +319,8 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
     assert run.result["control_request"]["status_code"] == 200
     assert run.result["access"]["state"] == "waf_challenge"
     assert run.result["access"]["browser_fallback_used"] is True
+    assert run.result["access"]["control_transport"] == "curl_cffi_chrome"
+    assert run.result["access"]["raw_html_source"] == "browser_control"
     assert run.result["crawlability"]["allowed"] is True
     assert run.result["indexability"]["indexable"] is None
     assert run.result["indexability"]["state"] == "unknown_googlebot_access"
