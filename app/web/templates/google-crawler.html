@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Google 爬虫测试 · GEO Audit Console</title>
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">G</span>
+      <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
+    </a>
+    <nav aria-label="主导航">
+      <a href="/">网站诊断</a>
+      <a class="active" href="/google-crawler-test">Google 爬虫测试</a>
+      <a href="/docs" target="_blank" rel="noreferrer">API 文档</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow"><span class="live-dot"></span> Google Search 模拟检测</div>
+      <h1>Googlebot 抓到了什么，<br /><span>Google Render 又看到了什么？</span></h1>
+      <p>输入任意公开页面链接，一次检查抓取权限、HTTP 响应、索引指令、初始 HTML，以及 JavaScript 渲染后的内容与资源异常。</p>
+
+      <form id="crawler-form" class="test-form">
+        <label for="test-url">需要检测的页面</label>
+        <div class="input-row">
+          <div class="url-input">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a2 2 0 0 0 2.8 0l3-3a2 2 0 0 0-2.8-2.8l-1.1 1.1m-1 6.6-1.1 1.1a2 2 0 1 1-2.8-2.8l3-3a2 2 0 0 1 2.8 0" /></svg>
+            <input id="test-url" name="url" type="url" placeholder="https://example.com/page" autocomplete="url" required />
+          </div>
+          <button id="run-test" type="submit">
+            <span class="button-label">开始测试</span>
+            <span class="button-spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="token-row" class="token-row" hidden>
+          <label for="demo-token">Demo Token</label>
+          <input id="demo-token" type="password" placeholder="X-Demo-Token" autocomplete="current-password" />
+          <span>此环境已启用访问保护</span>
+        </div>
+      </form>
+
+      <div class="flow" aria-label="检测流程">
+        <div><b>01</b><span><strong>Googlebot</strong><small>robots.txt · HTTP · 初始 HTML</small></span></div>
+        <i></i>
+        <div><b>02</b><span><strong>Google Render</strong><small>Chromium · JS · 渲染 DOM</small></span></div>
+        <i></i>
+        <div><b>03</b><span><strong>问题清单</strong><small>严重度 · 证据 · 修复建议</small></span></div>
+      </div>
+    </section>
+
+    <section id="empty-state" class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2m2-11v4m-2-2h4" /></svg>
+      </div>
+      <h2>等待开始检测</h2>
+      <p>检测通常需要几秒钟；JavaScript 较重的页面可能需要更长时间。</p>
+    </section>
+
+    <section id="loading-state" class="loading-state" hidden>
+      <div class="loading-head">
+        <div><span class="pulse"></span><strong>正在模拟 Google 抓取与渲染</strong></div>
+        <span id="elapsed-time">0.0s</span>
+      </div>
+      <div class="loading-grid">
+        <article><span class="skeleton icon"></span><div><b>Googlebot</b><small id="crawl-loading-copy">正在检查 robots.txt 与页面响应…</small></div></article>
+        <article><span class="skeleton icon"></span><div><b>Google Render</b><small>正在等待抓取前置检查…</small></div></article>
+      </div>
+      <div class="loading-bar"><span></span></div>
+    </section>
+
+    <section id="results" class="results" hidden>
+      <div class="result-overview">
+        <div>
+          <span class="section-kicker">Test result</span>
+          <h2 id="result-title">检测完成</h2>
+          <a id="result-url" href="#" target="_blank" rel="noreferrer"></a>
+        </div>
+        <div class="overview-score">
+          <div id="overall-score" class="score-ring"><strong>—</strong><small>综合分</small></div>
+          <span id="overall-status" class="status-pill">—</span>
+        </div>
+      </div>
+      <p id="disclaimer" class="disclaimer"></p>
+
+      <div class="result-tabs" role="tablist" aria-label="检测结果">
+        <button class="result-tab active" type="button" role="tab" aria-selected="true" data-tab="googlebot">
+          <span class="tab-number">01</span>
+          <span><strong>Googlebot</strong><small>抓取与索引</small></span>
+          <em id="googlebot-tab-status"></em>
+        </button>
+        <button class="result-tab" type="button" role="tab" aria-selected="false" data-tab="google-render">
+          <span class="tab-number">02</span>
+          <span><strong>Google Render</strong><small>渲染与资源</small></span>
+          <em id="render-tab-status"></em>
+        </button>
+      </div>
+
+      <div id="panel-googlebot" class="result-panel active" role="tabpanel"></div>
+      <div id="panel-google-render" class="result-panel" role="tabpanel"></div>
+    </section>
+
+    <div id="error-box" class="error-box" hidden>
+      <strong>检测未完成</strong>
+      <p id="error-message"></p>
+    </div>
+  </main>
+
+  <footer>
+    <p>本工具使用公开 Googlebot User-Agent 与本地 Chromium 做近似模拟。</p>
+    <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">最终确认请使用 Google Search Console ↗</a>
+  </footer>
+
+  <script type="module" src="/static/js/google-crawler.js?v=20260727"></script>
+</body>
+</html>
