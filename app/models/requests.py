@@ -51,6 +51,12 @@ class UrlRequest(BaseModel):
     build_knowledge_graph: bool = True
 
 
+class GoogleCrawlerTestRequest(BaseModel):
+    """Googlebot / Google Render 同步检测请求。"""
+
+    url: str = Field(..., min_length=3, max_length=2048)
+
+
 class AuditModuleRequest(UrlRequest):
     """单模块审计请求，可携带预先完成的 discovery 结果以复用"""
 

@@ -18,6 +18,7 @@ from app.api.routes.audit import router as audit_router
 from app.api.routes.demo import router as demo_router
 from app.api.routes.discovery import router as discovery_router
 from app.api.routes.health import router as health_router
+from app.api.routes.google_crawler import router as google_crawler_router
 from app.api.routes.report import router as report_router
 from app.api.routes.tasks import router as task_router
 from app.core.config import settings
@@ -63,6 +64,7 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> ORJSONRespo
 # 注册所有路由模块
 app.include_router(demo_router)        # 交互式演示 UI
 app.include_router(health_router)      # 健康检查
+app.include_router(google_crawler_router)  # Googlebot / Google Render 测试
 app.include_router(discovery_router)   # 站点快照
 app.include_router(audit_router)       # 各审计模块
 app.include_router(task_router)        # 异步任务管理

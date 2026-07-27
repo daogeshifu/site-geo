@@ -71,6 +71,7 @@ import tldextract
 import orjson
 import dotenv
 import pythonjsonlogger
+import playwright
 PY
 }
 
@@ -110,6 +111,11 @@ for key, value in dotenv_values(".env").items():
     print(f"{key}={shlex.quote(str(value))}")
 PY
     )
+fi
+
+if [[ "${ALLOW_PLAYWRIGHT:-false}" =~ ^([Yy]|1|true|TRUE)$ ]]; then
+    echo ">>> 检查 Google Render 所需的 Chromium..."
+    "${VENV_PYTHON}" -m playwright install chromium
 fi
 
 HOST="${HOST:-$DEFAULT_HOST}"

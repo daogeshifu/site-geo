@@ -47,6 +47,26 @@ GEO Audit 关注的是另一层问题：
 
 ## 核心能力
 
+### Google 爬虫测试
+
+独立 demo 页面：`GET /google-crawler-test`
+
+- `POST /api/v1/google-crawler/googlebot`：模拟 Googlebot Smartphone，检查 robots.txt、HTTP、重定向、索引指令和初始 HTML。
+- `POST /api/v1/google-crawler/google-render`：执行抓取前置检查后，用无头 Chromium 检查 JavaScript 渲染、渲染前后内容差异、控制台异常和失败资源。
+- `POST /api/v1/google-crawler/test`：一次返回上述两项结果，适合双 Tab 页面展示。
+
+本地启用渲染前需安装 Chromium 并打开开关：
+
+```bash
+.venv/bin/playwright install chromium
+ALLOW_PLAYWRIGHT=true ./start.sh
+```
+
+该功能是基于公开 User-Agent 和本地 Chromium 的近似模拟，不来自 Google IP，也不替代 Search Console URL Inspection。
+
+若运行平台明确使用 `198.18.0.0/15` 作为受控公网代理地址，可设置
+`ALLOW_BENCHMARK_PROXY_IPS=true`。默认关闭，其他私网、回环、链路本地和保留地址始终拒绝。
+
 ### 1. Site Snapshot 发现层
 
 系统不再只抓首页，而是构建站点级快照：
@@ -329,6 +349,9 @@ MYSQL_STORE_PARSED_CONTENT=true
 DISCOVERY_FETCH_CONCURRENCY=8
 DEFAULT_USER_AGENT=GEOAuditBot/1.0 (+https://example.com/bot)
 ALLOW_PLAYWRIGHT=false
+GOOGLE_RENDER_TIMEOUT_SECONDS=25
+GOOGLE_RENDER_NETWORK_IDLE_SECONDS=5
+ALLOW_BENCHMARK_PROXY_IPS=false
 ```
 
 ### AI 增强

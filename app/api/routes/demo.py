@@ -16,6 +16,7 @@ from app.models.task import TaskAuditRequest
 router = APIRouter(tags=["demo"])
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "demo.html"
+GOOGLE_CRAWLER_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "google-crawler.html"
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -28,6 +29,12 @@ async def demo_page() -> HTMLResponse:
     - app/web/static/js/demo/
     """
     return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+
+@router.get("/google-crawler-test", response_class=HTMLResponse)
+async def google_crawler_demo_page() -> HTMLResponse:
+    """返回 Googlebot / Google Render 双检测 demo。"""
+    return HTMLResponse(GOOGLE_CRAWLER_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 @router.get("/api/v1/demo/token-status", include_in_schema=False)

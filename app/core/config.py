@@ -95,6 +95,9 @@ class Settings:
 
     # 是否允许使用 Playwright 进行浏览器渲染
     allow_playwright: bool = os.getenv("ALLOW_PLAYWRIGHT", "false").lower() == "true"
+    google_render_timeout_seconds: float = _get_float("GOOGLE_RENDER_TIMEOUT_SECONDS", 25.0)
+    google_render_network_idle_seconds: float = _get_float("GOOGLE_RENDER_NETWORK_IDLE_SECONDS", 5.0)
+    allow_benchmark_proxy_ips: bool = _get_bool("ALLOW_BENCHMARK_PROXY_IPS", False)
 
     # LLM 调用配置（OpenRouter）
     llm_request_timeout_seconds: float = _get_float("LLM_REQUEST_TIMEOUT_SECONDS", 30.0)
