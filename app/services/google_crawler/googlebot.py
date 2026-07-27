@@ -242,6 +242,11 @@ class GooglebotService:
                             robots_url=robots_url,
                         )
 
+        browser_fallback_used = (
+            access_challenge
+            and fallback_response is not None
+            and fallback_response.status_code == 200
+        )
         content = inspect_html(analysis_response.text, analysis_response.final_url)
         header_directives = [
             item.strip().lower()
@@ -259,15 +264,14 @@ class GooglebotService:
             fallback_status = (
                 fallback_response.status_code if fallback_response is not None else None
             )
-            fallback_succeeded = fallback_status == 200
-            score -= 5 if fallback_succeeded else 15
+            score -= 5 if browser_fallback_used else 15
             issues.append(
                 issue(
                     "googlebot_access_challenge",
-                    "medium" if fallback_succeeded else "high",
+                    "medium" if browser_fallback_used else "high",
                     (
                         "模拟 Googlebot UA 被 WAF 拦截（浏览器对照成功）"
-                        if fallback_succeeded
+                        if browser_fallback_used
                         else "模拟 Googlebot 请求被 WAF 或反爬策略拦截"
                     ),
                     (
@@ -275,7 +279,7 @@ class GooglebotService:
                         f"普通浏览器 UA 对照请求返回 HTTP {fallback_status or 'unknown'}。"
                         + (
                             "已通过浏览器对照响应取得 Raw HTML，可继续判断页面内容与渲染方式；"
-                            if fallback_succeeded
+                            if browser_fallback_used
                             else "未能通过浏览器对照响应取得可用 Raw HTML；"
                         )
                         + "由于请求并非来自 Google 官方 IP，不能据此断言真实 Googlebot 被阻止。"
@@ -348,6 +352,21 @@ class GooglebotService:
             },
             {"key": "content", "label": "初始 HTML 有核心内容", "status": "pass" if content["word_count"] >= 50 else "warning", "detail": f"约 {content['word_count']} 个词/字符单元"},
         ]
+        if access_challenge:
+            checks.insert(
+                2,
+                {
+                    "key": "browser_control",
+                    "label": "替代抓取与内容分析",
+                    "status": "pass" if browser_fallback_used else "fail",
+                    "detail": (
+                        f"普通浏览器 UA 返回 HTTP {fallback_response.status_code}，"
+                        f"已自动使用该响应的 Raw HTML 进行内容和渲染检测"
+                        if browser_fallback_used and fallback_response is not None
+                        else "普通浏览器 UA 对照请求未取得 HTTP 200，无法替代被拦截的响应"
+                    ),
+                },
+            )
         result = {
             "service": "googlebot",
             "status": status_from_issues(issues, score=score),
@@ -357,11 +376,7 @@ class GooglebotService:
             "access": {
                 "state": "waf_challenge" if access_challenge else "ok",
                 "suspected_waf": access_challenge,
-                "browser_fallback_used": (
-                    access_challenge
-                    and fallback_response is not None
-                    and fallback_response.status_code == 200
-                ),
+                "browser_fallback_used": browser_fallback_used,
                 "fallback_user_agent": fallback_user_agent,
                 "control_transport": (
                     "curl_cffi_chrome"
@@ -370,12 +385,16 @@ class GooglebotService:
                 ),
                 "raw_html_source": (
                     "browser_control"
-                    if fallback_response is not None
-                    and fallback_response.status_code == 200
+                    if browser_fallback_used
                     else "googlebot"
                 ),
                 "detail": (
-                    "模拟 Googlebot UA 来自非 Google IP，被目标站点的 WAF/反爬策略拦截。"
+                    (
+                        "模拟 Googlebot UA 来自非 Google IP，被目标站点的 WAF/反爬策略拦截；"
+                        "已自动改用普通浏览器 UA 的 Raw HTML 作为替代内容源进行检测。"
+                    )
+                    if browser_fallback_used
+                    else "模拟 Googlebot UA 来自非 Google IP，被目标站点的 WAF/反爬策略拦截。"
                     if access_challenge
                     else "模拟请求未发现 WAF/反爬拦截。"
                 ),
@@ -395,17 +414,37 @@ class GooglebotService:
             },
             "control_request": (
                 {
+                    "role": "analysis_fallback",
+                    "user_agent": fallback_user_agent,
+                    "requested_url": fallback_response.requested_url,
                     "status_code": fallback_response.status_code,
                     "final_url": fallback_response.final_url,
                     "response_time_ms": fallback_response.response_time_ms,
+                    "redirect_count": len(fallback_response.redirect_chain),
+                    "redirect_chain": fallback_response.redirect_chain,
                     "content_type": fallback_response.headers.get("content-type", ""),
                     "html_bytes": len(
                         fallback_response.text.encode("utf-8", errors="ignore")
                     ),
+                    "truncated": fallback_response.truncated,
                 }
                 if fallback_response is not None
                 else None
             ),
+            "analysis_source": {
+                "source": "browser_control" if browser_fallback_used else "googlebot",
+                "substituted": browser_fallback_used,
+                "status_code": analysis_response.status_code,
+                "final_url": analysis_response.final_url,
+                "html_bytes": len(
+                    analysis_response.text.encode("utf-8", errors="ignore")
+                ),
+                "detail": (
+                    "Googlebot 模拟被拦截，content、索引指令和后续渲染检测均基于普通浏览器 UA 对照响应。"
+                    if browser_fallback_used
+                    else "content、索引指令和后续渲染检测基于 Googlebot 模拟响应。"
+                ),
+            },
             "crawlability": robots,
             "indexability": {
                 "indexable": indexable,

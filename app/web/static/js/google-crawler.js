@@ -56,6 +56,38 @@ function renderMetrics(items) {
   `).join('')}</div>`;
 }
 
+function copyIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+    </svg>
+  `;
+}
+
+function checkIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m5 12 4 4L19 6"></path>
+    </svg>
+  `;
+}
+
+function renderRawDetails(result, label) {
+  return `
+    <details class="details">
+      <summary>
+        <span>${escapeHtml(label)}</span>
+        <button class="copy-result" type="button" data-copy-result aria-label="复制 JSON 检测结果" title="复制 JSON 检测结果">
+          ${copyIcon()}
+          <span>复制</span>
+        </button>
+      </summary>
+      <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
+    </details>
+  `;
+}
+
 function overviewToneIcon(status) {
   return status === 'passed' ? '✓' : status === 'failed' ? '!' : '•';
 }
@@ -162,10 +194,7 @@ function renderGooglebot(result) {
     ${renderChecks(result.checks)}
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
     ${renderIssues(result.issues)}
-    <details class="details">
-      <summary>查看抓取详情与原始结果</summary>
-      <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
-    </details>
+    ${renderRawDetails(result, '查看抓取详情与原始结果')}
   `;
 }
 
@@ -202,11 +231,26 @@ function renderGoogleRender(result) {
     ${renderChecks(result.checks)}
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
     ${renderIssues(result.issues)}
-    <details class="details">
-      <summary>查看渲染详情与原始结果</summary>
-      <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
-    </details>
+    ${renderRawDetails(result, '查看渲染详情与原始结果')}
   `;
+}
+
+async function copyResultText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('浏览器未允许复制');
 }
 
 function setLoading(loading) {
@@ -299,6 +343,31 @@ document.querySelectorAll('.result-tab').forEach(button => {
     document.querySelectorAll('.result-panel').forEach(panel => panel.classList.remove('active'));
     $(`panel-${button.dataset.tab}`).classList.add('active');
   });
+});
+
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-copy-result]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const pre = button.closest('.details')?.querySelector('pre');
+  if (!pre) return;
+  try {
+    await copyResultText(pre.textContent || '');
+    button.classList.add('copied');
+    button.innerHTML = `${checkIcon()}<span>已复制</span>`;
+    window.setTimeout(() => {
+      button.classList.remove('copied');
+      button.innerHTML = `${copyIcon()}<span>复制</span>`;
+    }, 1600);
+  } catch {
+    button.classList.add('copy-failed');
+    button.querySelector('span').textContent = '复制失败';
+    window.setTimeout(() => {
+      button.classList.remove('copy-failed');
+      button.innerHTML = `${copyIcon()}<span>复制</span>`;
+    }, 1800);
+  }
 });
 
 loadTokenStatus();

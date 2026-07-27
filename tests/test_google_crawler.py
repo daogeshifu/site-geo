@@ -321,6 +321,11 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
     assert run.result["access"]["browser_fallback_used"] is True
     assert run.result["access"]["control_transport"] == "curl_cffi_chrome"
     assert run.result["access"]["raw_html_source"] == "browser_control"
+    assert run.result["analysis_source"]["source"] == "browser_control"
+    assert run.result["analysis_source"]["substituted"] is True
+    assert run.result["analysis_source"]["status_code"] == 200
+    assert run.result["control_request"]["role"] == "analysis_fallback"
+    assert run.result["control_request"]["user_agent"]
     assert run.result["crawlability"]["allowed"] is True
     assert run.result["indexability"]["indexable"] is None
     assert run.result["indexability"]["state"] == "unknown_googlebot_access"
@@ -334,6 +339,10 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
     assert challenge["severity"] == "medium"
     assert "浏览器对照成功" in challenge["title"]
     assert run.result["score"] == 83
+    fallback_check = next(
+        item for item in run.result["checks"] if item["key"] == "browser_control"
+    )
+    assert fallback_check["status"] == "pass"
 
 
 def test_crawler_overview_does_not_call_waf_challenge_not_indexable() -> None:
