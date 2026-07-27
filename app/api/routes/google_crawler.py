@@ -17,12 +17,23 @@ googlebot_service = GooglebotService()
 google_render_service = GoogleRenderService()
 
 
+def _render_fallback_options(googlebot_result: dict) -> dict:
+    access = googlebot_result.get("access") or {}
+    if not access.get("browser_fallback_used"):
+        return {}
+    return {
+        "user_agent": access.get("fallback_user_agent"),
+        "mode": "browser_fallback",
+    }
+
+
 async def _run_full_test(url: str) -> dict:
     googlebot_run = await googlebot_service.run(url)
     render_result = await google_render_service.test(
         googlebot_run.result["request"]["final_url"],
         initial_html=googlebot_run.html,
         crawl_allowed=googlebot_run.result["crawlability"]["allowed"],
+        **_render_fallback_options(googlebot_run.result),
     )
     scores = [
         value
@@ -66,6 +77,7 @@ async def test_google_render(payload: GoogleCrawlerTestRequest) -> dict:
         googlebot_run.result["request"]["final_url"],
         initial_html=googlebot_run.html,
         crawl_allowed=googlebot_run.result["crawlability"]["allowed"],
+        **_render_fallback_options(googlebot_run.result),
     )
     return success_response(result)
 

@@ -136,17 +136,20 @@ function renderGooglebot(result) {
   const crawl = result.crawlability || {};
   const indexability = result.indexability || {};
   const content = result.content || {};
+  const usedBrowserFallback = result.access?.browser_fallback_used === true;
   return `
     <div class="panel-head">
-      <div><h3>Googlebot Smartphone</h3><p>使用公开的移动版 Googlebot User-Agent 请求页面，并检查 robots.txt、HTTP 响应、索引指令与初始 HTML。</p></div>
+      <div><h3>Googlebot Smartphone</h3><p>${usedBrowserFallback
+        ? '模拟 Googlebot 请求被 WAF 拦截；本区保留 Googlebot HTTP 结果，并使用普通浏览器对照响应补充 robots、索引指令和初始 HTML 分析。'
+        : '使用公开的移动版 Googlebot User-Agent 请求页面，并检查 robots.txt、HTTP 响应、索引指令与初始 HTML。'}</p></div>
       <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>/ 100 <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
     </div>
     ${renderMetrics([
       ['HTTP 状态', valueOrDash(request.status_code)],
       ['响应时间', valueOrDash(request.response_time_ms, ' ms')],
       ['robots.txt', crawl.allowed === true ? '允许' : crawl.allowed === false ? '阻止' : '不确定'],
-      ['可索引', indexability.indexable ? '是' : '否'],
-      ['初始内容', valueOrDash(content.word_count, ' 词/字符')],
+      ['索引状态', indexability.indexable === true ? '允许' : indexability.indexable === false ? '不允许' : '待确认'],
+      [usedBrowserFallback ? '初始内容（浏览器对照）' : '初始内容', valueOrDash(content.word_count, ' 词/字符')],
       ['内部链接', valueOrDash(content.internal_link_count)],
       ['重定向', valueOrDash(request.redirect_count)],
       ['HTML 体积', request.html_bytes ? `${Math.round(request.html_bytes / 1024)} KB` : '—']
@@ -185,7 +188,9 @@ function renderGoogleRender(result) {
       ];
   return `
     <div class="panel-head">
-      <div><h3>Google Web Rendering 模拟</h3><p>使用移动视口的无头 Chromium 执行 JavaScript，对比初始 HTML 与渲染 DOM，并记录脚本、资源和网络异常。</p></div>
+      <div><h3>Google Web Rendering 模拟</h3><p>${result.mode === 'browser_fallback'
+        ? '模拟 Googlebot 被 WAF 拦截，本次改用普通浏览器 UA 执行 JavaScript，仅用于判断 CSR/SSR 与页面资源状态；真实 Googlebot 结果需由 Search Console 确认。'
+        : '使用移动视口和 Googlebot Smartphone UA 的无头 Chromium 执行 JavaScript，对比初始 HTML 与渲染 DOM，并记录脚本、资源和网络异常。'}</p></div>
       <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>${result.score === null ? '' : ' / 100'} <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
     </div>
     ${renderMetrics(metrics)}

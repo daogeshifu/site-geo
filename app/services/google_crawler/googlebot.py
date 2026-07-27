@@ -19,6 +19,20 @@ GOOGLEBOT_SMARTPHONE_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile "
     "Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 )
+BROWSER_FALLBACK_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+ACCESS_CHALLENGE_STATUS_CODES = {401, 403, 406, 418, 429, 446, 451}
+ACCESS_CHALLENGE_MARKERS = (
+    "access denied",
+    "request blocked",
+    "captcha",
+    "cf-chl-",
+    "cloudflare ray id",
+    "akamai",
+)
 MAX_HTML_BYTES = 2_000_000
 REDIRECT_CODES = {301, 302, 303, 307, 308}
 
@@ -46,6 +60,42 @@ class GooglebotService:
 
     def __init__(self, *, timeout_seconds: float | None = None) -> None:
         self.timeout_seconds = timeout_seconds or settings.request_timeout_seconds
+
+    @staticmethod
+    def _is_access_challenge(response: _HttpResult) -> bool:
+        if response.status_code in ACCESS_CHALLENGE_STATUS_CODES:
+            return True
+        if response.status_code not in {400, 503}:
+            return False
+        evidence = " ".join(
+            (
+                response.headers.get("server", ""),
+                response.headers.get("cf-ray", ""),
+                response.headers.get("x-sucuri-id", ""),
+                response.text[:2000],
+            )
+        ).lower()
+        return any(marker in evidence for marker in ACCESS_CHALLENGE_MARKERS)
+
+    @staticmethod
+    def _fallback_user_agent() -> str:
+        configured = settings.default_user_agent.strip()
+        if configured.startswith("Mozilla/5.0") and "googlebot" not in configured.lower():
+            return configured
+        return BROWSER_FALLBACK_UA
+
+    @staticmethod
+    def _browser_headers(user_agent: str) -> dict[str, str]:
+        return {
+            "User-Agent": user_agent,
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "max-age=0",
+            "Upgrade-Insecure-Requests": "1",
+        }
 
     async def _fetch(
         self,
@@ -113,13 +163,16 @@ class GooglebotService:
                 "detail": "robots.txt could not be fetched; Google may use a cached copy or temporarily pause crawling.",
             }
 
-        if response.status_code in {401, 403}:
+        if self._is_access_challenge(response):
             return {
                 "url": robots_url,
                 "status_code": response.status_code,
-                "allowed": False,
-                "state": "blocked",
-                "detail": "robots.txt returned an authorization error, which blocks crawling.",
+                "allowed": None,
+                "state": "access_challenge",
+                "detail": (
+                    f"robots.txt returned HTTP {response.status_code}; the simulated "
+                    "Googlebot request appears to be blocked by a WAF or bot-verification policy."
+                ),
             }
         if 400 <= response.status_code < 500:
             return {
@@ -168,26 +221,72 @@ class GooglebotService:
             except httpx.RequestError as exc:
                 raise AppError(502, f"Googlebot simulation failed: {exc}") from exc
 
-        content = inspect_html(response.text, response.final_url)
+        access_challenge = self._is_access_challenge(response)
+        fallback_response: _HttpResult | None = None
+        fallback_user_agent: str | None = None
+        analysis_response = response
+        if access_challenge:
+            fallback_user_agent = self._fallback_user_agent()
+            fallback_headers = self._browser_headers(fallback_user_agent)
+            async with httpx.AsyncClient(
+                headers=fallback_headers,
+                timeout=timeout,
+                http2=True,
+            ) as fallback_client:
+                try:
+                    fallback_response = await self._fetch(
+                        normalized,
+                        client=fallback_client,
+                    )
+                    fallback_robots = await self._inspect_robots(
+                        normalized,
+                        client=fallback_client,
+                    )
+                except (AppError, httpx.RequestError, httpx.TimeoutException):
+                    fallback_response = None
+                else:
+                    if fallback_response.status_code == 200:
+                        analysis_response = fallback_response
+                        robots = fallback_robots
+
+        content = inspect_html(analysis_response.text, analysis_response.final_url)
         header_directives = [
             item.strip().lower()
-            for item in response.headers.get("x-robots-tag", "").split(",")
+            for item in analysis_response.headers.get("x-robots-tag", "").split(",")
             if item.strip()
         ]
         directives = sorted(set(content["directives"] + header_directives))
         noindex = any(item == "none" or item.startswith("noindex") for item in directives)
         nofollow = any(item == "none" or item.startswith("nofollow") for item in directives)
-        content_type = response.headers.get("content-type", "")
+        content_type = analysis_response.headers.get("content-type", "")
 
         issues: list[dict[str, str]] = []
         score = 100
+        if access_challenge:
+            score -= 15
+            fallback_status = (
+                fallback_response.status_code if fallback_response is not None else None
+            )
+            issues.append(
+                issue(
+                    "googlebot_access_challenge",
+                    "high",
+                    "模拟 Googlebot 请求被 WAF 或反爬策略拦截",
+                    (
+                        f"Googlebot UA 返回 HTTP {response.status_code}；"
+                        f"普通浏览器 UA 对照请求返回 HTTP {fallback_status or 'unknown'}。"
+                        "由于请求并非来自 Google 官方 IP，不能据此断言真实 Googlebot 被阻止。"
+                    ),
+                    "使用 Search Console URL Inspection 确认真实 Googlebot；同时检查 CDN/WAF 是否按 Google 官方 IP 范围验证爬虫。",
+                )
+            )
         if robots["allowed"] is False:
             score -= 55
             issues.append(issue("robots_blocked", "critical", "Googlebot 被 robots.txt 阻止", robots["detail"], "在 robots.txt 中为 Googlebot 放行目标路径。"))
         elif robots["allowed"] is None:
             score -= 15
             issues.append(issue("robots_unavailable", "medium", "robots.txt 状态不确定", robots["detail"], "确保 /robots.txt 稳定返回 200 或明确的 404。"))
-        if response.status_code != 200:
+        if response.status_code != 200 and not access_challenge:
             deduction = 45 if response.status_code >= 400 else 20
             score -= deduction
             issues.append(issue("non_200", "critical" if response.status_code >= 400 else "high", f"页面返回 HTTP {response.status_code}", "Google 通常只会把 200 页面送入正常渲染与索引流程。", "让规范 URL 稳定返回 HTTP 200。"))
@@ -206,15 +305,44 @@ class GooglebotService:
         if content["word_count"] < 50:
             score -= 12
             issues.append(issue("thin_initial_html", "high", "初始 HTML 可见内容过少", f"仅检测到约 {content['word_count']} 个词/字符单元，页面可能依赖 JavaScript。", "使用 SSR、静态生成或预渲染输出核心正文和链接。"))
-        if response.truncated:
+        if analysis_response.truncated:
             score -= 5
             issues.append(issue("html_truncated", "medium", "HTML 超过模拟抓取上限", "本次分析只读取了前 2MB 解压后内容。", "减少 HTML 体积，把核心内容放在文档前部。"))
 
         score = max(0, min(100, score))
+        indexable: bool | None
+        if noindex or robots["allowed"] is False:
+            indexable = False
+        elif access_challenge:
+            indexable = None
+        else:
+            indexable = response.status_code == 200
         checks = [
             {"key": "robots", "label": "robots.txt 允许抓取", "status": "pass" if robots["allowed"] is True else ("fail" if robots["allowed"] is False else "warning"), "detail": robots["detail"]},
-            {"key": "http", "label": "HTTP 200", "status": "pass" if response.status_code == 200 else "fail", "detail": f"返回 {response.status_code}，耗时 {response.response_time_ms} ms"},
-            {"key": "indexable", "label": "允许索引", "status": "fail" if noindex else "pass", "detail": "未发现 noindex" if not noindex else f"发现 {', '.join(directives)}"},
+            {
+                "key": "http",
+                "label": "Googlebot HTTP 响应",
+                "status": "warning" if access_challenge else ("pass" if response.status_code == 200 else "fail"),
+                "detail": (
+                    f"模拟 UA 返回 {response.status_code}，疑似 WAF 校验；不能代表真实 Googlebot"
+                    if access_challenge
+                    else f"返回 {response.status_code}，耗时 {response.response_time_ms} ms"
+                ),
+            },
+            {
+                "key": "indexable",
+                "label": "允许索引",
+                "status": "warning" if indexable is None else ("pass" if indexable else "fail"),
+                "detail": (
+                    "模拟 Googlebot 被拦截，真实索引状态待 Search Console 确认"
+                    if indexable is None
+                    else "未发现 noindex"
+                    if indexable
+                    else f"发现 {', '.join(directives)}"
+                    if noindex
+                    else "当前响应不满足索引条件"
+                ),
+            },
             {"key": "content", "label": "初始 HTML 有核心内容", "status": "pass" if content["word_count"] >= 50 else "warning", "detail": f"约 {content['word_count']} 个词/字符单元"},
         ]
         result = {
@@ -223,6 +351,21 @@ class GooglebotService:
             "score": score,
             "simulated": True,
             "user_agent": GOOGLEBOT_SMARTPHONE_UA,
+            "access": {
+                "state": "waf_challenge" if access_challenge else "ok",
+                "suspected_waf": access_challenge,
+                "browser_fallback_used": (
+                    access_challenge
+                    and fallback_response is not None
+                    and fallback_response.status_code == 200
+                ),
+                "fallback_user_agent": fallback_user_agent,
+                "detail": (
+                    "模拟 Googlebot UA 来自非 Google IP，被目标站点的 WAF/反爬策略拦截。"
+                    if access_challenge
+                    else "模拟请求未发现 WAF/反爬拦截。"
+                ),
+            },
             "request": {
                 "requested_url": response.requested_url,
                 "final_url": response.final_url,
@@ -230,13 +373,35 @@ class GooglebotService:
                 "response_time_ms": response.response_time_ms,
                 "redirect_count": len(response.redirect_chain),
                 "redirect_chain": response.redirect_chain,
-                "content_type": content_type,
-                "html_bytes": content["html_bytes"],
+                "content_type": response.headers.get("content-type", ""),
+                "html_bytes": len(
+                    response.text.encode("utf-8", errors="ignore")
+                ),
                 "truncated": response.truncated,
             },
+            "control_request": (
+                {
+                    "status_code": fallback_response.status_code,
+                    "final_url": fallback_response.final_url,
+                    "response_time_ms": fallback_response.response_time_ms,
+                    "content_type": fallback_response.headers.get("content-type", ""),
+                    "html_bytes": len(
+                        fallback_response.text.encode("utf-8", errors="ignore")
+                    ),
+                }
+                if fallback_response is not None
+                else None
+            ),
             "crawlability": robots,
             "indexability": {
-                "indexable": robots["allowed"] is not False and response.status_code == 200 and not noindex,
+                "indexable": indexable,
+                "state": (
+                    "unknown_googlebot_access"
+                    if indexable is None
+                    else "indexable"
+                    if indexable
+                    else "not_indexable"
+                ),
                 "noindex": noindex,
                 "nofollow": nofollow,
                 "directives": directives,
@@ -246,7 +411,7 @@ class GooglebotService:
             "checks": checks,
             "issues": issues,
         }
-        return GooglebotRun(result=result, html=response.text)
+        return GooglebotRun(result=result, html=analysis_response.text)
 
     async def test(self, url: str) -> dict[str, Any]:
         return (await self.run(url)).result

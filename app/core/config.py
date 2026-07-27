@@ -90,7 +90,11 @@ class Settings:
     # 爬虫 UA 标识
     default_user_agent: str = os.getenv(
         "DEFAULT_USER_AGENT",
-        "GEOAuditBot/1.0 (+https://example.com/bot)",
+        (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
     )
 
     # 是否允许使用 Playwright 进行浏览器渲染

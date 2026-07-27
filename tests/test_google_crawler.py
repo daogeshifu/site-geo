@@ -7,7 +7,12 @@ from app.api.routes import google_crawler as crawler_routes
 from app.core.exceptions import AppError
 from app.main import app
 from app.services.google_crawler.common import inspect_html
-from app.services.google_crawler.googlebot import GooglebotRun
+from app.services.google_crawler import googlebot as googlebot_module
+from app.services.google_crawler.googlebot import (
+    GooglebotRun,
+    GooglebotService,
+    _HttpResult,
+)
 from app.services.google_crawler.overview import build_crawler_overview
 from app.utils.public_url import normalize_public_url
 
@@ -59,12 +64,18 @@ def test_combined_demo_endpoint_returns_two_tabs(monkeypatch: pytest.MonkeyPatch
         "score": 92,
         "request": {"final_url": "https://example.com/"},
         "crawlability": {"allowed": True},
+        "access": {
+            "browser_fallback_used": True,
+            "fallback_user_agent": "Mozilla/5.0 Test Browser",
+        },
     }
+    render_options: dict[str, object] = {}
 
     async def fake_googlebot_run(url: str) -> GooglebotRun:
         return GooglebotRun(result=googlebot_result, html="<html><body>content</body></html>")
 
-    async def fake_render_test(url: str, **_: object) -> dict:
+    async def fake_render_test(url: str, **options: object) -> dict:
+        render_options.update(options)
         return {"status": "warning", "score": 74, "service": "google_render"}
 
     monkeypatch.setattr(crawler_routes.googlebot_service, "run", fake_googlebot_run)
@@ -81,6 +92,8 @@ def test_combined_demo_endpoint_returns_two_tabs(monkeypatch: pytest.MonkeyPatch
     assert "overview" in data
     assert data["googlebot"]["score"] == 92
     assert data["google_render"]["score"] == 74
+    assert render_options["mode"] == "browser_fallback"
+    assert render_options["user_agent"] == "Mozilla/5.0 Test Browser"
 
 
 def test_crawler_overview_identifies_server_rendered_page() -> None:
@@ -124,6 +137,7 @@ def test_crawler_overview_flags_client_rendered_content_and_prioritizes_issues()
             "content": {"word_count": 12},
             "issues": [
                 {
+                    "code": "thin_initial_html",
                     "severity": "high",
                     "title": "初始 HTML 可见内容过少",
                     "detail": "核心内容依赖 JavaScript。",
@@ -152,7 +166,140 @@ def test_crawler_overview_flags_client_rendered_content_and_prioritizes_issues()
     )
 
     assert overview["rendering"]["type"] == "client_rendered"
-    assert overview["rendering"]["status"] == "failed"
-    assert overview["seo"]["status"] == "failed"
+    assert overview["rendering"]["status"] == "warning"
+    assert overview["seo"]["status"] == "warning"
     assert overview["major_issues"][0]["source"] == "Googlebot"
     assert overview["major_issues"][0]["severity"] == "high"
+
+
+def test_googlebot_access_challenge_recognizes_waf_response() -> None:
+    response = _HttpResult(
+        requested_url="https://example.com/",
+        final_url="https://example.com/",
+        status_code=446,
+        headers={"server": "AkamaiGHost", "content-type": "text/html"},
+        text="<h1>Access Denied</h1>",
+        response_time_ms=12,
+        redirect_chain=[],
+        truncated=False,
+    )
+
+    assert GooglebotService._is_access_challenge(response) is True
+
+
+@pytest.mark.asyncio
+async def test_googlebot_waf_challenge_uses_browser_control_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = GooglebotService(timeout_seconds=2)
+
+    async def fake_normalize(url: str) -> str:
+        return url
+
+    async def fake_fetch(
+        url: str,
+        *,
+        client: object,
+        validate_url: bool = True,
+    ) -> _HttpResult:
+        del validate_url
+        user_agent = client.headers.get("user-agent", "")  # type: ignore[attr-defined]
+        is_googlebot = "Googlebot" in user_agent
+        if is_googlebot:
+            return _HttpResult(
+                requested_url=url,
+                final_url=url,
+                status_code=446,
+                headers={"server": "AkamaiGHost", "content-type": "text/html"},
+                text="<h1>Access Denied</h1>",
+                response_time_ms=10,
+                redirect_chain=[],
+                truncated=False,
+            )
+        if url.endswith("/robots.txt"):
+            return _HttpResult(
+                requested_url=url,
+                final_url=url,
+                status_code=200,
+                headers={"content-type": "text/plain"},
+                text="User-agent: Googlebot\nAllow: /\n",
+                response_time_ms=8,
+                redirect_chain=[],
+                truncated=False,
+            )
+        return _HttpResult(
+            requested_url=url,
+            final_url=url,
+            status_code=200,
+            headers={"content-type": "text/html"},
+            text=(
+                "<html><head><title>App</title><meta name='robots' content='all'>"
+                "</head><body><h1>Browser content</h1><div id='app'></div>"
+                "<script src='/app.js'></script></body></html>"
+            ),
+            response_time_ms=12,
+            redirect_chain=[],
+            truncated=False,
+        )
+
+    monkeypatch.setattr(googlebot_module, "normalize_public_url", fake_normalize)
+    monkeypatch.setattr(service, "_fetch", fake_fetch)
+
+    run = await service.run("https://example.com/app")
+
+    assert run.result["request"]["status_code"] == 446
+    assert run.result["control_request"]["status_code"] == 200
+    assert run.result["access"]["state"] == "waf_challenge"
+    assert run.result["access"]["browser_fallback_used"] is True
+    assert run.result["crawlability"]["allowed"] is True
+    assert run.result["indexability"]["indexable"] is None
+    assert run.result["indexability"]["state"] == "unknown_googlebot_access"
+    assert run.result["content"]["h1"] == "Browser content"
+    assert "Browser content" in run.html
+
+
+def test_crawler_overview_does_not_call_waf_challenge_not_indexable() -> None:
+    overview = build_crawler_overview(
+        {
+            "status": "warning",
+            "score": 73,
+            "request": {"status_code": 446},
+            "access": {
+                "state": "waf_challenge",
+                "detail": "模拟 Googlebot 被 WAF 拦截。",
+            },
+            "crawlability": {"allowed": True, "detail": "Googlebot rules allow /app/"},
+            "indexability": {
+                "indexable": None,
+                "state": "unknown_googlebot_access",
+                "noindex": False,
+            },
+            "issues": [
+                {
+                    "code": "googlebot_access_challenge",
+                    "severity": "high",
+                    "title": "模拟 Googlebot 请求被 WAF 或反爬策略拦截",
+                    "detail": "Googlebot UA 返回 HTTP 446。",
+                    "recommendation": "使用 Search Console 确认。",
+                }
+            ],
+        },
+        {
+            "status": "warning",
+            "score": 85,
+            "mode": "browser_fallback",
+            "request": {"status_code": 200},
+            "comparison": {
+                "initial_word_count": 12,
+                "rendered_word_count": 320,
+                "word_delta": 308,
+            },
+            "issues": [],
+        },
+    )
+
+    assert overview["rendering"]["type"] == "client_rendered"
+    assert overview["seo"]["status"] == "warning"
+    assert overview["indexing"]["status"] == "warning"
+    assert overview["indexing"]["label"] == "真实索引状态待确认"
+    assert "不可索引" not in overview["summary"]

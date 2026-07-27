@@ -19,6 +19,8 @@ class GoogleRenderService:
         *,
         initial_html: str = "",
         crawl_allowed: bool | None = True,
+        user_agent: str | None = None,
+        mode: str = "googlebot",
     ) -> dict[str, Any]:
         normalized = await normalize_public_url(url)
         if crawl_allowed is False:
@@ -62,8 +64,9 @@ class GoogleRenderService:
                     "renderer_launch_failed",
                     "Chromium 无法启动。请安装与 Playwright 版本匹配的浏览器运行时。",
                 )
+            effective_user_agent = user_agent or GOOGLEBOT_SMARTPHONE_UA
             context = await browser.new_context(
-                user_agent=GOOGLEBOT_SMARTPHONE_UA,
+                user_agent=effective_user_agent,
                 viewport={"width": 412, "height": 915},
                 device_scale_factor=2,
                 is_mobile=True,
@@ -170,6 +173,16 @@ class GoogleRenderService:
 
         issues: list[dict[str, str]] = []
         score = 100
+        if mode == "browser_fallback":
+            issues.append(
+                issue(
+                    "browser_fallback_mode",
+                    "medium",
+                    "渲染模式使用普通浏览器 UA 对照",
+                    "模拟 Googlebot 请求被 WAF 拦截，本次渲染用于判断 CSR/SSR，不代表真实 Googlebot 渲染结果。",
+                    "通过 Search Console URL Inspection 查看真实 Googlebot 的抓取响应与渲染 DOM。",
+                )
+            )
         if status_code != 200:
             score -= 45
             issues.append(issue("render_http_status", "critical", "渲染导航未返回 HTTP 200", f"主文档状态为 {status_code or 'unknown'}。", "修复渲染请求的状态码、重定向或网络错误。"))
@@ -197,6 +210,16 @@ class GoogleRenderService:
 
         score = max(0, min(100, score))
         checks = [
+            {
+                "key": "render_mode",
+                "label": "渲染身份",
+                "status": "warning" if mode == "browser_fallback" else "pass",
+                "detail": (
+                    "普通浏览器 UA 对照模式；用于渲染方式诊断"
+                    if mode == "browser_fallback"
+                    else "Googlebot Smartphone UA 模拟模式"
+                ),
+            },
             {"key": "render_status", "label": "主文档成功渲染", "status": "pass" if status_code == 200 else "fail", "detail": f"HTTP {status_code or 'unknown'}，总耗时 {elapsed_ms} ms"},
             {"key": "rendered_content", "label": "渲染后有核心内容", "status": "pass" if rendered["word_count"] >= 50 else "fail", "detail": f"约 {rendered['word_count']} 个词/字符单元，变化 {word_delta:+d}"},
             {"key": "javascript", "label": "JavaScript 无致命异常", "status": "pass" if not page_errors else "fail", "detail": f"{len(page_errors)} 个页面异常，{len(console_errors)} 个 console error"},
@@ -209,6 +232,9 @@ class GoogleRenderService:
             "simulated": True,
             "available": True,
             "engine": "Playwright Chromium",
+            "mode": mode,
+            "user_agent": effective_user_agent,
+            "googlebot_equivalent": mode == "googlebot",
             "request": {
                 "requested_url": normalized,
                 "final_url": final_url,
