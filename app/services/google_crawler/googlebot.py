@@ -445,6 +445,39 @@ class GooglebotService:
                     else "content、索引指令和后续渲染检测基于 Googlebot 模拟响应。"
                 ),
             },
+            "raw_html": {
+                "active_source": (
+                    "browser_control" if browser_fallback_used else "googlebot"
+                ),
+                "googlebot": {
+                    "label": "Googlebot 原始响应 HTML",
+                    "user_agent": GOOGLEBOT_SMARTPHONE_UA,
+                    "status_code": response.status_code,
+                    "final_url": response.final_url,
+                    "html_bytes": len(
+                        response.text.encode("utf-8", errors="ignore")
+                    ),
+                    "truncated": response.truncated,
+                    "used_for_analysis": not browser_fallback_used,
+                    "html": response.text,
+                },
+                "browser_control": (
+                    {
+                        "label": "普通浏览器 UA 原始响应 HTML",
+                        "user_agent": fallback_user_agent,
+                        "status_code": fallback_response.status_code,
+                        "final_url": fallback_response.final_url,
+                        "html_bytes": len(
+                            fallback_response.text.encode("utf-8", errors="ignore")
+                        ),
+                        "truncated": fallback_response.truncated,
+                        "used_for_analysis": browser_fallback_used,
+                        "html": fallback_response.text,
+                    }
+                    if fallback_response is not None
+                    else None
+                ),
+            },
             "crawlability": robots,
             "indexability": {
                 "indexable": indexable,

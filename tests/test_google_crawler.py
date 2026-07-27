@@ -324,6 +324,13 @@ async def test_googlebot_waf_challenge_uses_browser_control_response(
     assert run.result["analysis_source"]["source"] == "browser_control"
     assert run.result["analysis_source"]["substituted"] is True
     assert run.result["analysis_source"]["status_code"] == 200
+    assert run.result["raw_html"]["active_source"] == "browser_control"
+    assert run.result["raw_html"]["googlebot"]["status_code"] == 446
+    assert "Access Denied" in run.result["raw_html"]["googlebot"]["html"]
+    assert run.result["raw_html"]["googlebot"]["used_for_analysis"] is False
+    assert run.result["raw_html"]["browser_control"]["status_code"] == 200
+    assert "Browser content" in run.result["raw_html"]["browser_control"]["html"]
+    assert run.result["raw_html"]["browser_control"]["used_for_analysis"] is True
     assert run.result["control_request"]["role"] == "analysis_fallback"
     assert run.result["control_request"]["user_agent"]
     assert run.result["crawlability"]["allowed"] is True

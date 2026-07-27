@@ -73,18 +73,79 @@ function checkIcon() {
   `;
 }
 
-function renderRawDetails(result, label) {
+function renderCopyButton(label) {
   return `
-    <details class="details">
+    <button class="copy-result" type="button" data-copy-content aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+      ${copyIcon()}
+      <span>复制</span>
+    </button>
+  `;
+}
+
+function resultWithoutRawHtmlBody(result) {
+  const rawHtml = result?.raw_html;
+  if (!rawHtml) return result;
+  const summarized = { active_source: rawHtml.active_source };
+  for (const key of ['googlebot', 'browser_control']) {
+    const item = rawHtml[key];
+    summarized[key] = item
+      ? { ...item, html: '[Raw HTML 已在下方单独展示，可使用对应按钮复制]' }
+      : null;
+  }
+  return { ...result, raw_html: summarized };
+}
+
+function renderRawDetails(result, label) {
+  const displayResult = resultWithoutRawHtmlBody(result);
+  return `
+    <details class="details" data-copy-container>
       <summary>
         <span>${escapeHtml(label)}</span>
-        <button class="copy-result" type="button" data-copy-result aria-label="复制 JSON 检测结果" title="复制 JSON 检测结果">
-          ${copyIcon()}
-          <span>复制</span>
-        </button>
+        ${renderCopyButton('复制 JSON 检测结果')}
       </summary>
-      <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
+      <pre>${escapeHtml(JSON.stringify(displayResult, null, 2))}</pre>
     </details>
+  `;
+}
+
+function renderRawHtml(result) {
+  const rawHtml = result?.raw_html || {};
+  const entries = ['googlebot', 'browser_control']
+    .map(key => [key, rawHtml[key]])
+    .filter(([, item]) => item && typeof item.html === 'string');
+  if (!entries.length) return '';
+
+  return `
+    <section class="raw-html-section">
+      <div class="raw-html-title">
+        <div>
+          <h4>网页原始 Raw HTML</h4>
+          <p>完整展示实际取得的原始响应；标记“用于检测”的响应是本次内容与渲染判断的数据源。</p>
+        </div>
+        <span>${entries.length} 份响应</span>
+      </div>
+      <div class="raw-html-list">
+        ${entries.map(([key, item]) => `
+          <article class="raw-html-card${item.used_for_analysis ? ' active-source' : ''}" data-copy-container>
+            <header>
+              <div>
+                <strong>${escapeHtml(item.label || key)}</strong>
+                <p>
+                  HTTP ${escapeHtml(valueOrDash(item.status_code))}
+                  · ${escapeHtml(valueOrDash(item.html_bytes, ' bytes'))}
+                  ${item.truncated ? ' · 已截断' : ''}
+                </p>
+              </div>
+              <div class="raw-html-actions">
+                ${item.used_for_analysis ? '<span class="source-badge">用于检测</span>' : ''}
+                ${renderCopyButton(`复制${item.label || '原始 HTML'}`)}
+              </div>
+            </header>
+            <pre>${escapeHtml(item.html)}</pre>
+          </article>
+        `).join('')}
+      </div>
+    </section>
   `;
 }
 
@@ -195,6 +256,7 @@ function renderGooglebot(result) {
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
     ${renderIssues(result.issues)}
     ${renderRawDetails(result, '查看抓取详情与原始结果')}
+    ${renderRawHtml(result)}
   `;
 }
 
@@ -346,11 +408,11 @@ document.querySelectorAll('.result-tab').forEach(button => {
 });
 
 document.addEventListener('click', async event => {
-  const button = event.target.closest('[data-copy-result]');
+  const button = event.target.closest('[data-copy-content]');
   if (!button) return;
   event.preventDefault();
   event.stopPropagation();
-  const pre = button.closest('.details')?.querySelector('pre');
+  const pre = button.closest('[data-copy-container]')?.querySelector('pre');
   if (!pre) return;
   try {
     await copyResultText(pre.textContent || '');
