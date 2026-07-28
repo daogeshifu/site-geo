@@ -93,7 +93,7 @@ h1 span { color: var(--blue); }
 .flow i { width: 42px; height: 1px; margin: 0 15px; background: #d2dbe6; }
 
 .empty-state, .loading-state, .results {
-  margin-top: 62px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow);
+  margin-top: 35px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow);
 }
 .empty-state { padding: 70px 24px; text-align: center; }
 .empty-icon { width: 66px; height: 66px; margin: 0 auto 18px; display: grid; place-items: center; border-radius: 18px; background: var(--soft); }
@@ -247,7 +247,7 @@ h1 span { color: var(--blue); }
 .section-break-render > span { background: linear-gradient(145deg, #7c5cff, #5635dd); box-shadow: 0 7px 18px rgba(100, 70, 225, .2); }
 
 .result-section {
-  margin: 0 30px 30px;
+  margin: 30px 30px 30px;
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: 15px;
@@ -377,7 +377,7 @@ footer a { color: var(--blue); text-decoration: none; }
   .diagnostic-overview { padding: 22px 20px; }
   .overview-heading { align-items: flex-start; }
   .section-break { padding: 24px 20px 13px; }
-  .result-section, .result-panel { margin: 0 16px 26px; padding: 20px; }
+  .result-section, .result-panel { margin: 30px 16px 26px; padding: 20px; }
   .checklist-heading { flex-direction: column; }
   .export-button { width: 100%; }
   .checklist-stats { grid-template-columns: repeat(2, 1fr); }

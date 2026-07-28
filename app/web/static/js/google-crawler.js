@@ -1,10 +1,12 @@
 const $ = id => document.getElementById(id);
 const form = $('crawler-form');
 const runButton = $('run-test');
+const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token-today';
 let elapsedTimer = null;
 let startedAt = 0;
 let currentChecklist = [];
 let currentResultUrl = '';
+let restoredTokenDate = null;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -26,6 +28,56 @@ function statusLabel(status) {
 
 function valueOrDash(value, suffix = '') {
   return value === null || value === undefined || value === '' ? '—' : `${value}${suffix}`;
+}
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function forgetSavedDemoToken() {
+  restoredTokenDate = null;
+  try {
+    localStorage.removeItem(DEMO_TOKEN_STORAGE_KEY);
+  } catch {
+    // 浏览器禁用本地存储时仍可正常手动输入。
+  }
+}
+
+function rememberDemoToken(token) {
+  if (!token) return;
+  restoredTokenDate = localDateKey();
+  try {
+    localStorage.setItem(DEMO_TOKEN_STORAGE_KEY, JSON.stringify({
+      token,
+      date: restoredTokenDate
+    }));
+  } catch {
+    // 隐私模式或存储空间受限时不影响本次检测。
+  }
+}
+
+function restoreDemoTokenForToday() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEMO_TOKEN_STORAGE_KEY) || 'null');
+    if (saved?.date === localDateKey() && typeof saved.token === 'string' && saved.token) {
+      $('demo-token').value = saved.token;
+      restoredTokenDate = saved.date;
+      return true;
+    }
+  } catch {
+    // 无效或不可读的数据按未保存处理。
+  }
+  forgetSavedDemoToken();
+  $('demo-token').value = '';
+  return false;
+}
+
+function setTokenRowMessage(remembered) {
+  const message = $('token-row').querySelector('span');
+  message.textContent = remembered ? '今日已记住，无需再次输入' : '此环境已启用访问保护';
 }
 
 function renderChecks(checks = []) {
@@ -464,7 +516,13 @@ async function loadTokenStatus() {
   try {
     const response = await fetch('/api/v1/demo/token-status');
     const payload = await response.json();
-    $('token-row').hidden = !payload.data?.token_required;
+    const tokenRequired = Boolean(payload.data?.token_required);
+    $('token-row').hidden = !tokenRequired;
+    if (tokenRequired) {
+      setTokenRowMessage(restoreDemoTokenForToday());
+    } else {
+      forgetSavedDemoToken();
+    }
   } catch {
     $('token-row').hidden = true;
   }
@@ -474,6 +532,15 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   const url = $('test-url').value.trim();
   if (!url) return;
+  if (restoredTokenDate && restoredTokenDate !== localDateKey()) {
+    forgetSavedDemoToken();
+    $('demo-token').value = '';
+    $('token-row').hidden = false;
+    setTokenRowMessage(false);
+    $('error-message').textContent = '日期已变化，请重新输入 Demo Token。';
+    $('error-box').hidden = false;
+    return;
+  }
   setLoading(true);
   try {
     const headers = { 'Content-Type': 'application/json' };
@@ -484,9 +551,19 @@ form.addEventListener('submit', async event => {
       headers,
       body: JSON.stringify({ url })
     });
-    if (!response.ok) throw new Error(await readError(response));
+    if (!response.ok) {
+      if (response.status === 401) {
+        forgetSavedDemoToken();
+        $('demo-token').value = '';
+        $('token-row').hidden = false;
+        setTokenRowMessage(false);
+      }
+      throw new Error(await readError(response));
+    }
     const payload = await response.json();
     if (!payload.success) throw new Error(payload.message || '检测请求失败');
+    rememberDemoToken(token);
+    setTokenRowMessage(Boolean(token));
     setLoading(false);
     showResults(payload.data);
   } catch (error) {
