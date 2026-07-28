@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Google 爬虫测试 · GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727-raw-html" />
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727-seo-checklist" />
 </head>
 <body>
   <header class="topbar">
@@ -45,11 +45,11 @@
       </form>
 
       <div class="flow" aria-label="检测流程">
-        <div><b>01</b><span><strong>Googlebot</strong><small>robots.txt · HTTP · 初始 HTML</small></span></div>
+        <div><b>01</b><span><strong>问题清单</strong><small>状态 · 结论 · 修改建议</small></span></div>
         <i></i>
-        <div><b>02</b><span><strong>Google Render</strong><small>Chromium · JS · 渲染 DOM</small></span></div>
+        <div><b>02</b><span><strong>Googlebot</strong><small>robots.txt · HTTP · 初始 HTML</small></span></div>
         <i></i>
-        <div><b>03</b><span><strong>问题清单</strong><small>严重度 · 证据 · 修复建议</small></span></div>
+        <div><b>03</b><span><strong>Google Render</strong><small>Chromium · JS · 渲染 DOM</small></span></div>
       </div>
     </section>
 
@@ -91,38 +91,52 @@
         <div class="overview-heading">
           <div>
             <span class="section-kicker">Overview</span>
-            <h3 id="overview-heading">页面渲染与 SEO 结论</h3>
+            <h3 id="overview-heading">检测结论</h3>
           </div>
           <span id="overview-verdict" class="status-pill">—</span>
         </div>
         <p id="overview-summary" class="overview-summary"></p>
-        <div id="overview-cards" class="overview-cards"></div>
-        <div class="overview-issues-head">
-          <h4>主要问题</h4>
-          <span>按严重程度排序，最多展示 5 项</span>
-        </div>
-        <div id="overview-issues" class="overview-issues"></div>
       </section>
 
-      <div class="detail-heading">
-        <span class="section-kicker">Detailed diagnostics</span>
-        <h3>两种 Google 模式检测细项</h3>
+      <div class="section-break section-break-checklist" aria-hidden="true">
+        <span>01</span>
+        <div><small>SEO checklist</small><strong>问题清单</strong></div>
+        <i></i>
       </div>
-      <div class="result-tabs" role="tablist" aria-label="检测结果">
-        <button class="result-tab active" type="button" role="tab" aria-selected="true" data-tab="googlebot">
-          <span class="tab-number">01</span>
-          <span><strong>Googlebot</strong><small>抓取与索引</small></span>
-          <em id="googlebot-tab-status"></em>
-        </button>
-        <button class="result-tab" type="button" role="tab" aria-selected="false" data-tab="google-render">
-          <span class="tab-number">02</span>
-          <span><strong>Google Render</strong><small>渲染与资源</small></span>
-          <em id="render-tab-status"></em>
-        </button>
-      </div>
+      <section class="result-section checklist-section" aria-labelledby="checklist-heading">
+        <header class="checklist-heading">
+          <div>
+            <span class="section-kicker">Based on SEO white paper</span>
+            <h3 id="checklist-heading">页面 SEO 基础问题清单</h3>
+            <p>聚合抓取、索引、页面元素和渲染结果，仅展示本次检测可验证的基础事项。</p>
+          </div>
+          <button id="export-checklist" class="export-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
+            <span>一键导出 Excel</span>
+          </button>
+        </header>
+        <div id="checklist-stats" class="checklist-stats"></div>
+        <div class="checklist-table-wrap">
+          <table class="checklist-table">
+            <thead><tr><th>分类</th><th>检查事项</th><th>是否有问题</th><th>检测结论</th><th>修改建议</th></tr></thead>
+            <tbody id="checklist-body"></tbody>
+          </table>
+        </div>
+      </section>
 
-      <div id="panel-googlebot" class="result-panel active" role="tabpanel"></div>
-      <div id="panel-google-render" class="result-panel" role="tabpanel"></div>
+      <div class="section-break section-break-googlebot" aria-hidden="true">
+        <span>02</span>
+        <div><small>Crawl &amp; index</small><strong>Googlebot</strong></div>
+        <i></i>
+      </div>
+      <section id="panel-googlebot" class="result-section result-panel googlebot-panel" aria-label="Googlebot 抓取与索引细项"></section>
+
+      <div class="section-break section-break-render" aria-hidden="true">
+        <span>03</span>
+        <div><small>Render &amp; resources</small><strong>Google Render</strong></div>
+        <i></i>
+      </div>
+      <section id="panel-google-render" class="result-section result-panel render-panel" aria-label="Google Render 渲染与资源细项"></section>
     </section>
 
     <div id="error-box" class="error-box" hidden>
@@ -136,6 +150,6 @@
     <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">最终确认请使用 Google Search Console ↗</a>
   </footer>
 
-  <script type="module" src="/static/js/google-crawler.js?v=20260727-raw-html"></script>
+  <script type="module" src="/static/js/google-crawler.js?v=20260727-seo-checklist"></script>
 </body>
 </html>

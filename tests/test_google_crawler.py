@@ -31,7 +31,9 @@ def test_google_crawler_demo_page_is_available() -> None:
     assert "Googlebot" in response.text
     assert "Google Render" in response.text
     assert "Overview" in response.text
-    assert "页面渲染与 SEO 结论" in response.text
+    assert "检测结论" in response.text
+    assert "页面 SEO 基础问题清单" in response.text
+    assert "一键导出 Excel" in response.text
 
 
 def test_inspect_html_extracts_indexable_content() -> None:

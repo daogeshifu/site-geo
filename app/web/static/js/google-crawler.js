@@ -3,6 +3,8 @@ const form = $('crawler-form');
 const runButton = $('run-test');
 let elapsedTimer = null;
 let startedAt = 0;
+let currentChecklist = [];
+let currentResultUrl = '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -149,79 +151,179 @@ function renderRawHtml(result) {
   `;
 }
 
-function overviewToneIcon(status) {
-  return status === 'passed' ? '✓' : status === 'failed' ? '!' : '•';
-}
-
-function renderOverviewIssues(issues = []) {
-  if (!issues.length) {
-    return '<div class="overview-clear"><span>✓</span><div><strong>未发现主要技术问题</strong><p>抓取、索引与渲染结果符合本次模拟检测的基础标准。</p></div></div>';
-  }
-  return issues.map(item => `
-    <article class="overview-issue severity-${escapeHtml(item.severity)}">
-      <div class="overview-issue-source">${escapeHtml(item.source || '检测结果')}</div>
-      <div>
-        <div class="issue-head">
-          <span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
-          <b>${escapeHtml(item.title)}</b>
-        </div>
-        <p>${escapeHtml(item.detail)}</p>
-        <p class="fix"><strong>优先建议：</strong>${escapeHtml(item.recommendation)}</p>
-      </div>
-    </article>
-  `).join('');
-}
-
 function renderOverview(overview = {}) {
-  const rendering = overview.rendering || {};
   const seo = overview.seo || {};
-  const crawl = overview.crawl || {};
-  const indexing = overview.indexing || {};
-  const cards = [
-    {
-      eyebrow: '页面渲染方式',
-      label: rendering.label || '无法判定',
-      detail: rendering.detail || '本次返回数据不足，无法确认页面渲染方式。',
-      status: rendering.status || 'warning',
-      metric: rendering.rendered_word_count === null || rendering.rendered_word_count === undefined
-        ? '初始内容 ' + valueOrDash(rendering.initial_word_count)
-        : `${valueOrDash(rendering.initial_word_count)} → ${valueOrDash(rendering.rendered_word_count)}`
-    },
-    {
-      eyebrow: 'SEO 技术结论',
-      label: seo.label || '等待结论',
-      detail: seo.detail || '请查看 Googlebot 与 Google Render 检测细项。',
-      status: seo.status || overview.status || 'warning',
-      metric: '抓取与渲染标准'
-    },
-    {
-      eyebrow: '抓取 / 索引状态',
-      label: `${crawl.label || '未知'} · ${indexing.label || '未知'}`,
-      detail: `${crawl.detail || ''} ${indexing.detail || ''}`.trim(),
-      status: crawl.status === 'failed' || indexing.status === 'failed'
-        ? 'failed'
-        : crawl.status === 'warning'
-          ? 'warning'
-          : 'passed',
-      metric: 'Googlebot Smartphone'
-    }
-  ];
-
-  $('overview-summary').textContent = overview.summary || '本次检测未返回总览结论，请查看下方模式细项。';
+  $('overview-summary').textContent = overview.summary || '本次检测未返回总览结论，请查看下方问题清单。';
   $('overview-verdict').textContent = statusLabel(overview.status || seo.status);
   $('overview-verdict').className = `status-pill status-${overview.status || seo.status || 'warning'}`;
-  $('overview-cards').innerHTML = cards.map(card => `
-    <article class="overview-card status-${escapeHtml(card.status)}">
-      <div class="overview-card-top">
-        <span class="overview-card-icon">${overviewToneIcon(card.status)}</span>
-        <small>${escapeHtml(card.eyebrow)}</small>
-        <em>${escapeHtml(card.metric)}</em>
-      </div>
-      <strong>${escapeHtml(card.label)}</strong>
-      <p>${escapeHtml(card.detail)}</p>
-    </article>
+}
+
+function checklistStatus(status) {
+  if (status === 'pass' || status === 'passed') return { key: 'passed', label: '无问题' };
+  if (status === 'fail' || status === 'failed') return { key: 'failed', label: '有问题' };
+  if (status === 'skipped') return { key: 'skipped', label: '未检测' };
+  return { key: 'warning', label: '需关注' };
+}
+
+function buildProblemChecklist(data) {
+  const googlebot = data.googlebot || {};
+  const googleRender = data.google_render || {};
+  const request = googlebot.request || {};
+  const content = googlebot.content || {};
+  const crawlability = googlebot.crawlability || {};
+  const indexability = googlebot.indexability || {};
+  const renderedContent = googleRender.rendered_content || {};
+  const diagnostics = googleRender.diagnostics || {};
+  const checks = [...(googlebot.checks || []), ...(googleRender.checks || [])];
+  const findCheck = key => checks.find(item => item.key === key);
+  const row = (category, item, status, finding, recommendation) => ({
+    category,
+    item,
+    ...checklistStatus(status),
+    finding: finding || '本次未返回检测详情。',
+    recommendation
+  });
+  const finalUrl = request.final_url || data.url || '';
+  const htmlBytes = Number(content.html_bytes ?? request.html_bytes ?? 0);
+  const resourceFailures = (diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length;
+  const jsErrors = (diagnostics.page_errors || []).length;
+  const rows = [];
+
+  rows.push(row('SEO 规则', 'Robots.txt 抓取权限',
+    findCheck('robots')?.status || (crawlability.allowed === true ? 'pass' : crawlability.allowed === false ? 'fail' : 'warning'),
+    findCheck('robots')?.detail || crawlability.detail,
+    crawlability.allowed === false ? '调整 robots.txt，允许 Googlebot 抓取需要参与搜索的页面与资源。' : '保持规则清晰，并避免屏蔽核心 CSS、JS 和页面路径。'));
+  rows.push(row('SEO 规则', 'HTTPS 页面访问',
+    finalUrl.startsWith('https://') ? 'pass' : 'warning',
+    finalUrl ? `最终访问地址：${finalUrl}` : '未取得最终访问地址。',
+    '全站启用 HTTPS，并将 HTTP 版本通过 301 永久重定向到 HTTPS。'));
+  rows.push(row('引擎规范', 'HTTP 状态码',
+    findCheck('http')?.status || (request.status_code === 200 ? 'pass' : 'fail'),
+    findCheck('http')?.detail || `页面返回 HTTP ${valueOrDash(request.status_code)}。`,
+    '核心可索引页面应稳定返回 HTTP 200；修复 4xx、5xx 和不必要的重定向。'));
+  rows.push(row('引擎规范', 'URL 重定向',
+    Number(request.redirect_count || 0) <= 1 ? 'pass' : 'warning',
+    `本次经过 ${Number(request.redirect_count || 0)} 次重定向。`,
+    '减少重定向链，目标页面尽量一次跳转到最终规范 URL。'));
+  rows.push(row('引擎规范', 'Noindex 索引指令',
+    findCheck('indexable')?.status || (indexability.indexable === true ? 'pass' : indexability.indexable === false ? 'fail' : 'warning'),
+    findCheck('indexable')?.detail || `索引状态：${indexability.state || '待确认'}。`,
+    '需要参与搜索的页面不要设置 noindex，并确认响应头与 HTML Meta 指令一致。'));
+  rows.push(row('引擎规范', '移动端渲染',
+    googleRender.status === 'skipped' ? 'skipped' : findCheck('render_status')?.status || googleRender.status,
+    googleRender.status === 'skipped' ? 'Google Render 本次未执行。' : `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟。`,
+    '使用移动优先布局，并在 Google Search Console 中复核真实移动版渲染结果。'));
+  rows.push(row('引擎规范', 'JavaScript 加载',
+    googleRender.status === 'skipped' ? 'skipped' : findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass'),
+    findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常。`,
+    '修复首屏 JavaScript 异常，确保核心正文和链接不依赖失败的客户端请求。'));
+  rows.push(row('SEO 元素', 'Title 标题',
+    content.title ? 'pass' : 'fail',
+    content.title ? `已检测到：${content.title}` : '初始 HTML 未检测到 Title。',
+    '为页面设置唯一、准确且与搜索意图相关的 Title 标题。'));
+  rows.push(row('SEO 元素', 'H1 主标题',
+    Number(content.h1_count) === 1 ? 'pass' : Number(content.h1_count) === 0 ? 'fail' : 'warning',
+    Number(content.h1_count) === 1 ? `已检测到 1 个 H1：${content.h1 || '有主标题'}` : `检测到 ${Number(content.h1_count || 0)} 个 H1。`,
+    '每个页面保留一个清晰的主 H1，并让层级标题准确描述内容结构。'));
+  rows.push(row('SEO 元素', 'Canonical 规范链接',
+    content.canonical ? 'pass' : 'warning',
+    content.canonical ? `Canonical：${content.canonical}` : '初始 HTML 未检测到 Canonical。',
+    '为可索引页面设置指向首选 URL 的绝对 Canonical，并避免冲突信号。'));
+  rows.push(row('网站内容', '初始 HTML 核心内容',
+    findCheck('content')?.status || (Number(content.word_count || 0) >= 50 ? 'pass' : 'warning'),
+    findCheck('content')?.detail || `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元。`,
+    '优先在初始 HTML 输出核心正文；强依赖 JavaScript 的页面建议使用 SSR 或静态生成。'));
+  rows.push(row('网站内容', '网页 HTML 体积',
+    htmlBytes > 3 * 1024 * 1024 ? 'fail' : htmlBytes > 1024 * 1024 ? 'warning' : htmlBytes ? 'pass' : 'warning',
+    htmlBytes ? `初始 HTML 约 ${Math.round(htmlBytes / 1024)} KB。` : '未取得 HTML 体积。',
+    '精简重复标签、内联数据和无用代码，避免过大的 HTML 延迟抓取与解析。'));
+  rows.push(row('网站内容', '渲染后核心内容',
+    googleRender.status === 'skipped' ? 'skipped' : findCheck('rendered_content')?.status || (Number(renderedContent.word_count || 0) >= 50 ? 'pass' : 'fail'),
+    findCheck('rendered_content')?.detail || `渲染后约 ${Number(renderedContent.word_count || 0)} 个词/字符单元。`,
+    '确保渲染完成后正文稳定存在，不被 hydration、鉴权或异步失败覆盖。'));
+  rows.push(row('网站内容', '核心资源加载',
+    googleRender.status === 'skipped' ? 'skipped' : findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass'),
+    findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源。`,
+    '确保核心 JS、CSS、图片、字体和 API 可公开访问并稳定返回成功状态。'));
+  return rows;
+}
+
+function renderProblemChecklist(data) {
+  currentChecklist = buildProblemChecklist(data);
+  currentResultUrl = data.url || $('test-url').value;
+  const totals = currentChecklist.reduce((acc, item) => {
+    acc[item.key] = (acc[item.key] || 0) + 1;
+    return acc;
+  }, {});
+  $('checklist-stats').innerHTML = [
+    ['all', '检查事项', currentChecklist.length],
+    ['failed', '有问题', totals.failed || 0],
+    ['warning', '需关注', totals.warning || 0],
+    ['passed', '无问题', totals.passed || 0],
+    ['skipped', '未检测', totals.skipped || 0]
+  ].map(([key, label, value]) => `
+    <div class="checklist-stat status-${key}"><strong>${value}</strong><span>${label}</span></div>
   `).join('');
-  $('overview-issues').innerHTML = renderOverviewIssues(overview.major_issues || []);
+  $('checklist-body').innerHTML = currentChecklist.map(item => `
+    <tr>
+      <td data-label="分类"><span class="category-label">${escapeHtml(item.category)}</span></td>
+      <td data-label="检查事项"><strong>${escapeHtml(item.item)}</strong></td>
+      <td data-label="是否有问题"><span class="checklist-status status-${escapeHtml(item.key)}">${escapeHtml(item.label)}</span></td>
+      <td data-label="检测结论">${escapeHtml(item.finding)}</td>
+      <td data-label="修改建议">${escapeHtml(item.recommendation)}</td>
+    </tr>
+  `).join('');
+}
+
+function xmlCell(value, styleId = '') {
+  const safe = escapeHtml(String(value ?? '')).replaceAll('\n', '&#10;');
+  return `<Cell${styleId ? ` ss:StyleID="${styleId}"` : ''}><Data ss:Type="String">${safe}</Data></Cell>`;
+}
+
+function exportChecklistExcel() {
+  if (!currentChecklist.length) return;
+  const rows = currentChecklist.map(item => `<Row>${
+    [item.category, item.item, item.label, item.finding, item.recommendation]
+      .map(value => xmlCell(value, 'Body')).join('')
+  }</Row>`).join('');
+  const workbook = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Default"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10"/></Style>
+  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="15" ss:Color="#FFFFFF"/><Interior ss:Color="#1677FF" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Meta"><Font ss:Color="#526176"/><Interior ss:Color="#EEF5FF" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#132238" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>
+  <Style ss:ID="Body"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DFE5EC"/></Borders></Style>
+ </Styles>
+ <Worksheet ss:Name="SEO问题清单"><Table>
+  <Column ss:Width="90"/><Column ss:Width="150"/><Column ss:Width="80"/><Column ss:Width="300"/><Column ss:Width="360"/>
+  <Row ss:Height="28">${xmlCell('页面 SEO 基础问题清单', 'Title')}<Cell ss:MergeAcross="3" ss:StyleID="Title"/></Row>
+  <Row>${xmlCell('检测页面', 'Meta')}${xmlCell(currentResultUrl, 'Meta')}<Cell ss:MergeAcross="2" ss:StyleID="Meta"/></Row>
+  <Row>${xmlCell('导出时间', 'Meta')}${xmlCell(new Date().toLocaleString('zh-CN'), 'Meta')}<Cell ss:MergeAcross="2" ss:StyleID="Meta"/></Row>
+  <Row>${['分类', '检查事项', '是否有问题', '检测结论', '修改建议'].map(value => xmlCell(value, 'Header')).join('')}</Row>
+  ${rows}
+ </Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>
+</Workbook>`;
+  const blob = new Blob(['\ufeff', workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const hostname = (() => {
+    try { return new URL(currentResultUrl).hostname.replaceAll('.', '-'); } catch { return 'page'; }
+  })();
+  link.href = downloadUrl;
+  link.download = `SEO问题清单-${hostname}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  const exportButton = $('export-checklist');
+  exportButton.classList.add('exported');
+  exportButton.querySelector('span').textContent = '已开始下载';
+  window.setTimeout(() => {
+    exportButton.classList.remove('exported');
+    exportButton.querySelector('span').textContent = '一键导出 Excel';
+  }, 1600);
 }
 
 function renderGooglebot(result) {
@@ -342,8 +444,7 @@ function showResults(data) {
   $('overall-status').className = `status-pill status-${data.status}`;
   $('disclaimer').textContent = data.disclaimer || '';
   renderOverview(data.overview || {});
-  $('googlebot-tab-status').className = data.googlebot?.status || '';
-  $('render-tab-status').className = data.google_render?.status || '';
+  renderProblemChecklist(data);
   $('panel-googlebot').innerHTML = renderGooglebot(data.googlebot || {});
   $('panel-google-render').innerHTML = renderGoogleRender(data.google_render || {});
   $('results').hidden = false;
@@ -395,17 +496,7 @@ form.addEventListener('submit', async event => {
   }
 });
 
-document.querySelectorAll('.result-tab').forEach(button => {
-  button.addEventListener('click', () => {
-    document.querySelectorAll('.result-tab').forEach(item => {
-      const active = item === button;
-      item.classList.toggle('active', active);
-      item.setAttribute('aria-selected', String(active));
-    });
-    document.querySelectorAll('.result-panel').forEach(panel => panel.classList.remove('active'));
-    $(`panel-${button.dataset.tab}`).classList.add('active');
-  });
-});
+$('export-checklist').addEventListener('click', exportChecklistExcel);
 
 document.addEventListener('click', async event => {
   const button = event.target.closest('[data-copy-content]');
