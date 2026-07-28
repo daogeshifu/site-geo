@@ -217,86 +217,190 @@ function checklistStatus(status) {
   return { key: 'warning', label: '需关注' };
 }
 
+function combineChecklistStatuses(rawStatus, renderStatus) {
+  const statuses = [rawStatus, renderStatus].map(status => checklistStatus(status).key);
+  if (statuses.includes('failed')) return 'failed';
+  if (statuses.includes('warning')) return 'warning';
+  if (statuses.every(status => status === 'skipped')) return 'skipped';
+  if (statuses.includes('skipped')) return 'warning';
+  return 'passed';
+}
+
 function buildProblemChecklist(data) {
   const googlebot = data.googlebot || {};
   const googleRender = data.google_render || {};
-  const request = googlebot.request || {};
+  const googlebotRequest = googlebot.request || {};
+  const fallbackUsed = googlebot.access?.browser_fallback_used === true;
+  const rawRequest = fallbackUsed ? googlebot.control_request || googlebotRequest : googlebotRequest;
   const content = googlebot.content || {};
   const crawlability = googlebot.crawlability || {};
   const indexability = googlebot.indexability || {};
   const renderedContent = googleRender.rendered_content || {};
+  const renderRequest = googleRender.request || {};
   const diagnostics = googleRender.diagnostics || {};
   const checks = [...(googlebot.checks || []), ...(googleRender.checks || [])];
   const findCheck = key => checks.find(item => item.key === key);
-  const row = (category, item, status, finding, recommendation) => ({
-    category,
-    item,
-    ...checklistStatus(status),
-    finding: finding || '本次未返回检测详情。',
-    recommendation
-  });
-  const finalUrl = request.final_url || data.url || '';
-  const htmlBytes = Number(content.html_bytes ?? request.html_bytes ?? 0);
+  const renderExecuted = googleRender.status !== 'skipped'
+    && Boolean(googleRender.request || googleRender.rendered_content);
+  const rawSource = fallbackUsed
+    ? '用户 UA Raw HTML（Googlebot 获取失败后的替代抓取）'
+    : 'Googlebot Raw HTML';
+  const row = (category, item, whitepaperUrl, rawStatus, rawFinding, renderStatus, renderFinding, recommendation) => {
+    const status = combineChecklistStatuses(rawStatus, renderStatus);
+    return {
+      category,
+      item,
+      whitepaperUrl,
+      ...checklistStatus(status),
+      finding: `Raw HTML（${rawSource}）：${rawFinding || '未取得结果'}；Render HTML：${renderFinding || '未取得结果'}`,
+      recommendation
+    };
+  };
+  const finalUrl = rawRequest.final_url || data.url || '';
+  const htmlBytes = Number(content.html_bytes ?? rawRequest.html_bytes ?? 0);
+  const renderedHtmlBytes = Number(renderedContent.html_bytes || 0);
   const resourceFailures = (diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length;
   const jsErrors = (diagnostics.page_errors || []).length;
+  const renderUnavailableText = googleRender.status === 'skipped' ? '本次未执行渲染' : '未取得渲染数据';
+  const renderedDirectives = renderedContent.directives || [];
+  const renderedNoindex = renderedDirectives.includes('noindex');
+  const renderedFinalUrl = renderRequest.final_url || '';
+  const pageSizeStatus = bytes => bytes > 3 * 1024 * 1024
+    ? 'fail'
+    : bytes > 1024 * 1024
+      ? 'warning'
+      : bytes
+        ? 'pass'
+        : 'warning';
+  const h1Status = (count, missingStatus = 'fail') => Number(count) === 1
+    ? 'pass'
+    : Number(count) === 0
+      ? missingStatus
+      : 'warning';
   const rows = [];
 
-  rows.push(row('SEO 规则', 'Robots.txt 抓取权限',
+  rows.push(row(
+    'SEO 规则', 'Robots.txt 抓取权限', 'https://www.idtcpack.com/seo_book/robots',
     findCheck('robots')?.status || (crawlability.allowed === true ? 'pass' : crawlability.allowed === false ? 'fail' : 'warning'),
     findCheck('robots')?.detail || crawlability.detail,
-    crawlability.allowed === false ? '调整 robots.txt，允许 Googlebot 抓取需要参与搜索的页面与资源。' : '保持规则清晰，并避免屏蔽核心 CSS、JS 和页面路径。'));
-  rows.push(row('SEO 规则', 'HTTPS 页面访问',
+    renderExecuted ? (crawlability.allowed === false ? 'fail' : 'pass') : 'skipped',
+    renderExecuted
+      ? crawlability.allowed === false ? '抓取被阻止，渲染结果不能代表可正常访问' : '已在当前抓取权限基础上执行渲染'
+      : renderUnavailableText,
+    crawlability.allowed === false ? '调整 robots.txt，允许 Googlebot 抓取需要参与搜索的页面与资源。' : '保持规则清晰，并避免屏蔽核心 CSS、JS 和页面路径。'
+  ));
+  rows.push(row(
+    'SEO 规则', 'HTTPS 页面访问', 'https://www.idtcpack.com/seo_book/https',
     finalUrl.startsWith('https://') ? 'pass' : 'warning',
-    finalUrl ? `最终访问地址：${finalUrl}` : '未取得最终访问地址。',
-    '全站启用 HTTPS，并将 HTTP 版本通过 301 永久重定向到 HTTPS。'));
-  rows.push(row('引擎规范', 'HTTP 状态码',
-    findCheck('http')?.status || (request.status_code === 200 ? 'pass' : 'fail'),
-    findCheck('http')?.detail || `页面返回 HTTP ${valueOrDash(request.status_code)}。`,
-    '核心可索引页面应稳定返回 HTTP 200；修复 4xx、5xx 和不必要的重定向。'));
-  rows.push(row('引擎规范', 'URL 重定向',
-    Number(request.redirect_count || 0) <= 1 ? 'pass' : 'warning',
-    `本次经过 ${Number(request.redirect_count || 0)} 次重定向。`,
-    '减少重定向链，目标页面尽量一次跳转到最终规范 URL。'));
-  rows.push(row('引擎规范', 'Noindex 索引指令',
+    finalUrl ? `最终访问地址为 ${finalUrl}` : '未取得最终访问地址',
+    renderExecuted ? (renderedFinalUrl.startsWith('https://') ? 'pass' : 'warning') : 'skipped',
+    renderExecuted ? renderedFinalUrl ? `最终渲染地址为 ${renderedFinalUrl}` : '未取得最终渲染地址' : renderUnavailableText,
+    '全站启用 HTTPS，并将 HTTP 版本通过 301 永久重定向到 HTTPS。'
+  ));
+  rows.push(row(
+    '引擎规范', 'HTTP 状态码', 'https://www.idtcpack.com/seo_book/http',
+    rawRequest.status_code === 200 ? 'pass' : 'fail',
+    `返回 HTTP ${valueOrDash(rawRequest.status_code)}，耗时 ${valueOrDash(rawRequest.response_time_ms, ' ms')}`,
+    renderExecuted ? (renderRequest.status_code === 200 ? 'pass' : 'fail') : 'skipped',
+    renderExecuted ? `主文档返回 HTTP ${valueOrDash(renderRequest.status_code)}` : renderUnavailableText,
+    '核心可索引页面应稳定返回 HTTP 200；修复 4xx、5xx 和不必要的重定向。'
+  ));
+  rows.push(row(
+    '引擎规范', 'URL 重定向', 'https://www.idtcpack.com/seo_book/url',
+    Number(rawRequest.redirect_count || 0) <= 1 ? 'pass' : 'warning',
+    `本次经过 ${Number(rawRequest.redirect_count || 0)} 次重定向`,
+    renderExecuted ? (!renderedFinalUrl || renderedFinalUrl === finalUrl ? 'pass' : 'warning') : 'skipped',
+    renderExecuted
+      ? renderedFinalUrl === finalUrl ? '渲染最终地址与 Raw HTML 一致' : `渲染最终地址为 ${renderedFinalUrl || '未知'}`
+      : renderUnavailableText,
+    '减少重定向链，目标页面尽量一次跳转到最终规范 URL。'
+  ));
+  rows.push(row(
+    '引擎规范', 'Noindex 索引指令', 'https://www.idtcpack.com/seo_book/noindex',
     findCheck('indexable')?.status || (indexability.indexable === true ? 'pass' : indexability.indexable === false ? 'fail' : 'warning'),
-    findCheck('indexable')?.detail || `索引状态：${indexability.state || '待确认'}。`,
-    '需要参与搜索的页面不要设置 noindex，并确认响应头与 HTML Meta 指令一致。'));
-  rows.push(row('引擎规范', '移动端渲染',
-    googleRender.status === 'skipped' ? 'skipped' : findCheck('render_status')?.status || googleRender.status,
-    googleRender.status === 'skipped' ? 'Google Render 本次未执行。' : `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟。`,
-    '使用移动优先布局，并在 Google Search Console 中复核真实移动版渲染结果。'));
-  rows.push(row('引擎规范', 'JavaScript 加载',
-    googleRender.status === 'skipped' ? 'skipped' : findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass'),
-    findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常。`,
-    '修复首屏 JavaScript 异常，确保核心正文和链接不依赖失败的客户端请求。'));
-  rows.push(row('SEO 元素', 'Title 标题',
-    content.title ? 'pass' : 'fail',
-    content.title ? `已检测到：${content.title}` : '初始 HTML 未检测到 Title。',
-    '为页面设置唯一、准确且与搜索意图相关的 Title 标题。'));
-  rows.push(row('SEO 元素', 'H1 主标题',
-    Number(content.h1_count) === 1 ? 'pass' : Number(content.h1_count) === 0 ? 'fail' : 'warning',
-    Number(content.h1_count) === 1 ? `已检测到 1 个 H1：${content.h1 || '有主标题'}` : `检测到 ${Number(content.h1_count || 0)} 个 H1。`,
-    '每个页面保留一个清晰的主 H1，并让层级标题准确描述内容结构。'));
-  rows.push(row('SEO 元素', 'Canonical 规范链接',
+    findCheck('indexable')?.detail || `索引状态为 ${indexability.state || '待确认'}`,
+    renderExecuted ? (renderedNoindex ? 'fail' : 'pass') : 'skipped',
+    renderExecuted ? renderedNoindex ? '渲染 DOM 检测到 noindex' : '渲染 DOM 未检测到 noindex' : renderUnavailableText,
+    '需要参与搜索的页面不要设置 noindex，并确认响应头与 HTML Meta 指令一致。'
+  ));
+  rows.push(row(
+    '引擎规范', '移动端渲染', 'https://www.idtcpack.com/seo_book/mobile',
+    rawRequest.status_code === 200 ? 'pass' : 'warning',
+    `作为 Googlebot Smartphone 的初始 HTML 输入，HTTP ${valueOrDash(rawRequest.status_code)}`,
+    renderExecuted ? findCheck('render_status')?.status || googleRender.status : 'skipped',
+    renderExecuted ? `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟` : renderUnavailableText,
+    '使用移动优先布局，并在 Google Search Console 中复核真实移动版渲染结果。'
+  ));
+  rows.push(row(
+    '引擎规范', 'JavaScript 加载', 'https://www.idtcpack.com/seo_book/js',
+    Number(content.word_count || 0) >= 50 ? 'pass' : 'warning',
+    `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
+    renderExecuted ? findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass') : 'skipped',
+    renderExecuted ? findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常` : renderUnavailableText,
+    '修复首屏 JavaScript 异常，确保核心正文和链接不依赖失败的客户端请求。'
+  ));
+  rows.push(row(
+    'SEO 元素', 'Title 标题', 'https://www.idtcpack.com/seo_book/title',
+    content.title ? 'pass' : 'warning',
+    content.title ? `检测到 Title：${content.title}` : '未检测到 Title',
+    renderExecuted ? (renderedContent.title ? 'pass' : 'fail') : 'skipped',
+    renderExecuted ? renderedContent.title ? `检测到 Title：${renderedContent.title}` : '未检测到 Title' : renderUnavailableText,
+    '为页面设置唯一、准确且与搜索意图相关的 Title 标题。'
+  ));
+  rows.push(row(
+    'SEO 元素', 'H1 主标题', 'https://www.idtcpack.com/seo_book/h',
+    h1Status(content.h1_count, 'warning'),
+    `检测到 ${Number(content.h1_count || 0)} 个 H1${content.h1 ? `：${content.h1}` : ''}`,
+    renderExecuted ? h1Status(renderedContent.h1_count) : 'skipped',
+    renderExecuted
+      ? `检测到 ${Number(renderedContent.h1_count || 0)} 个 H1${renderedContent.h1 ? `：${renderedContent.h1}` : ''}`
+      : renderUnavailableText,
+    '每个页面保留一个清晰的主 H1，并让层级标题准确描述内容结构。'
+  ));
+  rows.push(row(
+    'SEO 元素', 'Canonical 规范链接', 'https://www.idtcpack.com/seo_book/canonical',
     content.canonical ? 'pass' : 'warning',
-    content.canonical ? `Canonical：${content.canonical}` : '初始 HTML 未检测到 Canonical。',
-    '为可索引页面设置指向首选 URL 的绝对 Canonical，并避免冲突信号。'));
-  rows.push(row('网站内容', '初始 HTML 核心内容',
+    content.canonical ? `Canonical 为 ${content.canonical}` : '未检测到 Canonical',
+    renderExecuted
+      ? renderedContent.canonical
+        ? content.canonical && renderedContent.canonical !== content.canonical ? 'warning' : 'pass'
+        : 'warning'
+      : 'skipped',
+    renderExecuted
+      ? renderedContent.canonical ? `Canonical 为 ${renderedContent.canonical}` : '未检测到 Canonical'
+      : renderUnavailableText,
+    '为可索引页面设置指向首选 URL 的绝对 Canonical，并避免冲突信号。'
+  ));
+  rows.push(row(
+    '网站内容', '核心内容完整性', 'https://www.idtcpack.com/seo_book/js',
     findCheck('content')?.status || (Number(content.word_count || 0) >= 50 ? 'pass' : 'warning'),
-    findCheck('content')?.detail || `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元。`,
-    '优先在初始 HTML 输出核心正文；强依赖 JavaScript 的页面建议使用 SSR 或静态生成。'));
-  rows.push(row('网站内容', '网页 HTML 体积',
-    htmlBytes > 3 * 1024 * 1024 ? 'fail' : htmlBytes > 1024 * 1024 ? 'warning' : htmlBytes ? 'pass' : 'warning',
-    htmlBytes ? `初始 HTML 约 ${Math.round(htmlBytes / 1024)} KB。` : '未取得 HTML 体积。',
-    '精简重复标签、内联数据和无用代码，避免过大的 HTML 延迟抓取与解析。'));
-  rows.push(row('网站内容', '渲染后核心内容',
-    googleRender.status === 'skipped' ? 'skipped' : findCheck('rendered_content')?.status || (Number(renderedContent.word_count || 0) >= 50 ? 'pass' : 'fail'),
-    findCheck('rendered_content')?.detail || `渲染后约 ${Number(renderedContent.word_count || 0)} 个词/字符单元。`,
-    '确保渲染完成后正文稳定存在，不被 hydration、鉴权或异步失败覆盖。'));
-  rows.push(row('网站内容', '核心资源加载',
-    googleRender.status === 'skipped' ? 'skipped' : findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass'),
-    findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源。`,
-    '确保核心 JS、CSS、图片、字体和 API 可公开访问并稳定返回成功状态。'));
+    findCheck('content')?.detail || `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
+    renderExecuted
+      ? findCheck('rendered_content')?.status || (Number(renderedContent.word_count || 0) >= 50 ? 'pass' : 'fail')
+      : 'skipped',
+    renderExecuted
+      ? findCheck('rendered_content')?.detail || `渲染后约 ${Number(renderedContent.word_count || 0)} 个词/字符单元`
+      : renderUnavailableText,
+    '优先在初始 HTML 输出核心正文；强依赖 JavaScript 的页面建议使用 SSR 或静态生成。'
+  ));
+  rows.push(row(
+    '网站内容', '网页 HTML 体积', 'https://www.idtcpack.com/seo_book/pagesize',
+    pageSizeStatus(htmlBytes),
+    htmlBytes ? `初始 HTML 约 ${Math.round(htmlBytes / 1024)} KB` : '未取得 HTML 体积',
+    renderExecuted ? pageSizeStatus(renderedHtmlBytes) : 'skipped',
+    renderExecuted
+      ? renderedHtmlBytes ? `渲染 DOM 约 ${Math.round(renderedHtmlBytes / 1024)} KB` : '未取得渲染 DOM 体积'
+      : renderUnavailableText,
+    '精简重复标签、内联数据和无用代码，避免过大的 HTML 延迟抓取与解析。'
+  ));
+  rows.push(row(
+    '网站内容', '核心资源加载', 'https://www.idtcpack.com/seo_book/js',
+    rawRequest.status_code === 200 ? 'pass' : 'warning',
+    `初始 HTML 引用了 ${Number(content.script_count || 0)} 个脚本`,
+    renderExecuted ? findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass') : 'skipped',
+    renderExecuted ? findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源` : renderUnavailableText,
+    '确保核心 JS、CSS、图片、字体和 API 可公开访问并稳定返回成功状态。'
+  ));
   return rows;
 }
 
@@ -319,10 +423,13 @@ function renderProblemChecklist(data) {
   $('checklist-body').innerHTML = currentChecklist.map(item => `
     <tr>
       <td data-label="分类"><span class="category-label">${escapeHtml(item.category)}</span></td>
-      <td data-label="检查事项"><strong>${escapeHtml(item.item)}</strong></td>
+      <td data-label="检查事项">
+        <a class="checklist-item-link" href="${escapeHtml(item.whitepaperUrl)}" target="_blank" rel="noreferrer">
+          ${escapeHtml(item.item)}
+        </a>
+      </td>
       <td data-label="是否有问题"><span class="checklist-status status-${escapeHtml(item.key)}">${escapeHtml(item.label)}</span></td>
       <td data-label="检测结论">${escapeHtml(item.finding)}</td>
-      <td data-label="修改建议">${escapeHtml(item.recommendation)}</td>
     </tr>
   `).join('');
 }
@@ -335,7 +442,7 @@ function xmlCell(value, styleId = '') {
 function exportChecklistExcel() {
   if (!currentChecklist.length) return;
   const rows = currentChecklist.map(item => `<Row>${
-    [item.category, item.item, item.label, item.finding, item.recommendation]
+    [item.category, item.item, item.label, item.finding, item.recommendation, item.whitepaperUrl]
       .map(value => xmlCell(value, 'Body')).join('')
   }</Row>`).join('');
   const workbook = `<?xml version="1.0"?>
@@ -349,11 +456,11 @@ function exportChecklistExcel() {
   <Style ss:ID="Body"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DFE5EC"/></Borders></Style>
  </Styles>
  <Worksheet ss:Name="SEO问题清单"><Table>
-  <Column ss:Width="90"/><Column ss:Width="150"/><Column ss:Width="80"/><Column ss:Width="300"/><Column ss:Width="360"/>
-  <Row ss:Height="28">${xmlCell('页面 SEO 基础问题清单', 'Title')}<Cell ss:MergeAcross="3" ss:StyleID="Title"/></Row>
-  <Row>${xmlCell('检测页面', 'Meta')}${xmlCell(currentResultUrl, 'Meta')}<Cell ss:MergeAcross="2" ss:StyleID="Meta"/></Row>
-  <Row>${xmlCell('导出时间', 'Meta')}${xmlCell(new Date().toLocaleString('zh-CN'), 'Meta')}<Cell ss:MergeAcross="2" ss:StyleID="Meta"/></Row>
-  <Row>${['分类', '检查事项', '是否有问题', '检测结论', '修改建议'].map(value => xmlCell(value, 'Header')).join('')}</Row>
+  <Column ss:Width="90"/><Column ss:Width="150"/><Column ss:Width="80"/><Column ss:Width="410"/><Column ss:Width="360"/><Column ss:Width="240"/>
+  <Row ss:Height="28">${xmlCell('页面 SEO 基础问题清单', 'Title')}<Cell ss:MergeAcross="4" ss:StyleID="Title"/></Row>
+  <Row>${xmlCell('检测页面', 'Meta')}${xmlCell(currentResultUrl, 'Meta')}<Cell ss:MergeAcross="3" ss:StyleID="Meta"/></Row>
+  <Row>${xmlCell('导出时间', 'Meta')}${xmlCell(new Date().toLocaleString('zh-CN'), 'Meta')}<Cell ss:MergeAcross="3" ss:StyleID="Meta"/></Row>
+  <Row>${['分类', '检查事项', '是否有问题', '检测结论', '修改建议', '白皮书链接'].map(value => xmlCell(value, 'Header')).join('')}</Row>
   ${rows}
  </Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>
 </Workbook>`;

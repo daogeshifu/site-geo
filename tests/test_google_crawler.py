@@ -34,6 +34,8 @@ def test_google_crawler_demo_page_is_available() -> None:
     assert "检测结论" in response.text
     assert "页面 SEO 基础问题清单" in response.text
     assert "一键导出 Excel" in response.text
+    assert "<th>修改建议</th>" not in response.text
+    assert "Raw HTML · Render HTML · 结论" in response.text
 
 
 def test_inspect_html_extracts_indexable_content() -> None:

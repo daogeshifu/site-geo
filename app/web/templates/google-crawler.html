@@ -45,7 +45,7 @@
       </form>
 
       <div class="flow" aria-label="检测流程">
-        <div><b>01</b><span><strong>问题清单</strong><small>状态 · 结论 · 修改建议</small></span></div>
+        <div><b>01</b><span><strong>问题清单</strong><small>Raw HTML · Render HTML · 结论</small></span></div>
         <i></i>
         <div><b>02</b><span><strong>Googlebot</strong><small>robots.txt · HTTP · 初始 HTML</small></span></div>
         <i></i>
@@ -108,7 +108,7 @@
           <div>
             <span class="section-kicker">Based on SEO white paper</span>
             <h3 id="checklist-heading">页面 SEO 基础问题清单</h3>
-            <p>聚合抓取、索引、页面元素和渲染结果，仅展示本次检测可验证的基础事项。</p>
+            <p>对照 Raw HTML 与 Render HTML 综合判断；点击检查事项可查看对应白皮书说明。</p>
           </div>
           <button id="export-checklist" class="export-button" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
@@ -118,7 +118,7 @@
         <div id="checklist-stats" class="checklist-stats"></div>
         <div class="checklist-table-wrap">
           <table class="checklist-table">
-            <thead><tr><th>分类</th><th>检查事项</th><th>是否有问题</th><th>检测结论</th><th>修改建议</th></tr></thead>
+            <thead><tr><th>分类</th><th>检查事项</th><th>是否有问题</th><th>检测结论</th></tr></thead>
             <tbody id="checklist-body"></tbody>
           </table>
         </div>
