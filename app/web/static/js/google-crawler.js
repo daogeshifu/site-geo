@@ -242,9 +242,7 @@ function buildProblemChecklist(data) {
   const findCheck = key => checks.find(item => item.key === key);
   const renderExecuted = googleRender.status !== 'skipped'
     && Boolean(googleRender.request || googleRender.rendered_content);
-  const rawSource = fallbackUsed
-    ? '用户 UA Raw HTML（Googlebot 获取失败后的替代抓取）'
-    : 'Googlebot Raw HTML';
+  const rawSource = fallbackUsed ? '用户 UA' : 'Googlebot';
   const row = (category, item, whitepaperUrl, rawStatus, rawFinding, renderStatus, renderFinding, recommendation) => {
     const status = combineChecklistStatuses(rawStatus, renderStatus);
     return {
@@ -252,7 +250,10 @@ function buildProblemChecklist(data) {
       item,
       whitepaperUrl,
       ...checklistStatus(status),
-      finding: `Raw HTML（${rawSource}）：${rawFinding || '未取得结果'}；Render HTML：${renderFinding || '未取得结果'}`,
+      rawSource,
+      rawFinding: rawFinding || '未取得结果',
+      renderFinding: renderFinding || '未取得结果',
+      finding: `Raw HTML（${rawSource}）：${rawFinding || '未取得结果'}\nRender HTML：${renderFinding || '未取得结果'}`,
       recommendation
     };
   };
@@ -429,7 +430,16 @@ function renderProblemChecklist(data) {
         </a>
       </td>
       <td data-label="是否有问题"><span class="checklist-status status-${escapeHtml(item.key)}">${escapeHtml(item.label)}</span></td>
-      <td data-label="检测结论">${escapeHtml(item.finding)}</td>
+      <td data-label="检测结论">
+        <div class="checklist-source-line">
+          <strong>Raw HTML（${escapeHtml(item.rawSource)}）</strong>
+          <span>${escapeHtml(item.rawFinding)}</span>
+        </div>
+        <div class="checklist-source-line">
+          <strong>Render HTML</strong>
+          <span>${escapeHtml(item.renderFinding)}</span>
+        </div>
+      </td>
     </tr>
   `).join('');
 }
