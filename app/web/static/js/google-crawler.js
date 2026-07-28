@@ -205,6 +205,35 @@ function renderRawHtml(result) {
 
 function renderOverview(overview = {}) {
   const seo = overview.seo || {};
+  const rendering = overview.rendering || {};
+  const isClientRendered = rendering.type === 'client_rendered';
+  const isServerRendered = ['server_rendered', 'hybrid_rendered'].includes(rendering.type);
+  const isRenderingFailure = ['thin_content', 'hydration_loss'].includes(rendering.type)
+    || rendering.status === 'failed';
+  const renderingLabel = rendering.label || (isClientRendered
+    ? '客户端渲染'
+    : isServerRendered
+      ? '服务端渲染 / 静态输出'
+      : '渲染方式待确认');
+  const renderingPanel = $('overview-rendering');
+  renderingPanel.className = `rendering-verdict ${
+    isClientRendered ? 'is-client' : isServerRendered ? 'is-server' : isRenderingFailure ? 'is-error' : 'is-unknown'
+  }`;
+  renderingPanel.innerHTML = `
+    <span class="rendering-verdict-icon">${isClientRendered || isRenderingFailure ? '!' : isServerRendered ? '✓' : '?'}</span>
+    <div>
+      <small>页面渲染方式</small>
+      <strong>${escapeHtml(renderingLabel)}</strong>
+      <p>${isClientRendered
+        ? '核心内容依赖 JavaScript 客户端渲染，对搜索引擎抓取、稳定索引和内容识别不利。'
+        : isServerRendered
+          ? '核心内容已在初始 HTML 中输出，对搜索引擎抓取和索引更友好。'
+          : isRenderingFailure
+            ? '页面核心内容不足或渲染后发生丢失，需要优先检查内容输出和 hydration。'
+            : '当前数据不足，暂时无法准确判断页面渲染方式。'}</p>
+    </div>
+    <em>${isClientRendered ? '黄色警告 · 需关注' : isServerRendered ? 'SEO 友好' : isRenderingFailure ? '未通过' : '待确认'}</em>
+  `;
   $('overview-summary').textContent = overview.summary || '本次检测未返回总览结论，请查看下方问题清单。';
   $('overview-verdict').textContent = statusLabel(overview.status || seo.status);
   $('overview-verdict').className = `status-pill status-${overview.status || seo.status || 'warning'}`;
