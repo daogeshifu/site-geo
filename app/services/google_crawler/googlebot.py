@@ -14,7 +14,12 @@ from app.services.google_crawler.browser_raw import (
     BrowserRawHtmlService,
     BrowserRawResponse,
 )
-from app.services.google_crawler.common import inspect_html, issue, status_from_issues
+from app.services.google_crawler.common import (
+    inspect_html,
+    issue,
+    request_http_metadata,
+    status_from_issues,
+)
 from app.utils.public_url import normalize_public_url
 
 
@@ -403,6 +408,11 @@ class GooglebotService:
                 "requested_url": response.requested_url,
                 "final_url": response.final_url,
                 "status_code": response.status_code,
+                **request_http_metadata(
+                    status_code=response.status_code,
+                    headers=response.headers,
+                    redirect_chain=response.redirect_chain,
+                ),
                 "response_time_ms": response.response_time_ms,
                 "redirect_count": len(response.redirect_chain),
                 "redirect_chain": response.redirect_chain,
@@ -419,6 +429,11 @@ class GooglebotService:
                     "requested_url": fallback_response.requested_url,
                     "status_code": fallback_response.status_code,
                     "final_url": fallback_response.final_url,
+                    **request_http_metadata(
+                        status_code=fallback_response.status_code,
+                        headers=fallback_response.headers,
+                        redirect_chain=fallback_response.redirect_chain,
+                    ),
                     "response_time_ms": fallback_response.response_time_ms,
                     "redirect_count": len(fallback_response.redirect_chain),
                     "redirect_chain": fallback_response.redirect_chain,
@@ -453,6 +468,12 @@ class GooglebotService:
                     "label": "Googlebot 原始响应 HTML",
                     "user_agent": GOOGLEBOT_SMARTPHONE_UA,
                     "status_code": response.status_code,
+                    "initial_status_code": request_http_metadata(
+                        status_code=response.status_code,
+                        headers=response.headers,
+                        redirect_chain=response.redirect_chain,
+                    )["initial_status_code"],
+                    "final_status_code": response.status_code,
                     "final_url": response.final_url,
                     "html_bytes": len(
                         response.text.encode("utf-8", errors="ignore")
@@ -466,6 +487,12 @@ class GooglebotService:
                         "label": "普通浏览器 UA 原始响应 HTML",
                         "user_agent": fallback_user_agent,
                         "status_code": fallback_response.status_code,
+                        "initial_status_code": request_http_metadata(
+                            status_code=fallback_response.status_code,
+                            headers=fallback_response.headers,
+                            redirect_chain=fallback_response.redirect_chain,
+                        )["initial_status_code"],
+                        "final_status_code": fallback_response.status_code,
                         "final_url": fallback_response.final_url,
                         "html_bytes": len(
                             fallback_response.text.encode("utf-8", errors="ignore")

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Google 爬虫测试 · GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727-seo-checklist" />
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260730-http-path" />
 </head>
 <body>
   <header class="topbar">
@@ -23,7 +23,7 @@
     <section class="hero">
       <div class="eyebrow"><span class="live-dot"></span> Google Search 模拟检测</div>
       <h1>Googlebot 抓到了什么，<br /><span>Google Render 又看到了什么？</span></h1>
-      <p>输入任意公开页面链接，一次检查抓取权限、HTTP 响应、索引指令、初始 HTML，以及 JavaScript 渲染后的内容与资源异常。</p>
+      <p>输入任意公开页面链接，一次检查初始状态、重定向链、最终响应、索引指令、Raw HTML，以及 JavaScript 渲染后的内容与资源异常。</p>
 
       <form id="crawler-form" class="test-form">
         <label for="test-url">需要检测的页面</label>
@@ -147,10 +147,10 @@
   </main>
 
   <footer>
-    <p>本工具使用公开 Googlebot User-Agent 与本地 Chromium 做近似模拟。</p>
+    <p>本工具使用公开 Googlebot User-Agent 与本地 Chromium 做近似模拟；请求来自本工具服务器，并非 Google 官方 IP。</p>
     <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">最终确认请使用 Google Search Console ↗</a>
   </footer>
 
-  <script type="module" src="/static/js/google-crawler.js?v=20260727-seo-checklist"></script>
+  <script type="module" src="/static/js/google-crawler.js?v=20260730-http-path"></script>
 </body>
 </html>

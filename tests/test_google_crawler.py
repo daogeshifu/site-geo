@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,7 +14,11 @@ from app.services.google_crawler.browser_raw import (
     BrowserRawHtmlService,
     BrowserRawResponse,
 )
-from app.services.google_crawler.common import inspect_html
+from app.services.google_crawler.common import (
+    inspect_html,
+    parse_retry_after,
+    request_http_metadata,
+)
 from app.services.google_crawler.googlebot import (
     GooglebotRun,
     GooglebotService,
@@ -37,6 +43,8 @@ def test_google_crawler_demo_page_is_available() -> None:
     assert "<th>修改建议</th>" not in response.text
     assert "Raw HTML · Render HTML · 结论" in response.text
     assert 'id="overview-rendering"' in response.text
+    assert "初始状态、重定向链、最终响应" in response.text
+    assert "并非 Google 官方 IP" in response.text
 
 
 def test_inspect_html_extracts_indexable_content() -> None:
@@ -182,6 +190,50 @@ def test_crawler_overview_flags_client_rendered_content_and_prioritizes_issues()
     assert overview["major_issues"][0]["severity"] == "high"
 
 
+def test_crawler_overview_treats_render_rate_limit_as_unknown_not_page_failure() -> None:
+    overview = build_crawler_overview(
+        {
+            "status": "passed",
+            "score": 96,
+            "request": {"status_code": 200},
+            "crawlability": {"allowed": True, "detail": "Googlebot allowed"},
+            "indexability": {"indexable": True},
+            "content": {"word_count": 240},
+            "issues": [],
+        },
+        {
+            "status": "warning",
+            "score": 70,
+            "request": {
+                "status_code": 429,
+                "outcome": "rate_limited",
+                "retry_after_seconds": 60,
+            },
+            "comparison": {
+                "initial_word_count": 240,
+                "rendered_word_count": 3,
+                "word_delta": -237,
+            },
+            "issues": [
+                {
+                    "code": "render_rate_limited",
+                    "severity": "high",
+                    "title": "模拟渲染请求被限流，无法判断页面状态",
+                    "detail": "当前测试服务器收到 HTTP 429。",
+                    "recommendation": "稍后重试。",
+                }
+            ],
+        },
+    )
+
+    assert overview["status"] == "warning"
+    assert overview["rendering"]["type"] == "unknown"
+    assert overview["rendering"]["status"] == "warning"
+    assert overview["rendering"]["rendered_word_count"] is None
+    assert overview["seo"]["label"] == "基础抓取可用，渲染状态待重试"
+    assert "不据此判断页面渲染方式" in overview["seo"]["detail"]
+
+
 def test_googlebot_access_challenge_recognizes_waf_response() -> None:
     response = _HttpResult(
         requested_url="https://example.com/",
@@ -195,6 +247,57 @@ def test_googlebot_access_challenge_recognizes_waf_response() -> None:
     )
 
     assert GooglebotService._is_access_challenge(response) is True
+
+
+def test_request_http_metadata_separates_initial_redirect_and_final_status() -> None:
+    metadata = request_http_metadata(
+        status_code=200,
+        headers={"server": "cloudflare", "x-request-id": "req-123"},
+        redirect_chain=[
+            {
+                "status_code": 302,
+                "from": "https://example.com/missing",
+                "to": "https://example.com/",
+            }
+        ],
+    )
+
+    assert metadata == {
+        "initial_status_code": 302,
+        "final_status_code": 200,
+        "outcome": "success",
+        "retry_after": None,
+        "retry_after_seconds": None,
+        "server": "cloudflare",
+        "cf_ray": "",
+        "request_id": "req-123",
+    }
+
+
+def test_request_http_metadata_classifies_rate_limit_and_retry_after() -> None:
+    metadata = request_http_metadata(
+        status_code=429,
+        headers={
+            "Retry-After": "60",
+            "Server": "cloudflare",
+            "CF-Ray": "ray-123",
+        },
+    )
+
+    assert metadata["initial_status_code"] == 429
+    assert metadata["final_status_code"] == 429
+    assert metadata["outcome"] == "rate_limited"
+    assert metadata["retry_after"] == "60"
+    assert metadata["retry_after_seconds"] == 60
+    assert metadata["server"] == "cloudflare"
+    assert metadata["cf_ray"] == "ray-123"
+
+
+def test_parse_retry_after_supports_http_date() -> None:
+    assert parse_retry_after(
+        "Thu, 30 Jul 2026 01:22:34 GMT",
+        now=datetime(2026, 7, 30, 1, 21, 34, tzinfo=timezone.utc),
+    ) == 60
 
 
 @pytest.mark.asyncio

@@ -17,9 +17,30 @@ def _rendering_assessment(
 ) -> dict[str, Any]:
     initial_content = googlebot.get("content") or {}
     comparison = google_render.get("comparison") or {}
+    render_request = google_render.get("request") or {}
     initial_words = comparison.get("initial_word_count", initial_content.get("word_count", 0))
     rendered_words = comparison.get("rendered_word_count")
     word_delta = comparison.get("word_delta")
+
+    if render_request.get("outcome") == "rate_limited":
+        retry_after = render_request.get("retry_after_seconds")
+        return {
+            "type": "unknown",
+            "label": "渲染请求受限，暂时无法判定",
+            "status": "warning",
+            "detail": (
+                "当前测试服务器的无头 Chromium 请求收到 HTTP 429"
+                + (
+                    f"，建议等待约 {retry_after} 秒后重试"
+                    if retry_after is not None
+                    else ""
+                )
+                + "；本次不使用限流响应判断 CSR、SSR 或内容丢失。"
+            ),
+            "initial_word_count": initial_words,
+            "rendered_word_count": None,
+            "word_delta": None,
+        }
 
     if google_render.get("status") == "skipped" or rendered_words is None:
         return {
@@ -150,8 +171,11 @@ def build_crawler_overview(
     access_challenge = access.get("state") == "waf_challenge"
     http_ok = googlebot_request.get("status_code") == 200
     render_completed = google_render.get("status") != "skipped"
+    render_rate_limited = render_request.get("outcome") == "rate_limited"
     render_http_ok = (
-        not render_completed or render_request.get("status_code") == 200
+        not render_completed
+        or render_request.get("status_code") == 200
+        or render_rate_limited
     )
     blocking_issue = any(
         (
@@ -159,7 +183,11 @@ def build_crawler_overview(
             or (
                 str(item.get("severity", "")).lower() == "high"
                 and item.get("code")
-                not in {"thin_initial_html", "googlebot_access_challenge"}
+                not in {
+                    "thin_initial_html",
+                    "googlebot_access_challenge",
+                    "render_rate_limited",
+                }
             )
         )
         for item in issues
@@ -175,6 +203,13 @@ def build_crawler_overview(
         seo_detail = (
             "模拟 Googlebot UA 被 WAF/反爬策略拦截；普通浏览器对照结果只能用于判断页面渲染方式，"
             "不能替代真实 Googlebot 索引结论。"
+        )
+    elif render_rate_limited:
+        seo_status = "warning"
+        seo_label = "基础抓取可用，渲染状态待重试"
+        seo_detail = (
+            "Raw HTML 结果仍可用于抓取与索引检查，但当前测试服务器的渲染请求被限流；"
+            "本次不据此判断页面渲染方式或页面自身 HTTP 状态。"
         )
     elif not http_ok or not render_http_ok:
         seo_status = "failed"

@@ -110,6 +110,82 @@ function renderMetrics(items) {
   `).join('')}</div>`;
 }
 
+function renderHttpJourney(request = {}, label = 'HTTP 请求路径') {
+  const redirects = Array.isArray(request.redirect_chain) ? request.redirect_chain : [];
+  const initialStatus = request.initial_status_code
+    ?? redirects[0]?.status_code
+    ?? request.status_code;
+  const finalStatus = request.final_status_code ?? request.status_code;
+  const requestedUrl = request.requested_url || '—';
+  const finalUrl = request.final_url || requestedUrl;
+  const steps = redirects.length
+    ? [
+        {
+          type: 'start',
+          label: '初始请求',
+          status: initialStatus,
+          url: requestedUrl
+        },
+        ...redirects.map((item, index) => {
+          const isLast = index === redirects.length - 1;
+          return {
+            type: isLast
+              ? request.outcome === 'rate_limited' ? 'limited' : 'final'
+              : 'redirect',
+            label: isLast ? '最终响应' : `重定向 ${index + 1}`,
+            status: redirects[index + 1]?.status_code ?? finalStatus,
+            url: item.to || finalUrl
+          };
+        })
+      ]
+    : [
+        {
+          type: 'start',
+          label: '初始请求',
+          status: initialStatus,
+          url: requestedUrl
+        },
+        {
+          type: request.outcome === 'rate_limited' ? 'limited' : 'final',
+          label: '最终响应',
+          status: finalStatus,
+          url: finalUrl
+        }
+      ];
+  const retryText = request.outcome === 'rate_limited'
+    ? request.retry_after_seconds !== null && request.retry_after_seconds !== undefined
+      ? `Retry-After：约 ${request.retry_after_seconds} 秒`
+      : request.retry_after
+        ? `Retry-After：${request.retry_after}`
+        : '服务器未提供 Retry-After'
+    : '';
+
+  return `
+    <section class="http-journey${request.outcome === 'rate_limited' ? ' is-rate-limited' : ''}">
+      <div class="http-journey-head">
+        <div><strong>${escapeHtml(label)}</strong><span>分别展示原始 URL、重定向链和最终响应</span></div>
+        ${retryText ? `<em>${escapeHtml(retryText)}</em>` : ''}
+      </div>
+      <div class="http-journey-steps">
+        ${steps.map((step, index) => `
+          ${index ? '<i aria-hidden="true">→</i>' : ''}
+          <div class="http-step step-${escapeHtml(step.type)}">
+            <small>${escapeHtml(step.label)}</small>
+            <b>HTTP ${escapeHtml(valueOrDash(step.status))}</b>
+            <span title="${escapeHtml(step.url)}">${escapeHtml(step.url)}</span>
+          </div>
+        `).join('')}
+      </div>
+      ${request.outcome === 'rate_limited' ? `
+        <p class="rate-limit-note">
+          此 429 表示当前测试服务器的渲染请求被限流，不能据此认定目标页面本身返回 429；
+          本次不会继续推导标题、正文或 hydration 结论。
+        </p>
+      ` : ''}
+    </section>
+  `;
+}
+
 function copyIcon() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -185,7 +261,8 @@ function renderRawHtml(result) {
               <div>
                 <strong>${escapeHtml(item.label || key)}</strong>
                 <p>
-                  HTTP ${escapeHtml(valueOrDash(item.status_code))}
+                  初始 HTTP ${escapeHtml(valueOrDash(item.initial_status_code ?? item.status_code))}
+                  → 最终 HTTP ${escapeHtml(valueOrDash(item.final_status_code ?? item.status_code))}
                   · ${escapeHtml(valueOrDash(item.html_bytes, ' bytes'))}
                   ${item.truncated ? ' · 已截断' : ''}
                 </p>
@@ -271,6 +348,10 @@ function buildProblemChecklist(data) {
   const findCheck = key => checks.find(item => item.key === key);
   const renderExecuted = googleRender.status !== 'skipped'
     && Boolean(googleRender.request || googleRender.rendered_content);
+  const renderRateLimited = renderRequest.outcome === 'rate_limited';
+  const renderComparable = renderExecuted
+    && renderRequest.status_code === 200
+    && !renderRateLimited;
   const rawSource = fallbackUsed ? '用户 UA' : 'Googlebot';
   const row = (category, item, whitepaperUrl, rawStatus, rawFinding, renderStatus, renderFinding, recommendation) => {
     const status = combineChecklistStatuses(rawStatus, renderStatus);
@@ -291,7 +372,11 @@ function buildProblemChecklist(data) {
   const renderedHtmlBytes = Number(renderedContent.html_bytes || 0);
   const resourceFailures = (diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length;
   const jsErrors = (diagnostics.page_errors || []).length;
-  const renderUnavailableText = googleRender.status === 'skipped' ? '本次未执行渲染' : '未取得渲染数据';
+  const renderUnavailableText = renderRateLimited
+    ? `当前测试服务器收到 HTTP 429，本次未评估${renderRequest.retry_after_seconds !== null && renderRequest.retry_after_seconds !== undefined ? `；建议 ${renderRequest.retry_after_seconds} 秒后重试` : ''}`
+    : googleRender.status === 'skipped'
+      ? '本次未执行渲染'
+      : '未取得可用渲染数据';
   const renderedDirectives = renderedContent.directives || [];
   const renderedNoindex = renderedDirectives.includes('noindex');
   const renderedFinalUrl = renderRequest.final_url || '';
@@ -330,9 +415,19 @@ function buildProblemChecklist(data) {
   rows.push(row(
     '引擎规范', 'HTTP 状态码', 'https://www.idtcpack.com/seo_book/http',
     rawRequest.status_code === 200 ? 'pass' : 'fail',
-    `返回 HTTP ${valueOrDash(rawRequest.status_code)}，耗时 ${valueOrDash(rawRequest.response_time_ms, ' ms')}`,
-    renderExecuted ? (renderRequest.status_code === 200 ? 'pass' : 'fail') : 'skipped',
-    renderExecuted ? `主文档返回 HTTP ${valueOrDash(renderRequest.status_code)}` : renderUnavailableText,
+    `初始 HTTP ${valueOrDash(rawRequest.initial_status_code ?? rawRequest.status_code)}，最终 HTTP ${valueOrDash(rawRequest.final_status_code ?? rawRequest.status_code)}，耗时 ${valueOrDash(rawRequest.response_time_ms, ' ms')}`,
+    renderExecuted
+      ? renderRequest.outcome === 'rate_limited'
+        ? 'warning'
+        : renderRequest.status_code === 200
+          ? 'pass'
+          : 'fail'
+      : 'skipped',
+    renderExecuted
+      ? renderRequest.outcome === 'rate_limited'
+        ? `渲染请求返回 HTTP 429，被当前测试服务器限流${renderRequest.retry_after_seconds !== null && renderRequest.retry_after_seconds !== undefined ? `，建议 ${renderRequest.retry_after_seconds} 秒后重试` : ''}`
+        : `初始 HTTP ${valueOrDash(renderRequest.initial_status_code ?? renderRequest.status_code)}，最终 HTTP ${valueOrDash(renderRequest.final_status_code ?? renderRequest.status_code)}`
+      : renderUnavailableText,
     '核心可索引页面应稳定返回 HTTP 200；修复 4xx、5xx 和不必要的重定向。'
   ));
   rows.push(row(
@@ -349,8 +444,8 @@ function buildProblemChecklist(data) {
     '引擎规范', 'Noindex 索引指令', 'https://www.idtcpack.com/seo_book/noindex',
     findCheck('indexable')?.status || (indexability.indexable === true ? 'pass' : indexability.indexable === false ? 'fail' : 'warning'),
     findCheck('indexable')?.detail || `索引状态为 ${indexability.state || '待确认'}`,
-    renderExecuted ? (renderedNoindex ? 'fail' : 'pass') : 'skipped',
-    renderExecuted ? renderedNoindex ? '渲染 DOM 检测到 noindex' : '渲染 DOM 未检测到 noindex' : renderUnavailableText,
+    renderComparable ? (renderedNoindex ? 'fail' : 'pass') : 'skipped',
+    renderComparable ? renderedNoindex ? '渲染 DOM 检测到 noindex' : '渲染 DOM 未检测到 noindex' : renderUnavailableText,
     '需要参与搜索的页面不要设置 noindex，并确认响应头与 HTML Meta 指令一致。'
   ));
   rows.push(row(
@@ -358,31 +453,31 @@ function buildProblemChecklist(data) {
     rawRequest.status_code === 200 ? 'pass' : 'warning',
     `作为 Googlebot Smartphone 的初始 HTML 输入，HTTP ${valueOrDash(rawRequest.status_code)}`,
     renderExecuted ? findCheck('render_status')?.status || googleRender.status : 'skipped',
-    renderExecuted ? `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟` : renderUnavailableText,
+    renderComparable ? `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟` : renderUnavailableText,
     '使用移动优先布局，并在 Google Search Console 中复核真实移动版渲染结果。'
   ));
   rows.push(row(
     '引擎规范', 'JavaScript 加载', 'https://www.idtcpack.com/seo_book/js',
     Number(content.word_count || 0) >= 50 ? 'pass' : 'warning',
     `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
-    renderExecuted ? findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass') : 'skipped',
-    renderExecuted ? findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常` : renderUnavailableText,
+    renderComparable ? findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass') : 'skipped',
+    renderComparable ? findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常` : renderUnavailableText,
     '修复首屏 JavaScript 异常，确保核心正文和链接不依赖失败的客户端请求。'
   ));
   rows.push(row(
     'SEO 元素', 'Title 标题', 'https://www.idtcpack.com/seo_book/title',
     content.title ? 'pass' : 'warning',
     content.title ? `检测到 Title：${content.title}` : '未检测到 Title',
-    renderExecuted ? (renderedContent.title ? 'pass' : 'fail') : 'skipped',
-    renderExecuted ? renderedContent.title ? `检测到 Title：${renderedContent.title}` : '未检测到 Title' : renderUnavailableText,
+    renderComparable ? (renderedContent.title ? 'pass' : 'fail') : 'skipped',
+    renderComparable ? renderedContent.title ? `检测到 Title：${renderedContent.title}` : '未检测到 Title' : renderUnavailableText,
     '为页面设置唯一、准确且与搜索意图相关的 Title 标题。'
   ));
   rows.push(row(
     'SEO 元素', 'H1 主标题', 'https://www.idtcpack.com/seo_book/h',
     h1Status(content.h1_count, 'warning'),
     `检测到 ${Number(content.h1_count || 0)} 个 H1${content.h1 ? `：${content.h1}` : ''}`,
-    renderExecuted ? h1Status(renderedContent.h1_count) : 'skipped',
-    renderExecuted
+    renderComparable ? h1Status(renderedContent.h1_count) : 'skipped',
+    renderComparable
       ? `检测到 ${Number(renderedContent.h1_count || 0)} 个 H1${renderedContent.h1 ? `：${renderedContent.h1}` : ''}`
       : renderUnavailableText,
     '每个页面保留一个清晰的主 H1，并让层级标题准确描述内容结构。'
@@ -391,12 +486,12 @@ function buildProblemChecklist(data) {
     'SEO 元素', 'Canonical 规范链接', 'https://www.idtcpack.com/seo_book/canonical',
     content.canonical ? 'pass' : 'warning',
     content.canonical ? `Canonical 为 ${content.canonical}` : '未检测到 Canonical',
-    renderExecuted
+    renderComparable
       ? renderedContent.canonical
         ? content.canonical && renderedContent.canonical !== content.canonical ? 'warning' : 'pass'
         : 'warning'
       : 'skipped',
-    renderExecuted
+    renderComparable
       ? renderedContent.canonical ? `Canonical 为 ${renderedContent.canonical}` : '未检测到 Canonical'
       : renderUnavailableText,
     '为可索引页面设置指向首选 URL 的绝对 Canonical，并避免冲突信号。'
@@ -405,10 +500,10 @@ function buildProblemChecklist(data) {
     '网站内容', '核心内容完整性', 'https://www.idtcpack.com/seo_book/js',
     findCheck('content')?.status || (Number(content.word_count || 0) >= 50 ? 'pass' : 'warning'),
     findCheck('content')?.detail || `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
-    renderExecuted
+    renderComparable
       ? findCheck('rendered_content')?.status || (Number(renderedContent.word_count || 0) >= 50 ? 'pass' : 'fail')
       : 'skipped',
-    renderExecuted
+    renderComparable
       ? findCheck('rendered_content')?.detail || `渲染后约 ${Number(renderedContent.word_count || 0)} 个词/字符单元`
       : renderUnavailableText,
     '优先在初始 HTML 输出核心正文；强依赖 JavaScript 的页面建议使用 SSR 或静态生成。'
@@ -417,8 +512,8 @@ function buildProblemChecklist(data) {
     '网站内容', '网页 HTML 体积', 'https://www.idtcpack.com/seo_book/pagesize',
     pageSizeStatus(htmlBytes),
     htmlBytes ? `初始 HTML 约 ${Math.round(htmlBytes / 1024)} KB` : '未取得 HTML 体积',
-    renderExecuted ? pageSizeStatus(renderedHtmlBytes) : 'skipped',
-    renderExecuted
+    renderComparable ? pageSizeStatus(renderedHtmlBytes) : 'skipped',
+    renderComparable
       ? renderedHtmlBytes ? `渲染 DOM 约 ${Math.round(renderedHtmlBytes / 1024)} KB` : '未取得渲染 DOM 体积'
       : renderUnavailableText,
     '精简重复标签、内联数据和无用代码，避免过大的 HTML 延迟抓取与解析。'
@@ -427,8 +522,8 @@ function buildProblemChecklist(data) {
     '网站内容', '核心资源加载', 'https://www.idtcpack.com/seo_book/js',
     rawRequest.status_code === 200 ? 'pass' : 'warning',
     `初始 HTML 引用了 ${Number(content.script_count || 0)} 个脚本`,
-    renderExecuted ? findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass') : 'skipped',
-    renderExecuted ? findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源` : renderUnavailableText,
+    renderComparable ? findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass') : 'skipped',
+    renderComparable ? findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源` : renderUnavailableText,
     '确保核心 JS、CSS、图片、字体和 API 可公开访问并稳定返回成功状态。'
   ));
   return rows;
@@ -542,15 +637,17 @@ function renderGooglebot(result) {
       <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>/ 100 <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
     </div>
     ${renderMetrics([
-      ['HTTP 状态', valueOrDash(request.status_code)],
+      ['初始状态', valueOrDash(request.initial_status_code ?? request.status_code)],
+      ['最终状态', valueOrDash(request.final_status_code ?? request.status_code)],
       ['响应时间', valueOrDash(request.response_time_ms, ' ms')],
       ['robots.txt', crawl.allowed === true ? '允许' : crawl.allowed === false ? '阻止' : '不确定'],
       ['索引状态', indexability.indexable === true ? '允许' : indexability.indexable === false ? '不允许' : '待确认'],
       [usedBrowserFallback ? '初始内容（浏览器对照）' : '初始内容', valueOrDash(content.word_count, ' 词/字符')],
       ['内部链接', valueOrDash(content.internal_link_count)],
-      ['重定向', valueOrDash(request.redirect_count)],
       [usedBrowserFallback ? 'Raw HTML（浏览器对照）' : 'HTML 体积', analyzedHtmlBytes ? `${Math.round(analyzedHtmlBytes / 1024)} KB` : '—']
     ])}
+    ${renderHttpJourney(request, 'Googlebot Raw HTTP 请求路径')}
+    ${usedBrowserFallback ? renderHttpJourney(controlRequest, '普通浏览器对照请求路径') : ''}
     <h4 class="section-title">检查项 <span>${(result.checks || []).length} 项</span></h4>
     ${renderChecks(result.checks)}
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
@@ -572,12 +669,12 @@ function renderGoogleRender(result) {
         ['评分', valueOrDash(result.score)]
       ]
     : [
-        ['HTTP 状态', valueOrDash(request.status_code)],
+        ['初始状态', valueOrDash(request.initial_status_code ?? request.status_code)],
+        ['最终状态', valueOrDash(request.final_status_code ?? request.status_code)],
         ['渲染耗时', valueOrDash(request.render_time_ms, ' ms')],
+        ['重定向', valueOrDash(request.redirect_count)],
         ['渲染后内容', valueOrDash(comparison.rendered_word_count, ' 词/字符')],
         ['内容变化', valueOrDash(comparison.word_delta)],
-        ['渲染后内链', valueOrDash(comparison.rendered_internal_links)],
-        ['链接变化', valueOrDash(comparison.link_delta)],
         ['JS 页面异常', valueOrDash((diagnostics.page_errors || []).length)],
         ['异常资源', valueOrDash((diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length)]
       ];
@@ -589,6 +686,7 @@ function renderGoogleRender(result) {
       <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>${result.score === null ? '' : ' / 100'} <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
     </div>
     ${renderMetrics(metrics)}
+    ${result.status === 'skipped' ? '' : renderHttpJourney(request, 'Google Render 主文档请求路径')}
     <h4 class="section-title">检查项 <span>${(result.checks || []).length} 项</span></h4>
     ${renderChecks(result.checks)}
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>

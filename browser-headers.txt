@@ -1,0 +1,20 @@
+HTTP/2 200 
+content-type: text/html; charset=UTF-8
+x-pluto-service: webservice-pluto-page-server-for-kfx-1
+x-pluto-channel-id: 100169
+x-service-type: pluto
+x-pluto-version: 30913092
+cache-control: public, max-age=0
+x-kslogid: 785297971344405704
+x-server: kfx-pluto
+x-kfx-request-id: 3663c7799a6b15bca872e24c97fbca56
+x-appid: 45d6382b95
+x-deploy-info: webservice-live-air_sgp-prod_30913092_gray
+x-deploy-kws-name: webservice-live-air
+x-deploy-env: sgp-prod
+etag: W/"1e77c-173e7159878_&kling-web-sgp:10"
+x-kgateway-request-id: 785297971344405704
+date: Wed, 29 Jul 2026 04:06:11 GMT
+set-cookie: kGateway-identity=kGateway-37a3afb0-298250453; Max-Age=15552000; Expires=Mon, 25 Jan 2027 04:06:11 GMT
+alt-svc: h3=":443"; ma=93600
+
