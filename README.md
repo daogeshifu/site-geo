@@ -52,7 +52,7 @@ GEO Audit 关注的是另一层问题：
 独立 demo 页面：`GET /google-crawler-test`
 
 - `POST /api/v1/google-crawler/googlebot`：模拟 Googlebot Smartphone，检查 robots.txt、HTTP、重定向、索引指令和初始 HTML；`raw_html.googlebot` 保留 Googlebot 原始响应，触发浏览器回退时 `raw_html.browser_control` 同时保留普通浏览器 UA 原始响应，并通过 `raw_html.active_source` 标记实际检测数据源。
-- `POST /api/v1/google-crawler/google-render`：执行抓取前置检查后，用无头 Chromium 检查 JavaScript 渲染、渲染前后内容差异、控制台异常和失败资源。
+- `POST /api/v1/google-crawler/google-render`：执行抓取前置检查后，用无头 Chromium 检查 JavaScript 渲染、渲染前后内容差异、控制台异常和失败资源；`rendered_html` 返回执行 JavaScript 后的 DOM HTML 快照（展示上限 2MB）。
 - `POST /api/v1/google-crawler/test`：一次返回上述两项结果，适合双 Tab 页面展示。
 
 本地启用渲染前需安装 Chromium 并打开开关：

@@ -212,21 +212,33 @@ function renderCopyButton(label) {
   `;
 }
 
-function resultWithoutRawHtmlBody(result) {
+function resultWithoutHtmlBodies(result) {
   const rawHtml = result?.raw_html;
-  if (!rawHtml) return result;
-  const summarized = { active_source: rawHtml.active_source };
-  for (const key of ['googlebot', 'browser_control']) {
-    const item = rawHtml[key];
-    summarized[key] = item
-      ? { ...item, html: '[Raw HTML 已在下方单独展示，可使用对应按钮复制]' }
-      : null;
+  let displayResult = result;
+  if (rawHtml) {
+    const summarized = { active_source: rawHtml.active_source };
+    for (const key of ['googlebot', 'browser_control']) {
+      const item = rawHtml[key];
+      summarized[key] = item
+        ? { ...item, html: '[Raw HTML 已在下方单独展示，可使用对应按钮复制]' }
+        : null;
+    }
+    displayResult = { ...displayResult, raw_html: summarized };
   }
-  return { ...result, raw_html: summarized };
+  if (result?.rendered_html?.html) {
+    displayResult = {
+      ...displayResult,
+      rendered_html: {
+        ...result.rendered_html,
+        html: '[渲染后 HTML 已在下方单独展示，可使用对应按钮复制]'
+      }
+    };
+  }
+  return displayResult;
 }
 
 function renderRawDetails(result, label) {
-  const displayResult = resultWithoutRawHtmlBody(result);
+  const displayResult = resultWithoutHtmlBodies(result);
   return `
     <details class="details" data-copy-container>
       <summary>
@@ -275,6 +287,48 @@ function renderRawHtml(result) {
             <pre>${escapeHtml(item.html)}</pre>
           </article>
         `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderRenderedHtml(result) {
+  const renderedHtml = result?.rendered_html;
+  if (!renderedHtml || typeof renderedHtml.html !== 'string') return '';
+  const captureStateLabel = {
+    network_idle: '网络空闲后截取',
+    timeout: '等待超时后截取',
+    navigation_error: '导航异常后截取'
+  }[renderedHtml.capture_state] || '渲染结束后截取';
+
+  return `
+    <section class="raw-html-section">
+      <div class="raw-html-title">
+        <div>
+          <h4>JavaScript 渲染后 HTML</h4>
+          <p>这是 Chromium 执行 JavaScript 后通过 DOM 序列化取得的快照，可与上方 Googlebot Raw HTML 对照；它不是服务器原始响应。</p>
+        </div>
+        <span>Render DOM</span>
+      </div>
+      <div class="raw-html-list">
+        <article class="raw-html-card active-source" data-copy-container>
+          <header>
+            <div>
+              <strong>${escapeHtml(renderedHtml.label || 'JavaScript 渲染后 HTML')}</strong>
+              <p>
+                最终 HTTP ${escapeHtml(valueOrDash(result.request?.final_status_code ?? result.request?.status_code))}
+                · ${escapeHtml(valueOrDash(renderedHtml.html_bytes, ' bytes'))}
+                · ${escapeHtml(captureStateLabel)}
+                ${renderedHtml.truncated ? ' · 展示已截断' : ''}
+              </p>
+            </div>
+            <div class="raw-html-actions">
+              <span class="source-badge">渲染后 DOM</span>
+              ${renderCopyButton('复制渲染后 HTML')}
+            </div>
+          </header>
+          <pre>${escapeHtml(renderedHtml.html)}</pre>
+        </article>
       </div>
     </section>
   `;
@@ -692,6 +746,7 @@ function renderGoogleRender(result) {
     <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
     ${renderIssues(result.issues)}
     ${renderRawDetails(result, '查看渲染详情与原始结果')}
+    ${renderRenderedHtml(result)}
   `;
 }
 

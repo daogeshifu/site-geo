@@ -15,6 +15,21 @@ from app.services.google_crawler.googlebot import GOOGLEBOT_SMARTPHONE_UA
 from app.utils.public_url import normalize_public_url
 
 
+MAX_RENDERED_HTML_BYTES = 2_000_000
+
+
+def _rendered_html_snapshot(html: str) -> dict[str, Any]:
+    raw = html.encode("utf-8", errors="ignore")
+    truncated = len(raw) > MAX_RENDERED_HTML_BYTES
+    displayed = raw[:MAX_RENDERED_HTML_BYTES].decode("utf-8", errors="ignore")
+    return {
+        "label": "JavaScript 渲染后 HTML",
+        "html": displayed,
+        "html_bytes": len(raw),
+        "truncated": truncated,
+    }
+
+
 class GoogleRenderService:
     """Approximate Google's Web Rendering Service with headless Chromium."""
 
@@ -210,6 +225,7 @@ class GoogleRenderService:
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         initial = inspect_html(initial_html, normalized)
         rendered = inspect_html(rendered_html, final_url)
+        rendered_html_result = _rendered_html_snapshot(rendered_html)
         word_delta = rendered["word_count"] - initial["word_count"]
         link_delta = rendered["internal_link_count"] - initial["internal_link_count"]
         content_retention = (
@@ -419,6 +435,17 @@ class GoogleRenderService:
             },
             "rendered_content": {
                 key: value for key, value in rendered.items() if key != "visible_text"
+            },
+            "rendered_html": {
+                **rendered_html_result,
+                "final_url": final_url,
+                "capture_state": (
+                    "network_idle"
+                    if navigation_succeeded and not timed_out
+                    else "timeout"
+                    if timed_out
+                    else "navigation_error"
+                ),
             },
             "diagnostics": {
                 "page_errors": page_errors,

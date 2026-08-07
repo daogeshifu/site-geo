@@ -24,6 +24,10 @@ from app.services.google_crawler.googlebot import (
     GooglebotService,
     _HttpResult,
 )
+from app.services.google_crawler.google_render import (
+    MAX_RENDERED_HTML_BYTES,
+    _rendered_html_snapshot,
+)
 from app.services.google_crawler.overview import build_crawler_overview
 from app.utils.public_url import normalize_public_url
 
@@ -45,6 +49,18 @@ def test_google_crawler_demo_page_is_available() -> None:
     assert 'id="overview-rendering"' in response.text
     assert "初始状态、重定向链、最终响应" in response.text
     assert "并非 Google 官方 IP" in response.text
+
+
+def test_rendered_html_snapshot_is_utf8_safe_and_size_limited() -> None:
+    html = "<html><body>" + ("渲染内容" * 300_000) + "</body></html>"
+
+    snapshot = _rendered_html_snapshot(html)
+
+    assert snapshot["label"] == "JavaScript 渲染后 HTML"
+    assert snapshot["html_bytes"] == len(html.encode("utf-8"))
+    assert snapshot["truncated"] is True
+    assert len(snapshot["html"].encode("utf-8")) <= MAX_RENDERED_HTML_BYTES
+    snapshot["html"].encode("utf-8")
 
 
 def test_inspect_html_extracts_indexable_content() -> None:
