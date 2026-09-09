@@ -1,8 +1,9 @@
 import { renderContentAuditReport } from './content-report.js';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
-import { renderSeoAuditReport } from './seo-report.js';
+import { renderSeoAuditReport } from './seo-report.js?v=20260909-checklist';
 import { renderSiteAuditReport } from './site-report.js';
+import { createSiteLinksExplorer } from './site-links.js';
 import {
   getTaskStepOrder,
   getTaskTypeConfig,
@@ -10,16 +11,26 @@ import {
 } from './task-config.js';
 import {
   $,
+  escapeHtml,
   tx
 } from './shared.js';
 
 /* ── Tabs ── */
 document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.setAttribute('role', 'tab');
+  btn.setAttribute('aria-selected', String(btn.classList.contains('active')));
+  btn.setAttribute('aria-controls', `tab-${btn.dataset.tab}`);
+  btn.id = `result-tab-${btn.dataset.tab}`;
+  const panel = $(`tab-${btn.dataset.tab}`);
+  panel.setAttribute('role', 'tabpanel');
+  panel.setAttribute('aria-labelledby', btn.id);
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', String(b === btn)));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     $(`tab-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'site-links') siteLinks.load();
     if (btn.dataset.tab === 'structure-graph' && currentTask?.task_id && currentTask?.build_knowledge_graph !== false) {
       loadStructureGraph(currentTask).catch(() => {});
     }
@@ -54,11 +65,13 @@ let structureGraphLoading = false;
 let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
-const REPORT_CACHE_PREFIX = 'geo-audit-report:';
+const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v4-checklist:';
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
 const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token';
+const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const GRAPH_CONFIG = {
   structure: {
     graphKind: 'structure',
@@ -87,6 +100,80 @@ const GRAPH_CONFIG = {
     render: ({ task, graph, host, lang }) => renderEntityGraph({ task, graph, host, lang }),
   },
 };
+
+function readBooleanParam(params, name, fallback = false) {
+  if (!params.has(name)) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(params.get(name)).toLowerCase());
+}
+
+function applyAuditUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  const taskTypes = new Set(['site_seo_audit', 'site_geo_audit', 'site_content_audit']);
+  const modes = new Set(['standard', 'premium']);
+  const languages = new Set(['zh', 'en']);
+  const targetLocales = new Set(['', 'en', 'de', 'nl', 'fr', 'zh']);
+  const taskType = params.get('task_type');
+  const mode = params.get('mode');
+  const feedbackLang = params.get('feedback_lang');
+  const targetLocale = params.get('target_locale') || '';
+
+  if (params.get('url')) $('url').value = params.get('url');
+  if (taskTypes.has(taskType)) $('task-type').value = taskType;
+  if (modes.has(mode)) $('mode').value = mode;
+  if (languages.has(feedbackLang)) $('feedback-lang').value = feedbackLang;
+  if ($('target-locale') && targetLocales.has(targetLocale)) $('target-locale').value = targetLocale;
+  if (params.has('full_audit')) $('full-audit').checked = readBooleanParam(params, 'full_audit');
+  if (params.has('build_knowledge_graph')) $('build-knowledge-graph').checked = readBooleanParam(params, 'build_knowledge_graph');
+  if (params.has('force_refresh')) $('force').checked = readBooleanParam(params, 'force_refresh');
+  if (params.get('max_pages')) {
+    const pages = Number(params.get('max_pages'));
+    if (Number.isFinite(pages)) $('max-pages').value = String(Math.max(5, Math.min(10000, Math.round(pages))));
+  }
+  if (params.get('model')) $('model').value = params.get('model');
+
+  const isPremium = $('mode').value === 'premium';
+  $('model').disabled = !isPremium;
+  $('model').style.opacity = isPremium ? '1' : '0.45';
+  $('max-pages').disabled = !$('full-audit').checked;
+  $('max-pages').style.opacity = $('full-audit').checked ? '1' : '0.45';
+
+  const taskId = params.get('task_id') || '';
+  return TASK_ID_PATTERN.test(taskId) ? taskId : null;
+}
+
+function getTaskIdFromLocation() {
+  const taskId = new URLSearchParams(window.location.search).get('task_id') || '';
+  return TASK_ID_PATTERN.test(taskId) ? taskId : null;
+}
+
+function syncAuditUrl(taskId = null, { replace = false } = {}) {
+  const params = new URLSearchParams();
+  const targetUrl = $('url').value.trim();
+  if (targetUrl) params.set('url', targetUrl);
+  params.set('task_type', getSelectedTaskType());
+  params.set('mode', $('mode').value);
+  params.set('feedback_lang', $('feedback-lang').value);
+  params.set('full_audit', $('full-audit').checked ? '1' : '0');
+  params.set('build_knowledge_graph', $('build-knowledge-graph').checked ? '1' : '0');
+  params.set('force_refresh', $('force').checked ? '1' : '0');
+  if ($('full-audit').checked) params.set('max_pages', $('max-pages').value || '12');
+  const targetLocale = $('target-locale')?.value || '';
+  if (targetLocale) params.set('target_locale', targetLocale);
+  const model = $('model').value.trim();
+  if ($('mode').value === 'premium' && model) params.set('model', model);
+  if (taskId && TASK_ID_PATTERN.test(taskId)) params.set('task_id', taskId);
+
+  const nextUrl = `${window.location.pathname}?${params.toString()}`;
+  window.history[replace ? 'replaceState' : 'pushState']({ taskId: taskId || null }, '', nextUrl);
+}
+
+function syncGraphTabs(enabled = false) {
+  document.querySelectorAll('.graph-tab').forEach(tab => { tab.hidden = !enabled; });
+  const active = document.querySelector('.tab-btn.active');
+  if (!enabled && active?.classList.contains('graph-tab')) {
+    document.querySelector('[data-tab="summary"]').click();
+  }
+}
 
 function getSelectedDemoToken() {
   return $('demo-token')?.value?.trim() || '';
@@ -128,6 +215,7 @@ function setDemoAccessState({
   const panel = $('demo-access-panel');
   panel.classList.toggle('ready', ready);
   panel.classList.toggle('locked', !ready);
+  panel.open = !ready;
   $('demo-token-badge').textContent = badgeText;
   $('demo-token-badge').className = `badge ${badgeClass}`;
   $('demo-token-desc').textContent = description;
@@ -324,7 +412,7 @@ async function initDemoAccess() {
 }
 
 function getSelectedTaskType() {
-  return $('task-type')?.value || 'site_geo_audit';
+  return $('task-type')?.value || 'site_seo_audit';
 }
 
 function applyTaskTypeUi(taskType = null) {
@@ -335,6 +423,7 @@ function applyTaskTypeUi(taskType = null) {
   $('page-subtitle').textContent = config.subtitle[lang] || config.subtitle.zh;
   $('url-label').textContent = config.urlLabel[lang] || config.urlLabel.zh;
   $('url').placeholder = config.placeholder;
+  $('sample-hint').textContent = resolvedTaskType === 'site_content_audit' ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : resolvedTaskType === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认分析首页与 About、服务、文章和案例关键页。';
   $('full-audit-row').style.display = config.fullAuditVisible ? 'grid' : 'none';
   if (!config.fullAuditVisible) {
     $('full-audit').checked = false;
@@ -412,11 +501,9 @@ function renderReport(task) {
   const result = task?.result;
   if (!result?.summary) {
     host.className = 'report-empty placeholder';
-    host.innerHTML = tx(
-      lang,
-      '等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、平台适配、关键问题、行动计划、snapshot 发现与引用证据。',
-      'Wait for task completion to generate the full report. The report will show the composite score, 6 scored dimensions, platform readiness, key issues, action plan, snapshot findings, and source evidence.'
-    );
+    const running = ['queued', 'running'].includes(task?.status);
+    const failed = task?.status === 'failed';
+    host.innerHTML = `<div class="empty-orbit ${running ? 'is-scanning' : ''}"><span>G.</span><i></i><b></b></div><span class="workspace-kicker">${running ? 'ANALYSIS IN PROGRESS' : failed ? 'AUDIT INTERRUPTED' : 'YOUR NEXT OPPORTUNITY'}</span><h3>${escapeHtml(failed ? tx(lang, '本次审计未能完成', 'Audit could not be completed') : running ? tx(lang, '正在发现站点的优化机会', 'Discovering opportunities for your site') : tx(lang, '发现网站的下一次增长机会', 'Discover your next growth opportunity'))}</h3><p>${escapeHtml(failed ? task.error || tx(lang, '请检查目标 URL 后重试。', 'Check the target URL and try again.') : running ? tx(lang, '页面抓取与诊断正在进行，报告将在完成后自动呈现。', 'Crawling and analysis are underway. Your report will appear automatically.') : tx(lang, '输入站点 URL，开始一次全面的搜索健康检查。', 'Enter a site URL to start a search health check.'))}</p><div class="empty-capabilities"><span>01 · ${tx(lang, '六维健康评分', 'Health scores')}</span><span>02 · ${tx(lang, '页面抓取证据', 'Page evidence')}</span><span>03 · ${tx(lang, '优先行动建议', 'Prioritized actions')}</span></div>`;
     return;
   }
   if (task?.task_type === 'site_content_audit') {
@@ -636,27 +723,26 @@ async function loadEntityGraph(task = currentTask) {
 function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';
+    const labels = { discovery: '发现站点', seo: 'SEO 诊断', summary: '生成报告', visibility: 'AI 可见性', technical: '技术基础', content: '内容质量', schema: '结构化数据', platform: '平台适配', observation: '观测数据' };
+    const statuses = { pending: '待执行', running: '进行中', completed: '已完成', failed: '失败', skipped: '未启用' };
     getTaskStepOrder(currentTask?.task_type || getSelectedTaskType()).forEach((name, i) => {
       const step = steps?.[name] || { status: 'pending' };
-      const raw  = step.data ? JSON.stringify(step.data) : null;
-      const preview = raw
-        ? raw.slice(0, 130) + (raw.length > 130 ? '…' : '')
-        : (step.error || '等待执行');
+      const preview = step.error || (step.status === 'completed' ? '结果已就绪' : step.status === 'running' ? '正在处理站点数据…' : '等待执行');
       const item = document.createElement('div');
       item.className = 'tl-item';
       item.innerHTML = `
         <div class="tl-dot ${step.status}">${STEP_ICON[name] || i+1}</div>
         <div class="tl-body">
           <div class="tl-head">
-            <span class="tl-name">${name}</span>
-            <span class="tl-st s-${step.status}">${step.status}</span>
+            <span class="tl-name">${escapeHtml(labels[name] || name)}</span>
+            <span class="tl-st s-${step.status}">${escapeHtml(statuses[step.status] || step.status)}</span>
           </div>
-          <div class="tl-preview">${preview}</div>
+          <div class="tl-preview">${escapeHtml(preview)}</div>
         </div>`;
       el.appendChild(item);
     });
     const graphJobs = currentTask?.graph_jobs || {};
-    if (currentTask?.build_knowledge_graph !== false) {
+    if (currentTask?.build_knowledge_graph ?? $('build-knowledge-graph').checked) {
       [
         { key: 'structure', name: 'structure_graph' },
         { key: 'entity', name: 'entity_graph' },
@@ -669,10 +755,10 @@ function renderTimeline(steps) {
           <div class="tl-dot ${step.status}">${STEP_ICON[item.name] || i + 1}</div>
           <div class="tl-body">
             <div class="tl-head">
-              <span class="tl-name">${item.name}</span>
-              <span class="tl-st s-${step.status}">${step.status}</span>
+              <span class="tl-name">${item.key === 'structure' ? '结构图谱' : '实体图谱'}</span>
+              <span class="tl-st s-${step.status}">${escapeHtml(statuses[step.status] || step.status)}</span>
             </div>
-            <div class="tl-preview">${preview}</div>
+            <div class="tl-preview">${escapeHtml(preview)}</div>
           </div>`;
         el.appendChild(row);
       });
@@ -682,7 +768,7 @@ function renderTimeline(steps) {
   /* ── Update status badge ── */
   function setStatusBadge(status) {
     const el = $('status-badge');
-    const map = { idle:['空闲','b-default'], pending:['排队中','b-warn'], running:['进行中','b-warn'], completed:['已完成','b-success'], failed:['失败','b-danger'] };
+    const map = { idle:['空闲','b-default'], queued:['排队中','b-warn'], pending:['排队中','b-warn'], running:['进行中','b-warn'], completed:['已完成','b-success'], failed:['失败','b-danger'] };
     const [text, cls] = map[status] || ['未知','b-default'];
     el.textContent = text;
     el.className = `badge ${cls}`;
@@ -691,6 +777,7 @@ function renderTimeline(steps) {
   /* ── Populate meta fields ── */
   function setMeta(task) {
     currentTask = task || null;
+    siteLinks.setTask(task);
     currentTaskId     = task.task_id || null;
     currentTaskStatus = task.status  || 'idle';
     const assetSummary = getAssetSummary(task);
@@ -706,6 +793,7 @@ function renderTimeline(steps) {
     if (typeof task.build_knowledge_graph === 'boolean') {
       $('build-knowledge-graph').checked = task.build_knowledge_graph;
     }
+    syncGraphTabs(Boolean(task.build_knowledge_graph));
     applyTaskTypeUi(task.task_type);
     const shortId = task.task_id ? task.task_id.slice(0, 10) + '…' : '—';
     $('task-id').textContent     = shortId;
@@ -799,6 +887,40 @@ function renderTimeline(steps) {
       if (task.status === 'failed') showToast(task.error || '任务执行失败');
       else showToast('审计已完成', 'success');
     }
+    return task;
+  }
+
+  function scheduleTaskPolling(taskId) {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      pollTask(taskId).catch(err => {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        clearAllGraphPolling();
+        resetBtn();
+        showToast(err.message);
+      });
+    }, 1500);
+  }
+
+  async function restoreTaskFromLocation(taskId) {
+    if (!taskId || !demoTokenVerified) return;
+    setSubmitBusy('恢复任务中…');
+    try {
+      const task = await pollTask(taskId);
+      if (task.url) $('url').value = task.url;
+      syncAuditUrl(task.task_id, { replace: true });
+      if (['queued', 'running', 'pending'].includes(task.status)) {
+        setSubmitBusy('审计中…');
+        ensureAllGraphPolling(task);
+        scheduleTaskPolling(task.task_id);
+      } else {
+        resetBtn();
+      }
+    } catch (err) {
+      resetBtn();
+      syncAuditUrl(null, { replace: true });
+      showToast(err?.message || '链接中的审计任务无法恢复，请重新开始审计。');
+    }
   }
 
   async function copyJsonOutput() {
@@ -877,6 +999,8 @@ function renderTimeline(steps) {
     const taskType = getSelectedTaskType();
     const isContentAudit = taskType === 'site_content_audit';
     currentTask = { task_type: taskType, status: 'queued' };
+    siteLinks.setTask(currentTask);
+    document.querySelector('[data-tab="summary"]').click();
     currentStructureGraph = null;
     currentEntityGraph = null;
     currentTaskId = null;
@@ -932,6 +1056,7 @@ function renderTimeline(steps) {
       if (!payload.success) throw new Error(payload.message || '创建任务失败');
 
       const task = payload.data;
+      syncAuditUrl(task.task_id);
       setSubmitBusy('审计中…');
       setMeta(task);
       renderTimeline(task.steps);
@@ -954,14 +1079,7 @@ function renderTimeline(steps) {
       }
 
       ensureAllGraphPolling(task);
-      pollTimer = setInterval(() => {
-        pollTask(task.task_id).catch(err => {
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          clearAllGraphPolling();
-          resetBtn();
-          showToast(err.message);
-        });
-      }, 1500);
+      scheduleTaskPolling(task.task_id);
 
     } catch (err) {
       resetBtn();
@@ -971,9 +1089,11 @@ function renderTimeline(steps) {
 
   /* ── Events ── */
   $('verify-token-btn').addEventListener('click', () => {
-    verifyDemoToken().catch(err => {
-      showToast(err?.message || 'token 验证失败');
-    });
+    verifyDemoToken()
+      .then(verified => verified && !currentTaskId ? restoreTaskFromLocation(getTaskIdFromLocation()) : null)
+      .catch(err => {
+        showToast(err?.message || 'token 验证失败');
+      });
   });
   $('demo-token').addEventListener('input', () => {
     if (!demoTokenRequired) return;
@@ -991,9 +1111,11 @@ function renderTimeline(steps) {
   $('demo-token').addEventListener('keydown', event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    verifyDemoToken().catch(err => {
-      showToast(err?.message || 'token 验证失败');
-    });
+    verifyDemoToken()
+      .then(verified => verified && !currentTaskId ? restoreTaskFromLocation(getTaskIdFromLocation()) : null)
+      .catch(err => {
+        showToast(err?.message || 'token 验证失败');
+      });
   });
   $('submit-btn').addEventListener('click', startAudit);
   $('audit-form').addEventListener('submit', e => { e.preventDefault(); startAudit(); });
@@ -1008,6 +1130,8 @@ function renderTimeline(steps) {
   $('task-type').addEventListener('change', () => {
     clearAllGraphPolling();
     currentTask = { task_type: getSelectedTaskType(), status: 'idle' };
+    siteLinks.setTask(currentTask);
+    renderReport(currentTask);
     currentStructureGraph = null;
     currentEntityGraph = null;
     currentTaskId = null;
@@ -1049,14 +1173,26 @@ function renderTimeline(steps) {
     const enabled = $('full-audit').checked;
     $('max-pages').disabled = !enabled;
     $('max-pages').style.opacity = enabled ? '1' : '0.45';
+    applyTaskTypeUi();
+  });
+  $('max-pages').addEventListener('input', () => applyTaskTypeUi());
+  $('build-knowledge-graph').addEventListener('change', () => {
+    syncGraphTabs($('build-knowledge-graph').checked);
+    renderTimeline(currentTask?.steps || {});
   });
 
   /* ── Init ── */
+  const locationTaskId = applyAuditUrlState();
   applyTaskTypeUi();
+  syncGraphTabs($('build-knowledge-graph').checked);
   renderTimeline({});
   setGraphPlaceholder('structure', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示结构图谱。', 'Structure graph will appear after the task starts.'));
   setGraphPlaceholder('entity', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示实体图谱。', 'Entity graph will appear after the task starts.'));
   syncSubmitButtonState();
-  initDemoAccess().catch(err => {
-    showToast(err?.message || '初始化 demo token 失败');
-  });
+  initDemoAccess()
+    .then(() => restoreTaskFromLocation(locationTaskId))
+    .catch(err => {
+      showToast(err?.message || '初始化 demo token 失败');
+    });
+
+  window.addEventListener('popstate', () => window.location.reload());

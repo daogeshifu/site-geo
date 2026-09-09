@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.models.storage import SiteAssetSummary
+from app.models.page_fetch import PageFetchMetadata
 
 
 class HeadingItem(BaseModel):
@@ -155,7 +156,7 @@ class SiteSignals(BaseModel):
     homepage_brand_mentions: int = 0         # 首页正文中品牌名出现次数
 
 
-class PageProfile(BaseModel):
+class PageProfile(PageFetchMetadata):
     """单页面综合画像，融合 E-E-A-T 信号和内容质量评估"""
 
     page_type: str    # 页面类型：homepage/about/service/article/case_study

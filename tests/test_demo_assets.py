@@ -37,6 +37,9 @@ def test_api_doc_is_separate_and_links_to_interactive_docs() -> None:
     assert "Google 爬虫测试 API" in response.text
     assert 'href="/docs"' in response.text
     assert "立即测试 API" in response.text
+    assert 'id="seo-checklist"' in response.text
+    assert "检测清单说明" in response.text
+    assert response.text.count("CHK-") == 26
 
 
 def test_openapi_hides_demo_task_routes_and_exposes_split_graph_routes() -> None:

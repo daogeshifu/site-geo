@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>网站 GEO 诊断 · GEO Audit</title>
+  <title>网站 SEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
+  <link rel="stylesheet" href="/static/css/workspace.css?v=20260909-checklist" />
 </head>
 <body>
 
 <header class="audit-topbar">
   <a class="audit-brand" href="/">
-    <span class="audit-brand-mark">G</span>
+    <span class="audit-brand-mark">G.</span>
     <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
   </a>
   <nav class="audit-nav" aria-label="主导航">
@@ -23,9 +24,9 @@
 
 <div class="wrap">
   <section class="page-title audit-hero">
-    <div class="audit-eyebrow"><span></span> AI Search Readiness</div>
-    <h1 id="page-heading">网站 GEO 审计</h1>
-    <p id="page-subtitle">提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。</p>
+    <div class="audit-eyebrow"><span></span> SEARCH INTELLIGENCE / WORKSPACE</div>
+    <h1 id="page-heading">网站 SEO 审计</h1>
+    <p id="page-subtitle">洞察站点搜索表现，让每一次优化都有据可循。</p>
     <div class="audit-feature-row" aria-label="审计能力">
       <span><b>01</b> 站点快照</span>
       <i></i>
@@ -35,11 +36,12 @@
     </div>
   </section>
 
-  <section class="access-panel" id="demo-access-panel">
+  <details class="access-panel" id="demo-access-panel" open>
+    <summary class="access-summary">访问验证 <span>管理 Demo Token</span></summary>
     <div class="access-copy">
       <div class="access-eyebrow">Demo Access</div>
       <div class="access-title-row">
-        <h2>输入访问 Token 后再开始执行</h2>
+        <h2>连接你的审计工作台</h2>
         <div class="access-status" aria-label="访问状态">
           <span class="access-status-label">访问状态</span>
           <span id="demo-token-badge" class="badge b-default" role="status" aria-live="polite">待验证</span>
@@ -55,8 +57,9 @@
       <button id="verify-token-btn" type="button" class="btn btn-primary">验证 Token</button>
     </div>
     <div id="demo-token-hint" class="access-hint" aria-live="polite">输入并验证 token 后，底部“开始审计”按钮才会解锁。</div>
-  </section>
+  </details>
 
+  <div class="workspace-grid">
   <div class="grid-top">
 
     <!-- 配置卡 -->
@@ -73,8 +76,8 @@
             <div class="field">
               <label>任务类型</label>
               <select id="task-type">
+                <option value="site_seo_audit" selected>网站 SEO 审计</option>
                 <option value="site_geo_audit">网站 GEO 审计</option>
-                <option value="site_seo_audit">网站 SEO 审计</option>
                 <option value="site_content_audit">网站内容审计</option>
               </select>
             </div>
@@ -93,6 +96,8 @@
               <input id="url" type="text" class="has-icon" placeholder="https://example.com" required />
             </div>
           </div>
+          <details class="advanced-config">
+            <summary>高级配置 <span>语言、AI 模型与知识图谱</span></summary>
           <div class="row-2">
             <div class="field">
               <label>OpenRouter 模型</label>
@@ -106,7 +111,7 @@
               <label>反馈语言</label>
               <select id="feedback-lang">
                 <option value="en">English</option>
-                <option value="zh">简体中文</option>
+                <option value="zh" selected>简体中文</option>
               </select>
             </div>
           </div>
@@ -131,17 +136,18 @@
           </div>
           <div class="field">
             <label for="build-knowledge-graph" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
-              <input id="build-knowledge-graph" type="checkbox" checked />
+              <input id="build-knowledge-graph" type="checkbox" />
               <span class="toggle-lbl">构建站点知识图谱</span>
-              <span class="toggle-hint">基于 MySQL 快照做实体关系投影</span>
+              <span class="toggle-hint">可选</span>
             </label>
           </div>
+          </details>
           <div id="full-audit-row" class="row-2">
             <div class="field">
               <label for="full-audit" class="toggle-wrap" style="margin-bottom:0;border:none;padding-left:0;display:flex;align-items:center">
                 <input id="full-audit" type="checkbox" />
                 <span class="toggle-lbl">启用 Full Audit</span>
-                <span class="toggle-hint">返回逐页诊断</span>
+                <span class="toggle-hint">扩展页面采样</span>
               </label>
             </div>
             <div class="field">
@@ -149,6 +155,7 @@
               <input id="max-pages" type="number" min="5" max="10000" step="1" value="12" disabled />
             </div>
           </div>
+          <p class="sample-hint" id="sample-hint">默认采样最多 8 个 URL，覆盖站点关键页面。</p>
           <div class="btn-row">
             <button id="submit-btn" type="button" class="btn btn-primary" disabled>开始审计</button>
             <button id="export-btn" type="button" class="btn btn-ghost" disabled>导出报告</button>
@@ -167,6 +174,7 @@
         <span id="status-badge" class="badge b-default">空闲</span>
       </div>
       <div class="card-body">
+        <details class="task-metadata"><summary>任务详情 <span id="task-detail-hint">查看执行信息</span></summary>
         <div class="meta-grid">
           <div class="meta-cell">
             <div class="meta-lbl">任务 ID</div>
@@ -202,6 +210,7 @@
           </div>
         </div>
 
+        </details>
         <div class="prog-row">
           <span class="prog-label">进度</span>
           <span class="prog-pct" id="progress">0%</span>
@@ -218,10 +227,13 @@
   </div><!-- /grid-top -->
 
   <!-- 结果区 -->
-  <div class="tabs-bar">
+  <main class="results-workspace">
+  <div class="results-heading"><div><span class="workspace-kicker">AUDIT OVERVIEW</span><h2>搜索表现，尽在掌握</h2></div><span class="workspace-live"><i></i> 实时审计工作台</span></div>
+  <div class="tabs-bar" role="tablist" aria-label="审计结果">
     <button class="tab-btn active" data-tab="summary">报告</button>
-    <button class="tab-btn" data-tab="structure-graph">结构图谱</button>
-    <button class="tab-btn" data-tab="entity-graph">实体图谱</button>
+    <button class="tab-btn" data-tab="site-links">站点链接 <span id="site-links-count" class="tab-count">0</span></button>
+    <button class="tab-btn graph-tab" data-tab="structure-graph" hidden>结构图谱</button>
+    <button class="tab-btn graph-tab" data-tab="entity-graph" hidden>实体图谱</button>
     <button class="tab-btn" data-tab="llm">AI 增强</button>
     <button class="tab-btn" data-tab="compare">版本对比</button>
     <button class="tab-btn" data-tab="json">原始数据</button>
@@ -229,7 +241,11 @@
   <div class="tabs-body">
 
     <div id="tab-summary" class="tab-panel active">
-      <div id="summary-text" class="report-empty placeholder">等待任务完成后生成完整报告。报告将展示综合评分、6 个汇总维度、6 平台适配、可选 Observation Layer、非首页提示、full audit 逐页诊断、关键问题、行动计划与 snapshot 证据。</div>
+      <div id="summary-text" class="report-empty placeholder"><div class="empty-orbit"><span>G.</span><i></i><b></b></div><span class="workspace-kicker">YOUR NEXT OPPORTUNITY</span><h3>发现网站的下一次增长机会</h3><p>输入站点 URL，开始一次全面的搜索健康检查。<br>从技术基础到内容质量，让优化方向清晰可见。</p><div class="empty-capabilities"><span>01 · 六维健康评分</span><span>02 · 页面抓取证据</span><span>03 · 优先行动建议</span></div></div>
+    </div>
+
+    <div id="tab-site-links" class="tab-panel">
+      <div id="site-links-output"></div>
     </div>
 
     <div id="tab-structure-graph" class="tab-panel">
@@ -304,13 +320,17 @@
     </div>
 
   </div><!-- /tabs-body -->
+  </main>
+  </div><!-- /workspace-grid -->
+  <footer class="workspace-footer"><span>GEO Audit · Search Intelligence</span><a href="/api-doc">了解审计维度与 API 接入 ↗</a></footer>
 
+  <!-- API_DOC_START -->
   <!-- ═══ 打分维度说明 ═══ -->
 
 <hr class="section-divider" style="margin-top:36px" />
 <div style="margin-top:28px">
   <div class="section-hdr">
-    <h2>打分维度与规则</h2>
+    <h2>GEO 打分维度与规则</h2>
     <span>按 6 个汇总层展示关键指标、内部公式与综合分权重，单维度原始分满分均为 100 分</span>
   </div>
 
@@ -413,7 +433,6 @@
   <div class="biz-card" style="margin-top:10px"><h4>会员 AI 增强 · 机制说明</h4><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div>
 </div>
 
-  <!-- API_DOC_START -->
   <div style="margin-top:28px;margin-bottom:48px">
     <div class="section-hdr">
       <h2>API 调用步骤</h2>
@@ -432,25 +451,27 @@
           <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
+            <div class="param-row"><span class="param-key">task_type</span><span class="param-type">string</span><span class="param-desc"><code>"site_seo_audit"</code>（默认）、<code>"site_geo_audit"</code> 或 <code>"site_content_audit"</code></span></div>
             <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
             <div class="param-row"><span class="param-key">force_refresh</span><span class="param-type">boolean</span><span class="param-desc">true 则跳过 7 天缓存强制重新审计</span></div>
             <div class="param-row"><span class="param-key">target_locale</span><span class="param-type">string</span><span class="param-desc">可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</span></div>
             <div class="param-row"><span class="param-key">feedback_lang</span><span class="param-type">string</span><span class="param-desc"><code>"en"</code>（默认）或 <code>"zh"</code>；仅控制报告返回语言，不控制目标站点语言版本</span></div>
             <div class="param-row"><span class="param-key">full_audit</span><span class="param-type">boolean</span><span class="param-desc">可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></span></div>
-            <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">仅 full audit 生效，范围 5-50，默认 12</span></div>
-            <div class="param-row"><span class="param-key">build_knowledge_graph</span><span class="param-type">boolean</span><span class="param-desc">是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>true</code>，失败不会中断审计</span></div>
+            <div class="param-row"><span class="param-key">max_pages</span><span class="param-type">int</span><span class="param-desc">Full Audit 范围 5–10000，默认 12；网站 SEO 审计未开启 Full Audit 时最多采样 8 页</span></div>
+            <div class="param-row"><span class="param-key">build_knowledge_graph</span><span class="param-type">boolean</span><span class="param-desc">是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>false</code>，开启后即使构建失败也不会中断审计</span></div>
             <div class="param-row"><span class="param-key">observation</span><span class="param-type">object</span><span class="param-desc">可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</span></div>
             <div class="param-row"><span class="param-key">llm.provider</span><span class="param-type">string</span><span class="param-desc">premium 模式下固定 <code>"openrouter"</code></span></div>
             <div class="param-row"><span class="param-key">llm.model</span><span class="param-type">string</span><span class="param-desc">如 <code>"openai/gpt-4.1"</code>、<code>"anthropic/claude-sonnet-4.6"</code></span></div>
           </div>
           <div class="code-snippet"><pre>{
   "url": "https://example.com",
+  "task_type": "site_seo_audit",
   "mode": "premium",
   "target_locale": "nl",
   "feedback_lang": "zh",
   "full_audit": true,
   "max_pages": 12,
-  "build_knowledge_graph": true,
+  "build_knowledge_graph": false,
   "force_refresh": false,
   "llm": { "provider": "openrouter", "model": "openai/gpt-4.1" }
 }</pre></div>
@@ -548,7 +569,7 @@
             <div class="param-row"><span class="method m-post" style="border-radius:4px;font-size:11px">POST</span><code style="font-size:12px">/api/v1/audit/full</code><span class="param-desc" style="margin-left:4px">全量同步审计（含 summary，无缓存）</span></div>
           </div>
           <div class="code-snippet"><pre>// 单模块请求体（Body 字段相同）
-{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12, "build_knowledge_graph": true }
+{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12, "build_knowledge_graph": false }
 
 // premium 模式下可附加 LLM 配置
 { "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20, "build_knowledge_graph": true,
@@ -569,6 +590,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260508-graph-split"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260909-checklist"></script>
 </body>
 </html>

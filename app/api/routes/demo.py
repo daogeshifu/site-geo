@@ -11,6 +11,8 @@ from app.api.routes.tasks import build_pending_graph_payload, task_service
 from app.core.exceptions import AppError
 from app.models.responses import success_response
 from app.models.task import TaskAuditRequest
+from app.services.reporting.site_pages import task_site_pages
+from app.services.infra.page_sources import read_page_source
 
 # Demo 路由：返回模板化后的交互式 GEO 审计控制台页面
 router = APIRouter(tags=["demo"])
@@ -105,6 +107,29 @@ async def get_demo_task_knowledge_graph(task_id: str, request: Request) -> dict:
     """兼容旧接口：demo 页返回结构图谱数据。"""
     require_demo_token(request)
     return await _load_demo_graph(task_id, graph_kind="structure")
+
+
+@router.get("/api/v1/demo/tasks/{task_id}/pages", include_in_schema=False)
+async def get_demo_task_pages(task_id: str, request: Request) -> dict:
+    require_demo_token(request)
+    task = await task_service.get_task(task_id)
+    if not task:
+        raise AppError(404, "task not found")
+    pages = task_site_pages(task)
+    return success_response({"pages": [{k: v for k, v in page.items() if k != "source_key"} for page in pages]})
+
+
+@router.get("/api/v1/demo/tasks/{task_id}/pages/{page_id}/source", include_in_schema=False)
+async def get_demo_page_source(task_id: str, page_id: str, request: Request) -> dict:
+    require_demo_token(request)
+    task = await task_service.get_task(task_id)
+    if not task:
+        raise AppError(404, "task not found")
+    page = next((page for page in task_site_pages(task) if page["id"] == page_id), None)
+    if page is None:
+        raise AppError(404, "page not found in this task")
+    html = await read_page_source(page["source_key"]) if page.get("source_key") else None
+    return success_response({"html": html, "fetched_at": page.get("fetched_at"), "truncated": page.get("source_truncated", False)})
 
 
 async def _load_demo_graph(task_id: str, *, graph_kind: str) -> dict:

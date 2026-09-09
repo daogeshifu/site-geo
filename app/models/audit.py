@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, Field
+from app.models.page_fetch import PageFetchMetadata
 
 
 class BaseAuditResult(BaseModel):
@@ -315,6 +316,7 @@ class SeoIssueResult(BaseModel):
     """SEO issue backlog row."""
 
     issue_id: str
+    check_item: str = ""
     priority: str
     severity: str
     category: str
@@ -359,7 +361,7 @@ class SeoRoadmapItem(BaseModel):
     status: str = "todo"
 
 
-class SeoSamplePageResult(BaseModel):
+class SeoSamplePageResult(PageFetchMetadata):
     """Sampled page snapshot used in SEO auditing."""
 
     url: str

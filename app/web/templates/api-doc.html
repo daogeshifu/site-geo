@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>API 文档 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727" />
-  <link rel="stylesheet" href="/static/css/api-doc.css?v=20260727" />
+  <link rel="stylesheet" href="/static/css/api-doc.css?v=20260909-checklist-anchor" />
 </head>
 <body>
   <header class="topbar">
@@ -49,6 +49,61 @@
       <article><b>01</b><div><strong>创建任务</strong><small>提交 URL 和审计选项</small></div></article>
       <article><b>02</b><div><strong>轮询状态</strong><small>跟踪阶段与进度</small></div></article>
       <article><b>03</b><div><strong>读取结果</strong><small>报告、图谱与原始数据</small></div></article>
+    </section>
+
+    <section class="crawler-api-section">
+      <div class="section-hdr"><h2>网站 SEO 审计与页面证据</h2><span>Demo 默认 SEO 审计，知识图谱按需开启</span></div>
+      <div class="api-desc">网站 SEO 审计（<code>task_type=site_seo_audit</code>）未开启 Full Audit 时最多采样 8 页；开启后默认 12 页，<code>max_pages</code> 范围为 5–10000。综合评分包含 Technical SEO、Content Quality、On-Page SEO、Schema、Performance、AI Search / GEO；配置权重分别为 22、23、20、10、10、10，计算时按总和 95 归一化。性能为启发式评估，未接入真实 CrUX/PSI。</div>
+      <div class="api-desc">站点链接展示当前任务发现的 URL。仅采样页面有抓取测量，历史记录中缺失的值显示“未记录”。新抓取会记录时间、状态码、响应耗时、部分响应头，并单独缓存 HTML 源码（每份最多 2 MB，超限标记截断）。源码以纯文本展示，缓存位于 <code>CACHE_DIR/page-sources</code>，不随任务轮询重复传输。</div>
+      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages</div>
+      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages/{page_id}/source</div>
+      <p class="api-desc">以上 Demo 证据接口遵循现有 <code>X-Demo-Token</code> 访问验证；<code>page_id</code> 来自对应任务的链接列表。</p>
+    </section>
+
+    <section class="crawler-api-section checklist-guide" id="seo-checklist">
+      <div class="section-hdr"><h2>检测清单说明</h2><span>六大评分维度、26 项检查与问题清单的对应关系</span></div>
+      <div class="checklist-relationship">
+        <article><b>01</b><div><strong>覆盖清单</strong><p>固定运行全部 26 项，展示通过、待优化或不适用，以及每项诊断证据。</p></div></article>
+        <article><b>02</b><div><strong>问题清单</strong><p>仅收录覆盖清单中的未通过项，并依据影响程度排序为 P0、P1、P2。</p></div></article>
+        <article><b>03</b><div><strong>六大维度</strong><p>从站点级信号汇总健康分，用于判断整体短板，不等同于问题数量求和。</p></div></article>
+      </div>
+      <div class="checklist-dimension-row" aria-label="六大评分维度">
+        <span>技术 SEO <b>22</b></span><span>内容质量 <b>23</b></span><span>页面 SEO <b>20</b></span><span>结构化数据 <b>10</b></span><span>性能体验 <b>10</b></span><span>AI 搜索 / GEO <b>10</b></span>
+      </div>
+      <div class="checklist-table-wrap">
+        <table class="checklist-table">
+          <thead><tr><th>编号</th><th>归属维度</th><th>精简事项</th><th>检查标准</th></tr></thead>
+          <tbody>
+            <tr><td>CHK-001</td><td>技术 SEO</td><td><strong>Robots</strong></td><td>robots.txt 可用且声明本站 Sitemap</td></tr>
+            <tr><td>CHK-002</td><td>技术 SEO</td><td><strong>站点地图</strong></td><td>XML Sitemap 存在、全 HTTPS、无脏数据</td></tr>
+            <tr><td>CHK-003</td><td>数据衡量（辅助）</td><td><strong>数据追踪</strong></td><td>GA4 与 GSC 验证信号均可识别</td></tr>
+            <tr><td>CHK-004</td><td>技术 SEO</td><td><strong>HTTPS</strong></td><td>HTTP 自动 301 到首选 HTTPS 地址</td></tr>
+            <tr><td>CHK-005</td><td>技术 SEO</td><td><strong>主域统一</strong></td><td>www 与非 www 统一到首选主域</td></tr>
+            <tr><td>CHK-006</td><td>技术 SEO</td><td><strong>URL 规范</strong></td><td>路径简短、语义化、小写且无冗余参数</td></tr>
+            <tr><td>CHK-007</td><td>结构化数据</td><td><strong>结构化数据</strong></td><td>按页面类型部署适配的 Schema</td></tr>
+            <tr><td>CHK-008</td><td>技术 SEO</td><td><strong>HTTP 状态</strong></td><td>核心页面无 4xx、5xx 或明显重定向链</td></tr>
+            <tr><td>CHK-009</td><td>技术 SEO</td><td><strong>移动适配</strong></td><td>Viewport 与移动端基础适配正常</td></tr>
+            <tr><td>CHK-010</td><td>性能体验</td><td><strong>页面性能</strong></td><td>响应、阻塞资源与核心页面负担可控</td></tr>
+            <tr><td>CHK-011</td><td>技术 SEO</td><td><strong>多语言</strong></td><td>hreflang 与目标语言版本一致</td></tr>
+            <tr><td>CHK-012</td><td>技术 SEO</td><td><strong>索引指令</strong></td><td>Noindex 未误伤应收录的核心页面</td></tr>
+            <tr><td>CHK-013</td><td>技术 SEO</td><td><strong>JS 渲染</strong></td><td>初始 HTML 可见核心标题、正文和链接</td></tr>
+            <tr><td>CHK-014</td><td>页面 SEO</td><td><strong>页面标题</strong></td><td>Title 唯一、含主题词且长度合适</td></tr>
+            <tr><td>CHK-015</td><td>页面 SEO</td><td><strong>页面描述</strong></td><td>Meta Description 完整且长度合适</td></tr>
+            <tr><td>CHK-016</td><td>页面 SEO</td><td><strong>标题层级</strong></td><td>H 标签层级合理且核心页仅一个 H1</td></tr>
+            <tr><td>CHK-017</td><td>技术 SEO</td><td><strong>规范链接</strong></td><td>Canonical 与首选最终 URL 对齐</td></tr>
+            <tr><td>CHK-018</td><td>技术 SEO</td><td><strong>语言声明</strong></td><td>HTML lang 属性准确且完整</td></tr>
+            <tr><td>CHK-019</td><td>页面 SEO</td><td><strong>图片文本</strong></td><td>内容图片具备描述性 Alt 文本</td></tr>
+            <tr><td>CHK-020</td><td>页面 SEO</td><td><strong>内部链接</strong></td><td>锚文本语义清晰且无异常 nofollow</td></tr>
+            <tr><td>CHK-021</td><td>性能体验</td><td><strong>页面体量</strong></td><td>HTML 与页面负担处于合理范围</td></tr>
+            <tr><td>CHK-022</td><td>性能体验</td><td><strong>图片加载</strong></td><td>懒加载与图片尺寸声明合理</td></tr>
+            <tr><td>CHK-023</td><td>内容质量</td><td><strong>内容深度</strong></td><td>核心主题覆盖与页面深度充足</td></tr>
+            <tr><td>CHK-024</td><td>内容质量</td><td><strong>内容可信度</strong></td><td>作者、日期、案例等 E-E-A-T 信号完整</td></tr>
+            <tr><td>CHK-025</td><td>内容质量</td><td><strong>内容引用</strong></td><td>具备引用、FAQ 与 answer-first 结构</td></tr>
+            <tr><td>CHK-026</td><td>AI 搜索 / GEO</td><td><strong>AI 可见性</strong></td><td>AI 抓取、实体与可引用结构达到基础水平</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="checklist-footnote">说明：权重为当前原始配置，计算综合分时按总和 95 归一化；“数据追踪”属于辅助诊断事项，不单独形成第七个评分维度。</p>
     </section>
 
     {{API_DOC_CONTENT}}

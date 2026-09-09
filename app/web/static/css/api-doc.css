@@ -122,6 +122,26 @@ body { background: #f7f9fb; }
 .crawler-endpoint-grid .api-endpoint { width: 100%; }
 .crawler-endpoint-grid p { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
+html { scroll-behavior: smooth; }
+.checklist-guide { scroll-margin-top: 92px; }
+.checklist-relationship { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.checklist-relationship article { display: flex; gap: 13px; padding: 18px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.checklist-relationship b { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 8px; background: #edf5ff; color: var(--blue); font-size: 10px; }
+.checklist-relationship strong { color: var(--ink); font-size: 13px; }
+.checklist-relationship p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.checklist-dimension-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; margin: 14px 0; }
+.checklist-dimension-row span { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 11px; border-radius: 8px; background: #eef6f5; color: #416f69; font-size: 10px; }
+.checklist-dimension-row b { color: #173f44; font-size: 12px; }
+.checklist-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.checklist-table { width: 100%; min-width: 760px; border-collapse: collapse; color: #526176; font-size: 11px; }
+.checklist-table th { padding: 11px 14px; border-bottom: 1px solid var(--line); background: #f5f8fa; color: #758499; font-size: 10px; text-align: left; }
+.checklist-table td { padding: 11px 14px; border-bottom: 1px solid #edf1f4; line-height: 1.55; }
+.checklist-table tr:last-child td { border-bottom: 0; }
+.checklist-table td:first-child { color: #8b99a9; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.checklist-table td:nth-child(2) { color: #71818f; }
+.checklist-table strong { color: #243d4e; font-size: 12px; }
+.checklist-footnote { margin: 12px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
+
 .api-final-cta {
   margin-top: 50px;
   padding: 25px 28px;
@@ -141,7 +161,9 @@ body { background: #f7f9fb; }
 @media (max-width: 860px) {
   .api-doc-hero { grid-template-columns: 1fr; }
   .api-summary-grid,
-  .crawler-endpoint-grid { grid-template-columns: 1fr; }
+  .crawler-endpoint-grid,
+  .checklist-relationship { grid-template-columns: 1fr; }
+  .checklist-dimension-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .api-doc-main { padding: 40px 16px 60px; }
@@ -150,5 +172,21 @@ body { background: #f7f9fb; }
   .api-final-cta { flex-direction: column; align-items: stretch; }
   .api-final-cta > a { text-align: center; }
   .section-hdr { flex-direction: column; gap: 4px; }
+  .checklist-dimension-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .param-row { flex-wrap: wrap; }
 }
+.dim-grid, .biz-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.dim-card, .biz-card, .score-scale { border: 1px solid #dfe7ec; background: white; border-radius: 12px; padding: 20px; min-width: 0; }
+.dim-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; font-weight: 650; }
+.dim-score { color: #168480; }
+.dim-row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid #edf1f3; font-size: 12px; }
+.dim-row-label { color: #748691; }
+.dim-row-val { text-align: right; overflow-wrap: anywhere; }
+.biz-card h4 { margin-bottom: 12px; font-size: 15px; }
+.biz-card ul { padding-left: 18px; color: #667b88; font-size: 12px; line-height: 1.9; }
+.biz-card li + li { margin-top: 8px; }
+.biz-card code { overflow-wrap: anywhere; }
+.score-cells { display: flex; flex-wrap: wrap; gap: 14px; }
+.score-cell { display: flex; gap: 8px; padding: 8px; }
+.section-divider { border: 0; border-top: 1px solid #e1e8ed; }
+@media (max-width: 900px) { .dim-grid, .biz-grid { grid-template-columns: 1fr; } }

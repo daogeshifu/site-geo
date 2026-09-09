@@ -29,6 +29,7 @@ from app.services.audit.scoring import ScoringService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
 from app.utils.fetcher import fetch_url
+from app.services.infra.page_sources import capture_page_metadata
 from app.utils.html_parser import parse_html
 from app.utils.url_utils import normalize_url
 
@@ -166,7 +167,7 @@ class SeoAuditService(AuditBaseService):
                 return SeoSamplePageResult(
                     url=url,
                     page_type=page_type,
-                    status_code=response.status_code,
+                    **(await capture_page_metadata(response)),
                     final_url=response.final_url,
                     redirected=normalize_url(response.final_url) != normalize_url(url),
                     title=parsed["title"],
@@ -727,32 +728,32 @@ class SeoAuditService(AuditBaseService):
         )
         dimension_inputs = {
             "technical": {
-                "label": self._t(feedback_lang, "Technical SEO", "Technical SEO"),
+                "label": self._t(feedback_lang, "技术 SEO", "Technical SEO"),
                 "summary": self._t(feedback_lang, "抓取、索引、规范化与站点结构信号。", "Crawling, indexing, canonicalization, and site-structure signals."),
                 "highlights": technical.strengths[:3],
             },
             "content_quality": {
-                "label": self._t(feedback_lang, "Content Quality", "Content Quality"),
+                "label": self._t(feedback_lang, "内容质量", "Content Quality"),
                 "summary": self._t(feedback_lang, "页面深度、主题覆盖与 E-E-A-T 信号。", "Page depth, topical coverage, and E-E-A-T signals."),
                 "highlights": [self._t(feedback_lang, f"E-E-A-T {eeat_average}/100", f"E-E-A-T {eeat_average}/100")] + content.strengths[:2],
             },
             "on_page": {
-                "label": self._t(feedback_lang, "On-Page SEO", "On-Page SEO"),
+                "label": self._t(feedback_lang, "页面 SEO", "On-Page SEO"),
                 "summary": self._t(feedback_lang, "Title、描述、H 标签、图片与内链语义。", "Titles, descriptions, headings, images, and internal link semantics."),
                 "highlights": [self._t(feedback_lang, "采样页模板级 On-Page 基础检查", "Template-level on-page checks across sampled pages")],
             },
             "schema": {
-                "label": self._t(feedback_lang, "Schema", "Schema"),
+                "label": self._t(feedback_lang, "结构化数据", "Schema"),
                 "summary": self._t(feedback_lang, "结构化数据覆盖、实体关系与机器可读一致性。", "Structured data coverage, entity relationships, and machine-readable consistency."),
                 "highlights": schema_result.strengths[:3],
             },
             "performance": {
-                "label": self._t(feedback_lang, "Core Web Vitals / Performance", "Core Web Vitals / Performance"),
+                "label": self._t(feedback_lang, "性能体验", "Core Web Vitals / Performance"),
                 "summary": self._t(feedback_lang, "响应速度、阻塞资源、图片与页面体量。", "Response speed, blocking resources, images, and payload size."),
                 "highlights": technical.strengths[:2],
             },
             "ai_search": {
-                "label": self._t(feedback_lang, "AI Search / GEO", "AI Search / GEO"),
+                "label": self._t(feedback_lang, "AI 搜索 / GEO", "AI Search / GEO"),
                 "summary": self._t(feedback_lang, "AI 可抓取性、实体清晰度与可引用内容结构。", "AI crawlability, entity clarity, and citation-ready content structure."),
                 "highlights": visibility.strengths[:3],
             },
@@ -790,12 +791,23 @@ class SeoAuditService(AuditBaseService):
             for item in checks
         ]
 
-    def _issue_results(self, checks: list[dict[str, Any]]) -> list[SeoIssueResult]:
+    def _issue_results(self, checks: list[dict[str, Any]], feedback_lang: str = "en") -> list[SeoIssueResult]:
         issues = []
-        for index, item in enumerate([check for check in checks if check["status"] == "fail"], start=1):
+        priority_order = {"P0": 0, "P1": 1, "P2": 2}
+        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        failed_checks = sorted(
+            (check for check in checks if check["status"] == "fail"),
+            key=lambda item: (
+                priority_order.get(item.get("priority"), 99),
+                severity_order.get(item.get("severity"), 99),
+                item.get("id", ""),
+            ),
+        )
+        for index, item in enumerate(failed_checks, start=1):
             issues.append(
                 SeoIssueResult(
                     issue_id=f"P-{index:03d}",
+                    check_item=self._short_check_label(item["id"], feedback_lang=feedback_lang),
                     priority=item["priority"],
                     severity=item["severity"],
                     category=item["category"],
@@ -812,18 +824,37 @@ class SeoAuditService(AuditBaseService):
             )
         return issues
 
+    def _short_check_label(self, check_id: str, *, feedback_lang: str) -> str:
+        labels = {
+            "CHK-001": ("Robots", "Robots"), "CHK-002": ("站点地图", "Sitemap"),
+            "CHK-003": ("数据追踪", "Analytics"), "CHK-004": ("HTTPS", "HTTPS"),
+            "CHK-005": ("主域统一", "Host"), "CHK-006": ("URL 规范", "URL"),
+            "CHK-007": ("结构化数据", "Schema"), "CHK-008": ("HTTP 状态", "HTTP Status"),
+            "CHK-009": ("移动适配", "Mobile"), "CHK-010": ("页面性能", "Performance"),
+            "CHK-011": ("多语言", "Hreflang"), "CHK-012": ("索引指令", "Noindex"),
+            "CHK-013": ("JS 渲染", "Rendering"), "CHK-014": ("页面标题", "Title"),
+            "CHK-015": ("页面描述", "Description"), "CHK-016": ("标题层级", "Headings"),
+            "CHK-017": ("规范链接", "Canonical"), "CHK-018": ("语言声明", "Language"),
+            "CHK-019": ("图片文本", "Image Alt"), "CHK-020": ("内部链接", "Internal Links"),
+            "CHK-021": ("页面体量", "Payload"), "CHK-022": ("图片加载", "Image Loading"),
+            "CHK-023": ("内容深度", "Content Depth"), "CHK-024": ("内容可信度", "E-E-A-T"),
+            "CHK-025": ("内容引用", "Citability"), "CHK-026": ("AI 可见性", "AI Visibility"),
+        }
+        zh_label, en_label = labels.get(check_id, ("站点检查", "Site Check"))
+        return zh_label if feedback_lang == "zh" else en_label
+
     def _roadmap(self, issues: list[SeoIssueResult], feedback_lang: str) -> list[SeoRoadmapItem]:
         roadmap: list[SeoRoadmapItem] = []
         for issue in issues:
             if issue.priority == "P0":
                 phase = "0-30"
-                impact = self._t(feedback_lang, "Stop-loss: fix crawl, index, and canonical blockers.", "Stop-loss: fix crawl, index, and canonical blockers.")
+                impact = self._t(feedback_lang, "优先止损：修复抓取、索引与规范化阻断。", "Stop-loss: fix crawl, index, and canonical blockers.")
             elif issue.category in {"Schema", "Content Quality", "On-Page SEO"}:
                 phase = "31-60"
-                impact = self._t(feedback_lang, "Build stronger landing pages, metadata, and structured content coverage.", "Build stronger landing pages, metadata, and structured content coverage.")
+                impact = self._t(feedback_lang, "完善落地页、页面元数据与结构化内容覆盖。", "Build stronger landing pages, metadata, and structured content coverage.")
             else:
                 phase = "61-90"
-                impact = self._t(feedback_lang, "Compound trust, AI visibility, and long-tail quality signals.", "Compound trust, AI visibility, and long-tail quality signals.")
+                impact = self._t(feedback_lang, "持续积累信任、AI 可见性与长尾质量信号。", "Compound trust, AI visibility, and long-tail quality signals.")
             roadmap.append(
                 SeoRoadmapItem(
                     phase=phase,
@@ -935,7 +966,7 @@ class SeoAuditService(AuditBaseService):
             variant_results=variant_results,
         )
         coverage_checks = self._coverage_results(checks)
-        issues_table = self._issue_results(checks)
+        issues_table = self._issue_results(checks, feedback_lang)
         roadmap = self._roadmap(issues_table, feedback_lang)
         dimensions = self._dimension_cards(
             feedback_lang=feedback_lang,

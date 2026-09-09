@@ -19,6 +19,7 @@ from app.models.discovery import (
 from app.services.discovery.backlinks import BacklinkService
 from app.services.infra.site_assets import SiteAssetStore
 from app.utils.fetcher import fetch_url
+from app.services.infra.page_sources import capture_page_metadata
 from app.utils.heuristics import detect_site_signals, infer_business_type, select_key_pages
 from app.utils.html_parser import parse_html
 from app.utils.llms_parser import inspect_llms
@@ -235,6 +236,7 @@ class DiscoveryService:
 
         parsed = parse_html(response.final_url, response.text, scope_url=scope_url)
         profile = self._build_page_profile(page_type=page_type, final_url=response.final_url, parsed=parsed)
+        profile = profile.model_copy(update=await capture_page_metadata(response))
         if asset_stats is not None:
             asset_stats["fetched"] = asset_stats.get("fetched", 0) + 1
         if self.asset_store.enabled and site_id is not None:
@@ -565,6 +567,8 @@ class DiscoveryService:
                 parsed=parsed_homepage,
             )
             page_profiles: dict[str, PageProfile] = {"homepage": homepage_profile}
+            homepage_profile = homepage_profile.model_copy(update=await capture_page_metadata(homepage_response))
+            page_profiles["homepage"] = homepage_profile
             asset_stats["fetched"] += 1
             if self.asset_store.available and actual_site:
                 await self.asset_store.save_page_snapshot(

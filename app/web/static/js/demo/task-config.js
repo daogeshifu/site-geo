@@ -41,7 +41,7 @@ export const TASK_TYPE_CONFIG = {
   site_seo_audit: {
     heading: { zh: '网站 SEO 审计', en: 'Website SEO Audit' },
     subtitle: {
-      zh: '基于 Google SEO 审计模板输出站点级检查清单、问题总表与 30/60/90 路线图。',
+      zh: '从技术基础到内容质量，洞察搜索机会，让每一次优化都有据可循。',
       en: 'Run a site-level Google SEO audit with a coverage checklist, issue backlog, and 30/60/90 roadmap.'
     },
     urlLabel: { zh: '站点 URL', en: 'Site URL' },

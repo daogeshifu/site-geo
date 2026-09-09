@@ -160,7 +160,12 @@ def _base_discovery() -> DiscoveryResult:
             same_as_detected=True,
         ),
         backlinks=BacklinkOverviewResult(available=False),
-        page_profiles={"homepage": homepage_profile, "article": article_profile},
+        page_profiles={
+            "homepage": homepage_profile,
+            "service": homepage_profile.model_copy(update={"page_type": "service"}),
+            "about": homepage_profile.model_copy(update={"page_type": "about"}),
+            "article": article_profile,
+        },
     )
 
 

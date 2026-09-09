@@ -64,6 +64,7 @@ import fastapi
 import uvicorn
 import pydantic
 import httpx
+import cloudscraper
 import bs4
 import lxml
 import tenacity

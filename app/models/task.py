@@ -19,7 +19,7 @@ GraphJobState = Literal["pending", "running", "completed", "failed", "skipped"]
 class TaskAuditRequest(UrlRequest):
     """异步审计任务创建请求"""
 
-    task_type: TaskType = "site_geo_audit"
+    task_type: TaskType = "site_seo_audit"
     force_refresh: bool = False  # 是否强制跳过缓存重新执行
     observation: ObservationInput | None = None
 
@@ -56,7 +56,7 @@ class AuditTask(BaseModel):
     normalized_url: str    # 规范化 URL
     domain: str            # 目标域名
     cache_key: str         # SHA256 缓存键
-    task_type: TaskType = "site_geo_audit"
+    task_type: TaskType = "site_seo_audit"
     mode: str = "standard"
     llm: LLMConfig | None = None
     target_locale: str | None = None
@@ -64,7 +64,7 @@ class AuditTask(BaseModel):
     observation: ObservationInput | None = None
     full_audit: bool = False
     max_pages: int = 12
-    build_knowledge_graph: bool = True
+    build_knowledge_graph: bool = False
     status: TaskStatus = "queued"         # 任务整体状态
     current_step: str = "queued"          # 当前正在执行的步骤名称
     progress_percent: int = 0             # 完成进度百分比（0-100）

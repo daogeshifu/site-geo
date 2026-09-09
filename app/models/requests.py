@@ -48,7 +48,7 @@ class UrlRequest(BaseModel):
     max_pages: int = Field(default=12, ge=5, le=10000)
     target_locale: TargetLocale | None = None   # 目标站点语言版本（与反馈语言分离）
     feedback_lang: FeedbackLang = "en"
-    build_knowledge_graph: bool = True
+    build_knowledge_graph: bool = False
 
 
 class GoogleCrawlerTestRequest(BaseModel):
