@@ -57,6 +57,7 @@
       <div class="api-desc">站点链接展示当前任务发现的 URL。仅采样页面有抓取测量，历史记录中缺失的值显示“未记录”。新抓取会记录时间、状态码、响应耗时、部分响应头，并单独缓存 HTML 源码（每份最多 2 MB，超限标记截断）。源码以纯文本展示，缓存位于 <code>CACHE_DIR/page-sources</code>，不随任务轮询重复传输。</div>
       <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages</div>
       <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages/{page_id}/source</div>
+      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/export.xlsx</div>
       <p class="api-desc">以上 Demo 证据接口遵循现有 <code>X-Demo-Token</code> 访问验证；<code>page_id</code> 来自对应任务的链接列表。</p>
     </section>
 

@@ -23,6 +23,17 @@ SOURCE_LABELS = {
     "sitemap": "Sitemap",
     "internal_link": "站内链接",
 }
+CATEGORY_LABELS = {
+    "Technical SEO": "技术 SEO", "International SEO": "国际 SEO", "On-Page SEO": "页面 SEO",
+    "Image SEO": "图片 SEO", "Content Quality": "内容质量", "Schema": "结构化数据",
+    "Performance": "性能体验", "AI Search": "AI 搜索 / GEO", "Measurement": "数据衡量",
+}
+DIFFICULTY_LABELS = {"low": "低", "medium": "中", "high": "高"}
+STATUS_LABELS = {"todo": "待处理", "in_progress": "处理中", "done": "已完成"}
+PAGE_TYPE_LABELS = {
+    "homepage": "首页", "about": "关于页", "service": "服务页", "product": "产品页",
+    "article": "文章页", "blog": "博客页", "case_study": "案例页", "page": "页面",
+}
 CHECK_LABELS = {
     "CHK-001": "Robots", "CHK-002": "站点地图", "CHK-003": "数据追踪",
     "CHK-004": "HTTPS", "CHK-005": "主域统一", "CHK-006": "URL 规范",
@@ -133,7 +144,7 @@ def build_seo_excel_export(task) -> tuple[bytes, str]:
         priority_format = formats.get(priority.lower(), formats["center"])
         values = [
             row_index - 4,
-            _text(issue.get("category"), "-"),
+            CATEGORY_LABELS.get(issue.get("category"), _text(issue.get("category"), "-")),
             check_item,
             priority,
             SEVERITY_LABELS.get(issue.get("severity"), _text(issue.get("severity"), "-")),
@@ -143,8 +154,8 @@ def build_seo_excel_export(task) -> tuple[bytes, str]:
             _text(issue.get("recommendation"), "-"),
             _text(issue.get("owner_team"), "未分配"),
             _text(issue.get("estimated_effort"), "未评估"),
-            _text(issue.get("implementation_difficulty"), "未评估"),
-            _text(issue.get("status"), "todo"),
+            DIFFICULTY_LABELS.get(issue.get("implementation_difficulty"), _text(issue.get("implementation_difficulty"), "未评估")),
+            STATUS_LABELS.get(issue.get("status"), _text(issue.get("status"), "待处理")),
         ]
         issue_sheet.set_row(row_index, 56)
         for col, value in enumerate(values):
@@ -172,7 +183,7 @@ def build_seo_excel_export(task) -> tuple[bytes, str]:
         word_count = page.get("word_count") if page.get("word_count") is not None else "未记录"
         values = [
             row_index - 4,
-            _text(page.get("page_type"), "页面"),
+            PAGE_TYPE_LABELS.get(page.get("page_type"), _text(page.get("page_type"), "页面")),
             _text(page.get("title"), "未记录"),
             _text(page.get("url"), "-"),
             word_count,

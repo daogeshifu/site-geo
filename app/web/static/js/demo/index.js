@@ -295,7 +295,7 @@ function handleDemoAuthFailure(message = 'Demo token required or invalid') {
     hint: message
   });
   resetBtn();
-  $('export-btn').disabled = true;
+  syncExportButtonState(null);
 }
 
 async function demoApiFetch(path, options = {}) {
@@ -1038,7 +1038,7 @@ function renderTimeline(steps) {
     $('llm-notes').textContent = '等待会员增强状态。';
     setGraphPlaceholder('structure', currentTask);
     setGraphPlaceholder('entity', currentTask);
-    $('export-btn').disabled = true;
+    syncExportButtonState(currentTask);
     renderTimeline({});
 
     const mode = $('mode').value;
@@ -1166,7 +1166,7 @@ function renderTimeline(steps) {
     $('asset-counts').textContent = '—';
     $('asset-reuse').textContent = '—';
     $('current-mode-display').textContent = '—';
-    $('export-btn').disabled = true;
+    syncExportButtonState(null);
     setStatusBadge('idle');
     applyTaskTypeUi();
     renderTimeline({});
