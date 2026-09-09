@@ -6,7 +6,7 @@
   <title>网站 SEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
-  <link rel="stylesheet" href="/static/css/workspace.css?v=20260909-checklist" />
+  <link rel="stylesheet" href="/static/css/workspace.css?v=20260909-xlsx-export" />
 </head>
 <body>
 
@@ -158,7 +158,6 @@
           <p class="sample-hint" id="sample-hint">默认采样最多 8 个 URL，覆盖站点关键页面。</p>
           <div class="btn-row">
             <button id="submit-btn" type="button" class="btn btn-primary" disabled>开始审计</button>
-            <button id="export-btn" type="button" class="btn btn-ghost" disabled>导出报告</button>
           </div>
         </form>
       </div>
@@ -229,14 +228,20 @@
   <!-- 结果区 -->
   <main class="results-workspace">
   <div class="results-heading"><div><span class="workspace-kicker">AUDIT OVERVIEW</span><h2>搜索表现，尽在掌握</h2></div><span class="workspace-live"><i></i> 实时审计工作台</span></div>
-  <div class="tabs-bar" role="tablist" aria-label="审计结果">
-    <button class="tab-btn active" data-tab="summary">报告</button>
-    <button class="tab-btn" data-tab="site-links">站点链接 <span id="site-links-count" class="tab-count">0</span></button>
-    <button class="tab-btn graph-tab" data-tab="structure-graph" hidden>结构图谱</button>
-    <button class="tab-btn graph-tab" data-tab="entity-graph" hidden>实体图谱</button>
-    <button class="tab-btn" data-tab="llm">AI 增强</button>
-    <button class="tab-btn" data-tab="compare">版本对比</button>
-    <button class="tab-btn" data-tab="json">原始数据</button>
+  <div class="tabs-row">
+    <div class="tabs-bar" role="tablist" aria-label="审计结果">
+      <button class="tab-btn active" data-tab="summary">报告</button>
+      <button class="tab-btn" data-tab="site-links">站点链接 <span id="site-links-count" class="tab-count">0</span></button>
+      <button class="tab-btn graph-tab" data-tab="structure-graph" hidden>结构图谱</button>
+      <button class="tab-btn graph-tab" data-tab="entity-graph" hidden>实体图谱</button>
+      <button class="tab-btn" data-tab="llm">AI 增强</button>
+      <button class="tab-btn" data-tab="compare">版本对比</button>
+      <button class="tab-btn" data-tab="json">原始数据</button>
+    </div>
+    <button id="export-btn" type="button" class="tabs-export-btn" disabled aria-label="导出问题清单和链接清单 Excel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" /></svg>
+      <span class="export-label">导出 Excel</span>
+    </button>
   </div>
   <div class="tabs-body">
 
@@ -590,6 +595,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260909-checklist"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260909-xlsx-export"></script>
 </body>
 </html>

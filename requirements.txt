@@ -14,4 +14,5 @@ pymysql==1.1.1
 pytest==8.3.4
 pytest-asyncio==0.24.0
 playwright>=1.50,<2
+XlsxWriter==3.2.9
 eval_type_backport==0.2.2

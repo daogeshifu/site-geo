@@ -73,6 +73,7 @@ import orjson
 import dotenv
 import pythonjsonlogger
 import playwright
+import xlsxwriter
 PY
 }
 

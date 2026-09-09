@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app.api.demo_access import API_TOKEN_HEADER, DEMO_TOKEN_HEADER, is_demo_token_enabled, require_demo_token
 from app.api.routes.report import build_task_report_response
@@ -12,6 +12,7 @@ from app.core.exceptions import AppError
 from app.models.responses import success_response
 from app.models.task import TaskAuditRequest
 from app.services.reporting.site_pages import task_site_pages
+from app.services.reporting.seo_excel import build_seo_excel_export
 from app.services.infra.page_sources import read_page_source
 
 # Demo 路由：返回模板化后的交互式 GEO 审计控制台页面
@@ -186,3 +187,18 @@ async def export_demo_task_report(task_id: str, request: Request) -> PlainTextRe
     """demo 页专用报告导出入口，要求携带 demo token。"""
     require_demo_token(request)
     return await build_task_report_response(task_id)
+
+
+@router.get("/api/v1/demo/tasks/{task_id}/export.xlsx", include_in_schema=False)
+async def export_demo_seo_excel(task_id: str, request: Request) -> Response:
+    """导出 SEO 问题清单与站点链接清单。"""
+    require_demo_token(request)
+    task = await task_service.get_task(task_id)
+    if not task:
+        raise AppError(404, "task not found")
+    content, filename = build_seo_excel_export(task)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

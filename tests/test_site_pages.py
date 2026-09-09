@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
+from io import BytesIO
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 
@@ -79,6 +81,55 @@ def test_source_endpoint_is_token_protected_and_task_scoped(tmp_path, monkeypatc
     assert client.get(source_url, headers=headers).json()["data"]["html"] == "<h1>Captured page</h1>"
     assert client.get(f"{base}/arbitrary-page/source", headers=headers).status_code == 404
     assert client.get(f"{base}/{pages[1]['id']}/source", headers=headers).json()["data"]["html"] is None
+
+
+def test_seo_excel_export_contains_issue_and_link_sheets(monkeypatch):
+    monkeypatch.setattr(demo_access, "settings", replace(settings, demo_access_token="test-token"))
+    task = make_task().model_copy(update={"status": "completed", "task_type": "site_seo_audit"})
+    task.result["seo"].update({
+        "coverage_checks": [{"id": "CHK-014", "summary": "Title 缺失"}],
+        "issues_table": [{
+            "issue_id": "P-001", "check_item": "页面标题", "priority": "P1", "severity": "high",
+            "category": "On-Page SEO", "description": "Title 缺失", "seo_impact": "影响排名",
+            "evidence": "https://example.com/de/", "recommendation": "补齐 Title", "owner_team": "SEO",
+        }],
+    })
+
+    async def get_task(task_id):
+        return task if task_id == task.task_id else None
+
+    monkeypatch.setattr(demo.task_service, "get_task", get_task)
+    response = TestClient(app).get(
+        f"/api/v1/demo/tasks/{task.task_id}/export.xlsx",
+        headers={"X-Demo-Token": "test-token"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats")
+    assert response.headers["content-disposition"] == 'attachment; filename="example.com-seo-audit.xlsx"'
+    with ZipFile(BytesIO(response.content)) as archive:
+        workbook_xml = archive.read("xl/workbook.xml").decode("utf-8")
+        strings_xml = archive.read("xl/sharedStrings.xml").decode("utf-8")
+    assert 'name="问题清单"' in workbook_xml
+    assert 'name="链接清单"' in workbook_xml
+    for expected in ["问题类型", "检查事项", "问题描述", "影响", "建议", "负责人", "页面标题", "内容字数", "状态码", "抓取时间", "响应耗时（ms）"]:
+        assert expected in strings_xml
+    assert "页面标题" in strings_xml
+    assert "补齐 Title" in strings_xml
+
+
+def test_seo_excel_export_rejects_unfinished_task(monkeypatch):
+    task = make_task()
+    monkeypatch.setattr(demo_access, "settings", replace(settings, demo_access_token="test-token"))
+
+    async def get_task(task_id):
+        return task
+
+    monkeypatch.setattr(demo.task_service, "get_task", get_task)
+    response = TestClient(app).get(
+        f"/api/v1/demo/tasks/{task.task_id}/export.xlsx",
+        headers={"X-Demo-Token": "test-token"},
+    )
+    assert response.status_code == 409
 
 
 def test_demo_defaults_and_explanations_live_in_docs():

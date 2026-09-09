@@ -101,6 +101,14 @@ const GRAPH_CONFIG = {
   },
 };
 
+function syncExportButtonState(task = currentTask) {
+  const button = $('export-btn');
+  if (!button) return;
+  const isSeoAudit = task?.task_type === 'site_seo_audit';
+  button.disabled = button.classList.contains('exporting') || !demoTokenVerified || task?.status !== 'completed' || !isSeoAudit;
+  button.title = isSeoAudit ? '导出问题清单和链接清单' : 'Excel 导出仅适用于网站 SEO 审计';
+}
+
 function readBooleanParam(params, name, fallback = false) {
   if (!params.has(name)) return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(params.get(name)).toLowerCase());
@@ -435,9 +443,9 @@ function applyTaskTypeUi(taskType = null) {
     $('max-pages').style.opacity = enabled ? '1' : '0.45';
   }
   if (currentTask && currentTask.task_type !== resolvedTaskType) {
-    $('export-btn').disabled = true;
+    syncExportButtonState(null);
   } else if (currentTask) {
-    $('export-btn').disabled = !demoTokenVerified || currentTask.status !== 'completed' || config.exportable === false;
+    syncExportButtonState(currentTask);
   }
 }
 
@@ -813,7 +821,7 @@ function renderTimeline(steps) {
       ? '会员版（规则 + OpenRouter）'
       : (task.mode ? '普通版（规则）' : '—');
     setStatusBadge(task.status || 'idle');
-    $('export-btn').disabled = !demoTokenVerified || task.status !== 'completed' || getTaskTypeConfig(task.task_type).exportable === false;
+    syncExportButtonState(task);
   }
 
   /* ── LLM status panel ── */
@@ -943,7 +951,7 @@ function renderTimeline(steps) {
     }
   }
 
-  function getDownloadFilename(response, fallback = 'geo-audit-report.md') {
+  function getDownloadFilename(response, fallback = 'seo-audit.xlsx') {
     const disposition = response.headers.get('content-disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/i);
     return match?.[1] || fallback;
@@ -966,23 +974,32 @@ function renderTimeline(steps) {
       return;
     }
     if (!currentTaskId || currentTaskStatus !== 'completed') {
-      showToast('任务尚未完成，暂时无法导出报告。');
+      showToast('任务尚未完成，暂时无法导出 Excel。');
       return;
     }
-    if (currentTask?.task_type === 'site_content_audit') {
-      showToast('当前内容审计暂不支持导出 Markdown 报告。');
+    if (currentTask?.task_type !== 'site_seo_audit') {
+      showToast('Excel 导出仅适用于网站 SEO 审计。');
       return;
     }
+    const button = $('export-btn');
+    const label = button.querySelector('.export-label');
     try {
-      const response = await demoApiFetch(`${API_PREFIX}/tasks/${currentTaskId}/report`);
+      button.classList.add('exporting');
+      button.disabled = true;
+      label.textContent = '生成中…';
+      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${encodeURIComponent(currentTaskId)}/export.xlsx`);
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, '报告导出失败'));
+        throw new Error(await readErrorMessage(response, 'Excel 导出失败'));
       }
       const blob = await response.blob();
-      triggerDownload(blob, getDownloadFilename(response));
-      showToast('报告导出成功', 'success');
+      triggerDownload(blob, getDownloadFilename(response, 'seo-audit.xlsx'));
+      showToast('Excel 已开始下载', 'success');
     } catch (err) {
-      showToast(err?.message || '报告导出失败');
+      showToast(err?.message || 'Excel 导出失败');
+    } finally {
+      button.classList.remove('exporting');
+      label.textContent = '导出 Excel';
+      syncExportButtonState(currentTask);
     }
   }
 

@@ -19,6 +19,8 @@ def test_demo_page_serves_template_assets() -> None:
     assert '/static/js/demo/index.js' in response.text
     assert 'href="/api-doc"' in response.text
     assert 'API 调用步骤' not in response.text
+    assert 'id="export-btn"' in response.text
+    assert "导出 Excel" in response.text
 
 
 def test_demo_static_assets_are_mounted() -> None:
