@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>网站 SEO 审计 · GEO Audit</title>
+  <title>网站 SEO+GEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
-  <link rel="stylesheet" href="/static/css/workspace.css?v=20260909-xlsx-export" />
+  <link rel="stylesheet" href="/static/css/workspace.css?v=20260910-ai-cognition" />
 </head>
 <body>
 
@@ -77,7 +77,7 @@
               <label>任务类型</label>
               <select id="task-type">
                 <option value="site_seo_audit" selected>网站 SEO 审计</option>
-                <option value="site_geo_audit">网站 GEO 审计</option>
+                <option value="site_geo_audit">网站 SEO+GEO 审计</option>
                 <option value="site_content_audit">网站内容审计</option>
               </select>
             </div>
@@ -453,10 +453,10 @@
         <div class="api-step-body">
           <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/tasks/audit</div>
           <div class="api-desc">Demo 页面调用时默认附带请求头 <code>X-Demo-Token</code>，只有 token 验证通过后才允许提交任务。</div>
-          <div class="api-desc">提交目标 URL，后台异步启动 discovery → visibility → technical → content → schema → platform → observation → summary 流水线；若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
+          <div class="api-desc">提交目标 URL；<code>site_geo_audit</code> 对应“网站 SEO+GEO 审计”，后台异步启动 discovery → seo + GEO 六维模块 → observation → summary 流水线。若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</div>
           <div class="api-params">
             <div class="param-row"><span class="param-key">url</span><span class="param-type">string</span><span class="param-req">必填</span><span class="param-desc">目标网站 URL（自动规范化）</span></div>
-            <div class="param-row"><span class="param-key">task_type</span><span class="param-type">string</span><span class="param-desc"><code>"site_seo_audit"</code>（默认）、<code>"site_geo_audit"</code> 或 <code>"site_content_audit"</code></span></div>
+            <div class="param-row"><span class="param-key">task_type</span><span class="param-type">string</span><span class="param-desc"><code>"site_seo_audit"</code>（默认）、<code>"site_geo_audit"</code>（网站 SEO+GEO 审计）或 <code>"site_content_audit"</code></span></div>
             <div class="param-row"><span class="param-key">mode</span><span class="param-type">string</span><span class="param-desc"><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</span></div>
             <div class="param-row"><span class="param-key">force_refresh</span><span class="param-type">boolean</span><span class="param-desc">true 则跳过 7 天缓存强制重新审计</span></div>
             <div class="param-row"><span class="param-key">target_locale</span><span class="param-type">string</span><span class="param-desc">可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</span></div>
@@ -595,6 +595,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260909-xlsx-export"></script>
+<script type="module" src="/static/js/demo/index.js?v=20260910-ai-cognition"></script>
 </body>
 </html>

@@ -23,3 +23,14 @@ def test_cache_key_changes_with_mode() -> None:
     assert standard_key != zh_key
     assert standard_key != nl_target_key
     assert standard_key != content_key
+
+
+def test_combined_seo_geo_cache_namespace_differs_from_seo_only() -> None:
+    service = CacheService(cache_dir=".cache/test-audits", ttl_days=7)
+    combined_key, _, _ = service.build_cache_key(
+        "https://example.com", "standard", task_type="site_geo_audit"
+    )
+    seo_key, _, _ = service.build_cache_key(
+        "https://example.com", "standard", task_type="site_seo_audit"
+    )
+    assert combined_key != seo_key

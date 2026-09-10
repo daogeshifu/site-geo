@@ -7,6 +7,14 @@ def test_task_service_exposes_seo_step_order() -> None:
     assert service._step_order_for("site_seo_audit") == ["discovery", "seo", "summary"]
 
 
+def test_combined_geo_task_includes_seo_diagnosis_step() -> None:
+    service = TaskService()
+    assert service._step_order_for("site_geo_audit") == [
+        "discovery", "seo", "visibility", "technical", "content", "schema",
+        "platform", "observation", "summary",
+    ]
+
+
 def test_seo_issues_put_critical_p0_blockers_first() -> None:
     service = SeoAuditService()
     base = {

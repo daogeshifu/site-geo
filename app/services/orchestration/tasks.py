@@ -38,7 +38,7 @@ class TaskService:
     """
 
     # 任务步骤的执行顺序
-    SITE_GEO_STEP_ORDER = ["discovery", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
+    SITE_GEO_STEP_ORDER = ["discovery", "seo", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
     SITE_CONTENT_STEP_ORDER = ["discovery", "content", "summary"]
     SITE_SEO_STEP_ORDER = ["discovery", "seo", "summary"]
 
@@ -641,6 +641,15 @@ class TaskService:
         self._schedule_graph_jobs(task, discovery)
 
         module_coroutines = {
+            "seo": self.seo_audit_service.audit(
+                task.url,
+                discovery,
+                mode=task.mode,
+                llm_config=task.llm,
+                feedback_lang=task.feedback_lang,
+                target_locale=task.target_locale,
+                max_pages=task.max_pages if task.full_audit else min(task.max_pages, 8),
+            ),
             "visibility": self.visibility_service.audit(
                 task.url,
                 discovery,
@@ -722,6 +731,7 @@ class TaskService:
         return {
             "url": task.url,
             "discovery": discovery_payload,
+            "seo": module_results["seo"].model_dump(),
             "visibility": module_results["visibility"].model_dump(),
             "technical": module_results["technical"].model_dump(),
             "content": module_results["content"].model_dump(),

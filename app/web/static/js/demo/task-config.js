@@ -1,4 +1,4 @@
-export const SITE_GEO_STEP_ORDER = ['discovery', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
+export const SITE_GEO_STEP_ORDER = ['discovery', 'seo', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
 export const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
 export const SITE_SEO_STEP_ORDER = ['discovery', 'seo', 'summary'];
 export const STEP_ICON = {
@@ -17,10 +17,10 @@ export const STEP_ICON = {
 
 export const TASK_TYPE_CONFIG = {
   site_geo_audit: {
-    heading: { zh: '网站 GEO 审计', en: 'Site GEO Audit' },
+    heading: { zh: '网站 SEO+GEO 审计', en: 'Website SEO + GEO Audit' },
     subtitle: {
-      zh: '提交目标 URL 创建后台任务，支持可选 full audit、非首页偏差提示与逐页诊断结果。',
-      en: 'Submit a target URL to run the full GEO audit pipeline with optional full audit expansion and page diagnostics.'
+      zh: '一次完成搜索引擎健康度与 AI 可见性诊断，输出分级问题、证据和可执行建议。',
+      en: 'Audit search health and AI visibility together, with prioritized issues, evidence, and actionable recommendations.'
     },
     urlLabel: { zh: '目标 URL', en: 'Target URL' },
     placeholder: 'https://example.com',

@@ -183,12 +183,12 @@ function polarPoint(cx, cy, radius, angleDeg) {
 }
 
 function buildRadarChartHtml({ dimensionMeta, weighted, summary, lang = 'zh' }) {
-  const size = 208;
+  const size = 252;
   const cx = size / 2;
   const cy = size / 2;
-  const maxRadius = 64;
+  const maxRadius = 72;
   const baseAngle = -90;
-  const labelRadius = maxRadius + 22;
+  const labelRadius = maxRadius + 29;
   const levels = 5;
   const labelMap = lang === 'zh'
     ? {
@@ -249,13 +249,17 @@ function buildRadarChartHtml({ dimensionMeta, weighted, summary, lang = 'zh' }) 
 
   const labels = axes.map(axis => `
     <text x="${axis.label.x.toFixed(1)}" y="${axis.label.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" class="report-radar-label">
-      ${escapeHtml(axis.shortLabel)}
+      <tspan x="${axis.label.x.toFixed(1)}" dy="-4">${escapeHtml(axis.shortLabel)}</tspan>
+      <tspan x="${axis.label.x.toFixed(1)}" dy="13" class="report-radar-score">${escapeHtml(String(axis.score))}</tspan>
     </text>
   `).join('');
 
   return `
-    <div class="report-score-radar">
-      <div class="report-score-radar-title">${escapeHtml(tx(lang, '六维能力图', '6-Dimension Radar'))}</div>
+    <aside class="combined-radar-panel">
+      <div class="combined-radar-heading">
+        <div><span>${escapeHtml(tx(lang, '6 DIMENSION RADAR', '6 DIMENSION RADAR'))}</span><h4>${escapeHtml(tx(lang, '六维评分雷达图', '6-Dimension Radar'))}</h4></div>
+        <b>0 — 100</b>
+      </div>
       <svg viewBox="0 0 ${size} ${size}" class="report-radar-svg" aria-label="radar chart">
         ${gridPolygons}
         ${axisLines}
@@ -263,14 +267,168 @@ function buildRadarChartHtml({ dimensionMeta, weighted, summary, lang = 'zh' }) 
         ${valueDots}
         ${labels}
       </svg>
-    </div>
+    </aside>
   `;
+}
+
+function localizeCombinedCategory(value, lang = 'zh') {
+  if (lang !== 'zh') return value || '';
+  return String(value || '')
+    .replaceAll('Technical SEO', '技术 SEO')
+    .replaceAll('International SEO', '国际 SEO')
+    .replaceAll('On-Page SEO', '页面 SEO')
+    .replaceAll('Image SEO', '图片 SEO')
+    .replaceAll('Content Quality', '内容质量')
+    .replaceAll('Schema', '结构化数据')
+    .replaceAll('Performance', '性能体验')
+    .replaceAll('AI Search / GEO', 'AI 搜索 / GEO');
+}
+
+function priorityFromScore(score) {
+  const value = Number(score) || 0;
+  if (value < 25) return { priority: 'P0', severity: 'critical' };
+  if (value < 45) return { priority: 'P1', severity: 'high' };
+  if (value < 70) return { priority: 'P2', severity: 'medium' };
+  return { priority: 'P3', severity: 'low' };
+}
+
+function buildAiIssues({ visibility, content, schema, platform, lang = 'zh' }) {
+  const sources = [
+    {
+      key: 'visibility', module: visibility,
+      check: tx(lang, 'AI 可见性与品牌权威', 'AI Visibility & Brand Authority'),
+      category: tx(lang, 'AI 发现', 'AI Discovery'),
+      impact: tx(lang, '影响 AI 爬虫发现、品牌实体确认及内容进入候选引用集。', 'Reduces AI crawler discovery, entity confidence, and citation eligibility.')
+    },
+    {
+      key: 'content', module: content,
+      check: tx(lang, 'AI 可引用内容', 'AI-Citable Content'),
+      category: tx(lang, '内容 GEO', 'Content GEO'),
+      impact: tx(lang, '降低答案抽取、事实核验与生成式搜索引用概率。', 'Reduces answer extraction, fact verification, and generative-search citation likelihood.')
+    },
+    {
+      key: 'schema', module: schema,
+      check: tx(lang, '实体与结构化数据', 'Entity & Structured Data'),
+      category: tx(lang, '机器理解', 'Machine Understanding'),
+      impact: tx(lang, '削弱 AI 对页面类型、品牌实体、作者与内容关系的理解。', 'Weakens AI understanding of page types, entities, authors, and content relationships.')
+    },
+    {
+      key: 'platform', module: platform,
+      check: tx(lang, 'AI 平台适配', 'AI Platform Readiness'),
+      category: tx(lang, '平台适配', 'Platform Readiness'),
+      impact: tx(lang, '影响 ChatGPT、Perplexity、AI Overviews、Gemini 等平台的读取与引用准备度。', 'Affects readiness across ChatGPT, Perplexity, AI Overviews, Gemini, and similar platforms.')
+    }
+  ];
+  const rows = [];
+  const seen = new Set();
+  sources.forEach(source => {
+    if (!source.module || !Object.keys(source.module).length) return;
+    const issues = Array.isArray(source.module?.issues) ? source.module.issues : [];
+    const recommendations = Array.isArray(source.module?.recommendations) ? source.module.recommendations : [];
+    const score = Number(source.module?.score ?? 0);
+    const severity = priorityFromScore(score);
+    const normalizedIssues = issues.length
+      ? issues.slice(0, 5)
+      : score < 70
+        ? [tx(lang, `${source.check}得分为 ${score}/100，仍存在明显提升空间。`, `${source.check} scores ${score}/100 and needs improvement.`)]
+        : [];
+    normalizedIssues.forEach((description, index) => {
+      const fingerprint = `${source.key}:${String(description).trim()}`;
+      if (!description || seen.has(fingerprint)) return;
+      seen.add(fingerprint);
+      rows.push({
+        issue_id: `AI-${String(rows.length + 1).padStart(3, '0')}`,
+        check_item: source.check,
+        category: source.category,
+        priority: severity.priority,
+        severity: severity.severity,
+        description,
+        evidence: tx(lang, `${source.check} ${score}/100`, `${source.check}: ${score}/100`),
+        impact: source.impact,
+        recommendation: recommendations[index] || recommendations[0] || tx(lang, '针对该信号补充可抓取、可验证且结构清晰的页面内容。', 'Add crawlable, verifiable, well-structured page content for this signal.')
+      });
+    });
+  });
+  const rank = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  return rows.sort((a, b) => (rank[a.priority] ?? 4) - (rank[b.priority] ?? 4));
+}
+
+function renderIssueRows(issues, lang = 'zh', emptyMessage = '') {
+  if (!issues.length) return `<tr><td colspan="5" class="audit-table-empty">${escapeHtml(emptyMessage)}</td></tr>`;
+  const severityLabels = lang === 'zh'
+    ? { critical: '紧急', high: '高', medium: '常规', low: '低' }
+    : { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+  return issues.map(item => `
+    <tr>
+      <td><strong class="issue-check-title">${escapeHtml(item.check_item || tx(lang, '站点检查', 'Site Check'))}</strong><span class="issue-meta"><span>${escapeHtml(localizeCombinedCategory(item.category || '-', lang))}</span><code>${escapeHtml(item.issue_id || '-')}</code></span></td>
+      <td><span class="priority-chip ${escapeHtml(String(item.priority || '').toLowerCase())}">${escapeHtml(item.priority || '-')}</span><span class="issue-severity">${escapeHtml(tx(lang, '重要程度：', 'Severity: '))}${escapeHtml(severityLabels[item.severity] || item.severity || '-')}</span></td>
+      <td class="audit-table-main audit-cell-copy">${escapeHtml(item.description || '-')}<small class="issue-evidence-line">${escapeHtml(item.evidence || '')}</small></td>
+      <td class="audit-cell-copy">${escapeHtml(item.seo_impact || item.impact || '-')}</td>
+      <td class="audit-cell-copy recommendation">${escapeHtml(item.recommendation || '-')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPrioritySummary(issues) {
+  return ['P0', 'P1', 'P2', 'P3'].map(priority => {
+    const count = issues.filter(item => item.priority === priority).length;
+    return count ? `<span class="issue-count"><i class="priority-dot ${priority.toLowerCase()}"></i>${priority}<strong>${count}</strong></span>` : '';
+  }).join('');
+}
+
+function buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, lang = 'zh' }) {
+  const negativePattern = lang === 'zh'
+    ? /弱|不足|受限|缺失|风险|争议|低|薄弱|阻止|不可|欠缺/
+    : /weak|missing|limited|risk|controvers|low|block|insufficient|poor/i;
+  const keywords = Array.isArray(aiPerception?.cognition_keywords)
+    ? aiPerception.cognition_keywords.map(item => String(item || '').trim()).filter(Boolean)
+    : [];
+  const positive = keywords.filter(item => !negativePattern.test(item));
+  const limited = keywords.filter(item => negativePattern.test(item));
+  const perceptionLabels = lang === 'zh'
+    ? {
+        'AI Citability & Visibility': ['AI 可见性强', 'AI 抓取受限'],
+        'Brand Authority Signals': ['品牌可信', '品牌权威偏弱'],
+        'Content Quality & E-E-A-T': ['内容可信', '内容证据不足'],
+        'Technical Foundations': ['技术可读', '技术读取受限'],
+        'Structured Data': ['实体清晰', '结构化数据不足'],
+        'Platform Optimization': ['平台适配良好', '平台适配受限']
+      }
+    : {
+        'AI Citability & Visibility': ['AI-visible', 'AI crawl limited'],
+        'Brand Authority Signals': ['Trusted brand', 'Weak brand authority'],
+        'Content Quality & E-E-A-T': ['Credible content', 'Insufficient evidence'],
+        'Technical Foundations': ['Machine readable', 'Technical access limited'],
+        'Structured Data': ['Clear entities', 'Insufficient structured data'],
+        'Platform Optimization': ['Platform ready', 'Platform readiness limited']
+      };
+
+  dimensionMeta.forEach(meta => {
+    const score = Math.max(0, Math.min(100, Number(weighted?.[meta.key]?.raw_score ?? 0)));
+    const fallbackName = summary?.dimensions?.[meta.key]?.display_name || meta.defaultName;
+    const [positiveWord, limitedWord] = perceptionLabels[meta.key] || [fallbackName, fallbackName];
+    if (score >= 70) positive.push(positiveWord);
+    if (score < 60) limited.push(limitedWord);
+  });
+
+  const unique = items => [...new Set(items)].slice(0, 8);
+  return {
+    positive: unique(positive.length ? positive : [tx(lang, '待建立正面认知', 'Positive perception pending')]),
+    limited: unique(limited.length ? limited : [tx(lang, '暂无明显受限认知', 'No strong limiting perception')])
+  };
+}
+
+function renderWordCloud(words, tone) {
+  return words.map((word, index) => `
+    <span class="ai-word ai-word-${tone} size-${(index % 4) + 1}">${escapeHtml(word)}</span>
+  `).join('');
 }
 
 export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml }) {
   const result = task?.result || {};
   const summary = result.summary || {};
   const discovery = result.discovery || {};
+  const seo = result.seo || {};
   const assetSummary = discovery.asset_summary || {};
   const homepage = discovery.homepage || {};
   const visibility = result.visibility || {};
@@ -303,12 +461,12 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
     fullAuditMissing: tx(lang, '当前未启用 full audit，未返回逐页诊断。', 'Full audit is not enabled, so no page diagnostics were returned.'),
     noActionPlan: tx(lang, '暂无行动计划。', 'No action plan available.'),
     reportBasis: tx(lang, '报告口径', 'Report basis'),
-    compositeGeoScore: 'Composite GEO Score',
+    compositeGeoScore: tx(lang, 'SEO + GEO 综合得分', 'SEO + GEO Composite Score'),
     premiumBadge: tx(lang, '会员版 / AI 增强', 'Premium / AI Enriched'),
     standardBadge: tx(lang, '普通版 / 规则版', 'Standard / Rule-based'),
     enhanced: tx(lang, '报告已增强', 'Report Enhanced'),
     ruleSummary: tx(lang, '规则汇总', 'Rule Summary'),
-    siteGeoReport: tx(lang, '站点 GEO 报告', 'Site GEO Report'),
+    siteGeoReport: tx(lang, '网站 SEO+GEO 审计报告', 'Website SEO + GEO Audit Report'),
     responsePrefix: tx(lang, '响应', 'Response'),
     snapshotLabel: 'Snapshot',
     scopeRootLabel: 'Scope Root',
@@ -362,12 +520,29 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
   const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
   const actions = normalizeActions(result, lang).slice(0, 5);
   const weighted = summary.weighted_scores || {};
+  const compositeScore = Math.max(0, Math.min(100, Number(summary.composite_geo_score ?? 0)));
+  const compositeStatus = scoreToStatus(compositeScore);
   const aiPerception = summary.ai_perception || {};
   const platformScores = platform.platform_scores || {};
   const observation = result.observation || summary.observation || {};
   const metricDefinitions = summary.metric_definitions || [];
   const notices = summary.notices || [];
   const pageDiagnostics = Array.isArray(result.page_diagnostics) ? result.page_diagnostics : [];
+  const isAiSeoItem = item => item?.id === 'CHK-026' || /AI Search|GEO/i.test(String(item?.category || ''));
+  const seoIssues = Array.isArray(seo.issues_table) ? seo.issues_table.filter(item => !isAiSeoItem(item)).sort((a, b) => {
+    const priorityRank = { P0: 0, P1: 1, P2: 2, P3: 3 };
+    const severityRank = { critical: 0, high: 1, medium: 2, low: 3 };
+    return ((priorityRank[a.priority] ?? 4) - (priorityRank[b.priority] ?? 4)) ||
+      ((severityRank[a.severity] ?? 4) - (severityRank[b.severity] ?? 4));
+  }) : [];
+  const seoCoverage = Array.isArray(seo.coverage_checks) ? seo.coverage_checks.filter(item => !isAiSeoItem(item)) : [];
+  const seoFailedChecks = seoCoverage.filter(item => item.status === 'fail').length;
+  const aiIssues = buildAiIssues({ visibility, content, schema, platform, lang });
+  const priorityRank = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  const combinedIssues = [...seoIssues, ...aiIssues].sort((a, b) =>
+    (priorityRank[a.priority] ?? 4) - (priorityRank[b.priority] ?? 4)
+  );
+  const sampledCount = Number(seo.measurements?.sampled_url_count ?? discovery.profiled_page_count ?? 0);
   const citability = visibility.findings?.citability || {};
   const homepageCitability = citability.homepage_citability || {};
   const bestPageCitability = citability.best_page_citability || {};
@@ -382,6 +557,24 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
   const fallbackPages = Object.values(content.page_analyses || {});
   const dimensionMeta = getDimensionMeta(lang);
   const radarHtml = buildRadarChartHtml({ dimensionMeta, weighted, summary, lang });
+  const dimensionStripHtml = dimensionMeta.map((meta, index) => {
+    const score = Math.max(0, Math.min(100, Number(weighted?.[meta.key]?.raw_score ?? 0)));
+    const displayName = summary?.dimensions?.[meta.key]?.display_name || meta.defaultName;
+    return `<div class="combined-dimension-chip tone-${index + 1}"><span><i></i>${escapeHtml(displayName)}</span><strong>${escapeHtml(String(score))}</strong></div>`;
+  }).join('');
+  const capabilityListHtml = dimensionMeta.map((meta, index) => {
+    const score = Math.max(0, Math.min(100, Number(weighted?.[meta.key]?.raw_score ?? 0)));
+    const displayName = summary?.dimensions?.[meta.key]?.display_name || meta.defaultName;
+    const status = scoreToStatus(score);
+    return `
+      <div class="ai-capability-item tone-${index + 1}">
+        <div class="ai-capability-name"><i></i><span>${escapeHtml(displayName)}</span><small>${escapeHtml(formatStatus(status, lang))}</small></div>
+        <div class="ai-capability-meter"><span style="width:${score}%"></span></div>
+        <strong class="${escapeHtml(statusTone(status))}">${escapeHtml(String(score))}</strong>
+      </div>
+    `;
+  }).join('');
+  const cognitionWords = buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, lang });
   const pageSamples = pageProfiles.length
     ? [
         ...pageProfiles.map(([key, page]) => ({ key, source: 'core', ...page })),
@@ -490,42 +683,22 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
     ${observationGaps.length ? `<div class="report-list" style="margin-top:12px">${formatList(observationGaps, labels.noDataGaps)}</div>` : ''}
   `;
 
-  const aiPerceptionHtml = `
-    <div class="report-grid-2">
-      <div class="report-dim-card">
-        <div class="report-dim-head">
-          <span class="report-dim-name">${escapeHtml(labels.positiveLabel)}</span>
-          <span class="report-dim-pill">%</span>
-        </div>
-        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.positive_percentage ?? 0))}</span></div>
-      </div>
-      <div class="report-dim-card">
-        <div class="report-dim-head">
-          <span class="report-dim-name">${escapeHtml(labels.neutralLabel)}</span>
-          <span class="report-dim-pill">%</span>
-        </div>
-        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.neutral_percentage ?? 0))}</span></div>
-      </div>
-      <div class="report-dim-card">
-        <div class="report-dim-head">
-          <span class="report-dim-name">${escapeHtml(labels.controversialLabel)}</span>
-          <span class="report-dim-pill">%</span>
-        </div>
-        <div class="report-dim-scoreline"><span class="score">${escapeHtml(String(aiPerception.controversial_percentage ?? 0))}</span></div>
-      </div>
-      <div class="report-dim-card">
-        <div class="report-dim-head">
-          <span class="report-dim-name">${escapeHtml(labels.cognitionKeywordsLabel)}</span>
-          <span class="report-dim-pill">${escapeHtml(String((aiPerception.cognition_keywords || []).length || 0))}</span>
-        </div>
-        <div class="report-list">${formatList(aiPerception.cognition_keywords || [], tx(lang, '暂无认知标签。', 'No perception keywords.'))}</div>
-      </div>
-    </div>
-  `;
-
   const noticesHtml = notices.length
     ? `<div class="report-list" style="margin-top:14px">${formatList(notices, labels.noNotices, 8)}</div>`
     : '';
+
+  const seoCoverageHtml = seoCoverage.length
+    ? seoCoverage.map(item => `
+        <tr>
+          <td><code>${escapeHtml(item.id || '-')}</code></td>
+          <td>${escapeHtml(localizeCombinedCategory(item.category || '-', lang))}</td>
+          <td class="audit-table-main">${escapeHtml(item.check || '-')}</td>
+          <td><span class="check-state ${['pass', 'fail', 'na'].includes(item.status) ? item.status : 'na'}">${escapeHtml(({ pass: tx(lang, '通过', 'Pass'), fail: tx(lang, '待优化', 'Needs work'), na: tx(lang, '不适用', 'N/A') })[item.status] || item.status || '-')}</span></td>
+          <td class="audit-cell-copy">${escapeHtml(item.summary || '-')}</td>
+          <td class="audit-cell-copy evidence">${escapeHtml(item.evidence || '-')}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="6" class="audit-table-empty">${escapeHtml(tx(lang, '旧任务暂无 SEO 覆盖数据，请强制刷新后重新审计。', 'This older task has no SEO coverage data. Force-refresh the audit to generate it.'))}</td></tr>`;
 
   const pageDiagnosticsHtml = pageDiagnostics.length
     ? `<div class="report-list">${pageDiagnostics.slice(0, 12).map((item, index) => `
@@ -596,102 +769,92 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
 
   host.className = 'report-shell';
   const html = `
-    <section class="report-hero">
-      <div class="report-score-box">
-        <div>
-          <div class="report-score-label">${escapeHtml(labels.compositeGeoScore)}</div>
-          <div class="report-score-value">${escapeHtml(String(summary.composite_geo_score ?? 0))}</div>
-          <div class="report-score-sub">${escapeHtml(formatStatus(summary.status, lang))} · ${escapeHtml(labels.reportBasis)}</div>
-        </div>
-        ${radarHtml}
-        <div class="report-badges">
-          <span class="r-badge ${escapeHtml(statusTone(summary.status))}">${escapeHtml(formatStatus(summary.status, lang))}</span>
-          <span class="r-badge">${task.mode === 'premium' ? labels.premiumBadge : labels.standardBadge}</span>
-          <span class="r-badge ${summary.llm_enhanced ? 'success' : ''}">${summary.llm_enhanced ? labels.enhanced : labels.ruleSummary}</span>
-          <span class="r-badge">${escapeHtml(summary.scoring_version || 'geo-audit-v3')}</span>
-        </div>
-      </div>
-      <div class="report-hero-main">
+    <section class="report-hero combined-report-hero">
+      ${radarHtml}
+      <main class="combined-report-main">
         <div class="report-kicker">
-          <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '-')}</span>
-          <span class="dot"></span>
-          <span>${escapeHtml(discovery.business_type || 'unknown')}</span>
-          <span class="dot"></span>
-          <span>${escapeHtml(labels.responsePrefix)} ${escapeHtml(String(discovery.fetch?.response_time_ms ?? '-'))} ms</span>
+          <span>${escapeHtml(discovery.domain || discovery.normalized_url || task.url || '-')}</span><span class="dot"></span>
+          <span>${escapeHtml(task.mode || 'standard')}</span><span class="dot"></span>
+          <span>${escapeHtml(tx(lang, '已完成', 'completed'))}</span><span class="dot"></span>
+          <span>${escapeHtml(discovery.resolved_target_locale || discovery.homepage?.lang || '-')}</span>
         </div>
         <h3>${escapeHtml(labels.siteGeoReport)}</h3>
         <div class="report-summary">${escapeHtml(executive)}</div>
-        <div class="report-meta-grid">
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.snapshotLabel)}</div>
-            <div class="val">${escapeHtml(discovery.site_snapshot_version || 'snapshot-v1')} · ${escapeHtml(String(discovery.profiled_page_count || pageSamples.length || 1))} ${escapeHtml(tx(lang, '页画像', 'page profiles'))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.scopeRootLabel)}</div>
-            <div class="val">${escapeHtml(discovery.scope_root_url || discovery.site_root_url || '-')}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.aiCrawlLlms)}</div>
-            <div class="val">${escapeHtml(String(visibility.checks?.allowed_ai_crawlers ?? 0))} / ${escapeHtml(String(visibility.checks?.total_ai_crawlers_checked ?? 0))} ${escapeHtml(tx(lang, '放行', 'allowed'))} · llms ${escapeHtml(String(visibility.findings?.llms_quality?.score ?? 0))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.citationProbability)}</div>
-            <div class="val">${escapeHtml(citationLabelMap[citationProbability] || citationProbability)} · ${escapeHtml(tx(lang, '首页', 'Homepage'))} ${escapeHtml(String(homepageCitability.score ?? 0))} / ${escapeHtml(tx(lang, '最佳页', 'Best page'))} ${escapeHtml(String(bestPageCitability.score ?? 0))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.bestWeakestPlatform)}</div>
-            <div class="val">${escapeHtml(PLATFORM_LABELS[strongestPlatform?.[0]] || '-')} ${escapeHtml(String(strongestPlatform?.[1]?.platform_score ?? '-'))} / ${escapeHtml(PLATFORM_LABELS[weakestPlatform?.[0]] || '-')} ${escapeHtml(String(weakestPlatform?.[1]?.platform_score ?? '-'))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.observationLabel)}</div>
-            <div class="val">${escapeHtml(labels.observationProvidedLine(observation))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.inputScope)}</div>
-            <div class="val">${discovery.input_is_likely_homepage === false ? escapeHtml(tx(lang, '非首页输入 · 结果可能偏差', 'Non-homepage input · results may be biased')) : escapeHtml(tx(lang, '首页 / 语言首页输入', 'Homepage / locale-homepage input'))}</div>
-          </div>
-          <div class="report-meta-item">
-            <div class="lbl">${escapeHtml(labels.fullAudit)}</div>
-            <div class="val">${discovery.full_audit_enabled ? `${escapeHtml(tx(lang, '已启用', 'Enabled'))} · ${escapeHtml(String(discovery.profiled_page_count || 0))} ${escapeHtml(tx(lang, '页', 'pages'))}` : escapeHtml(tx(lang, '未启用', 'Disabled'))}</div>
-          </div>
-        </div>
+        <div class="combined-report-notice">${escapeHtml(tx(lang, '综合分采用 GEO v3 六维 readiness 口径；SEO 诊断作为独立检查层展示，不改变综合分。', 'The composite uses the GEO v3 six-dimension readiness model. SEO diagnostics are shown as a separate layer and do not alter the composite.'))}</div>
         ${noticesHtml}
+        <div class="combined-dimension-strip">${dimensionStripHtml}</div>
+      </main>
+      <aside class="combined-score-panel">
+        <div class="report-score-label">${escapeHtml(labels.compositeGeoScore)}</div>
+        <div class="report-score-value">${escapeHtml(String(compositeScore))}</div>
+        <strong class="combined-score-status">${escapeHtml(formatStatus(compositeStatus, lang))}</strong>
+        <div class="report-badges">
+          <span class="r-badge ${escapeHtml(statusTone(compositeStatus))}">${escapeHtml(formatStatus(compositeStatus, lang))}</span>
+          <span class="r-badge">${task.mode === 'premium' ? labels.premiumBadge : labels.standardBadge}</span>
+          <span class="r-badge">${escapeHtml(summary.scoring_version || 'geo-audit-v3')}</span>
+        </div>
+        <div class="combined-snapshot-grid">
+          <div><span>Snapshot</span><strong>${escapeHtml(discovery.site_snapshot_version || 'snapshot-v1')}</strong></div>
+          <div><span>AI Crawlers</span><strong>${escapeHtml(String(visibility.checks?.allowed_ai_crawlers ?? 0))}/${escapeHtml(String(visibility.checks?.total_ai_crawlers_checked ?? 0))}</strong></div>
+          <div><span>${escapeHtml(tx(lang, '页面诊断', 'Page Diagnostics'))}</span><strong>${escapeHtml(String(pageDiagnostics.length || sampledCount))}</strong></div>
+          <div><span>${escapeHtml(tx(lang, 'SEO 待优化', 'SEO Issues'))}</span><strong>${escapeHtml(String(Math.max(seoFailedChecks, seoIssues.length)))}</strong></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="report-section issue-table-section combined-issues-section">
+      <div class="report-section-hdr issue-section-heading"><div><h4>${escapeHtml(tx(lang, '问题清单', 'SEO + GEO Issue List'))}<span class="section-count">${combinedIssues.length}</span></h4><p>${escapeHtml(tx(lang, '沿用 SEO 诊断表结构，统一呈现搜索优化与 AI 可见性问题', 'Uses the SEO diagnostic table format for both search and AI visibility issues'))}</p></div><div class="issue-priority-summary">${renderPrioritySummary(combinedIssues)}</div></div>
+      <div class="audit-table-wrap issue-table-wrap">
+        <table class="audit-table issue-table">
+          <thead><tr><th>${escapeHtml(tx(lang, '检查事项', 'Check'))}</th><th>${escapeHtml(tx(lang, '优先级', 'Priority'))}</th><th>${escapeHtml(tx(lang, '发现的问题', 'Issue'))}</th><th>${escapeHtml(tx(lang, 'SEO / GEO 影响', 'SEO / GEO Impact'))}</th><th>${escapeHtml(tx(lang, '修复建议', 'Recommendation'))}</th></tr></thead>
+          <tbody>${renderIssueRows(combinedIssues, lang, tx(lang, '本次未发现明确问题；旧缓存请强制刷新以生成完整 SEO+GEO 诊断。', 'No explicit issues were found. Force-refresh older cached tasks to generate the full SEO + GEO diagnosis.'))}</tbody>
+        </table>
       </div>
     </section>
 
-    <section class="report-section">
-      <div class="report-section-hdr">
-        <h4>${escapeHtml(labels.scoredDimensionsTitle)}</h4>
-        <span>${escapeHtml(labels.scoredDimensionsSubtitle)}</span>
-      </div>
-      <div class="report-section-body">
-        <div class="report-dim-grid">${dimensionHtml}</div>
+    <section class="report-section ai-cognition-section">
+      <div class="report-section-hdr ai-cognition-heading"><div><h4>${escapeHtml(tx(lang, 'AI 认知图', 'AI Perception Map'))}</h4><p>${escapeHtml(tx(lang, '从六项能力与认知语义两个板块识别 AI 对网站的理解', 'Shows how AI systems understand the site through capabilities and perception signals'))}</p></div><span>${escapeHtml(tx(lang, '认知结果用于诊断，不改变综合分', 'Perception is diagnostic and unscored'))}</span></div>
+      <div class="ai-cognition-layout">
+        <article class="ai-cognition-panel ai-capability-panel">
+          <div class="ai-panel-heading"><div><span>01</span><h5>${escapeHtml(tx(lang, '能力项清单与分数', 'Capabilities & Scores'))}</h5></div><b>0 — 100</b></div>
+          <div class="ai-capability-list">${capabilityListHtml}</div>
+        </article>
+        <article class="ai-cognition-panel ai-word-panel">
+          <div class="ai-panel-heading"><div><span>02</span><h5>${escapeHtml(tx(lang, 'AI 认知词云', 'AI Perception Word Clouds'))}</h5></div><b>${escapeHtml(tx(lang, '语义信号', 'Signals'))}</b></div>
+          <div class="ai-perception-metrics">
+            <div><span>${escapeHtml(tx(lang, '正面', 'Positive'))}</span><strong>${escapeHtml(String(aiPerception.positive_percentage ?? 0))}%</strong></div>
+            <div><span>${escapeHtml(tx(lang, '中性', 'Neutral'))}</span><strong>${escapeHtml(String(aiPerception.neutral_percentage ?? 0))}%</strong></div>
+            <div><span>${escapeHtml(tx(lang, '受限', 'Limited'))}</span><strong>${escapeHtml(String(aiPerception.controversial_percentage ?? 0))}%</strong></div>
+            <div><span>${escapeHtml(tx(lang, '引用概率', 'Citation'))}</span><strong>${escapeHtml(citationLabelMap[citationProbability] || citationProbability)}</strong></div>
+          </div>
+          <div class="ai-word-clouds">
+            <div class="ai-word-cloud positive"><h6><i></i>${escapeHtml(tx(lang, '正面认知词云', 'Positive Perception'))}</h6><div>${renderWordCloud(cognitionWords.positive, 'positive')}</div></div>
+            <div class="ai-word-cloud limited"><h6><i></i>${escapeHtml(tx(lang, '受限认知词云', 'Limited Perception'))}</h6><div>${renderWordCloud(cognitionWords.limited, 'limited')}</div></div>
+          </div>
+          <div class="ai-word-footnote">${escapeHtml(tx(lang, `最佳引用页 ${bestPageCitability.page_key || 'homepage'} · ${bestPageCitability.score ?? 0} 分 · 最弱平台 ${PLATFORM_LABELS[weakestPlatform?.[0]] || '-'} ${weakestPlatform?.[1]?.platform_score ?? '-'}`, `Best citation page ${bestPageCitability.page_key || 'homepage'} · ${bestPageCitability.score ?? 0} · Weakest platform ${PLATFORM_LABELS[weakestPlatform?.[0]] || '-'} ${weakestPlatform?.[1]?.platform_score ?? '-'}`))}</div>
+        </article>
       </div>
     </section>
 
-    <section class="report-section">
-      <div class="report-section-hdr">
-        <h4>${escapeHtml(labels.aiPerceptionTitle)}</h4>
-        <span>${escapeHtml(labels.aiPerceptionSubtitle)}</span>
-      </div>
-      <div class="report-section-body">${aiPerceptionHtml}</div>
+    <section class="report-section dimensions-section scored-dimensions-section">
+      <div class="report-section-hdr"><h4>${escapeHtml(labels.scoredDimensionsTitle)}</h4><span>${escapeHtml(labels.scoredDimensionsSubtitle)}</span></div>
+      <div class="report-section-body"><div class="report-dim-grid">${dimensionHtml}</div></div>
     </section>
+
+    <details class="report-section collapsible-section coverage-section">
+      <summary class="report-section-hdr coverage-heading"><h4>${escapeHtml(tx(lang, 'SEO 覆盖清单', 'SEO Coverage Checklist'))}</h4><div class="coverage-heading-actions"><span>${escapeHtml(tx(lang, `${seoCoverage.length - seoFailedChecks} 项通过 · ${seoFailedChecks} 项待优化 · 点击展开`, `${seoCoverage.length - seoFailedChecks} passed · ${seoFailedChecks} need work · Expand`))}</span><a class="checklist-doc-link" href="/api-doc#seo-checklist" target="_blank" rel="noreferrer" onclick="event.stopPropagation()">${escapeHtml(tx(lang, '检测清单说明', 'Checklist Guide'))}<b>↗</b></a></div></summary>
+      <div class="audit-table-wrap coverage-table-wrap"><table class="audit-table coverage-table"><thead><tr><th>${escapeHtml(tx(lang, '编号', 'ID'))}</th><th>${escapeHtml(tx(lang, '分类', 'Category'))}</th><th>${escapeHtml(tx(lang, '检查事项', 'Check'))}</th><th>${escapeHtml(tx(lang, '状态', 'Status'))}</th><th>${escapeHtml(tx(lang, '诊断结论', 'Finding'))}</th><th>${escapeHtml(tx(lang, '证据', 'Evidence'))}</th></tr></thead><tbody>${seoCoverageHtml}</tbody></table></div>
+    </details>
 
     <div class="report-grid-2">
-      <section class="report-section">
-        <div class="report-section-hdr"><h4>${escapeHtml(labels.keyIssuesTitle)}</h4><span>${escapeHtml(labels.keyIssuesSubtitle)}</span></div>
-        <div class="report-section-body"><div class="report-list">${formatList(topIssues, tx(lang, '暂无关键问题。', 'No key issues.'))}</div></div>
-      </section>
-      <section class="report-section">
-        <div class="report-section-hdr"><h4>${escapeHtml(labels.quickWinsTitle)}</h4><span>${escapeHtml(labels.quickWinsSubtitle)}</span></div>
-        <div class="report-section-body"><div class="report-list">${formatList(quickWins, tx(lang, '暂无快速收益建议。', 'No quick wins available.'))}</div></div>
-      </section>
+      <section class="report-section"><div class="report-section-hdr"><h4>${escapeHtml(labels.keyIssuesTitle)}</h4><span>${escapeHtml(labels.keyIssuesSubtitle)}</span></div><div class="report-section-body"><div class="report-list">${formatList(topIssues, tx(lang, '暂无关键问题。', 'No key issues.'))}</div></div></section>
+      <section class="report-section"><div class="report-section-hdr"><h4>${escapeHtml(labels.quickWinsTitle)}</h4><span>${escapeHtml(labels.quickWinsSubtitle)}</span></div><div class="report-section-body"><div class="report-list">${formatList(quickWins, tx(lang, '暂无快速收益建议。', 'No quick wins available.'))}</div></div></section>
     </div>
 
-    <section class="report-section">
-      <div class="report-section-hdr"><h4>${escapeHtml(labels.actionPlanTitle)}</h4><span>${escapeHtml(labels.actionPlanSubtitle)}</span></div>
+    <details class="report-section collapsible-section">
+      <summary class="report-section-hdr"><h4>${escapeHtml(labels.actionPlanTitle)}</h4><span>${escapeHtml(labels.actionPlanSubtitle)}</span></summary>
       <div class="report-section-body"><div class="report-action-list">${actionHtml}</div></div>
-    </section>
+    </details>
 
     <section class="report-section">
       <div class="report-section-hdr"><h4>${escapeHtml(labels.platformOverviewTitle)}</h4><span>${escapeHtml(labels.platformOverviewSubtitle)}</span></div>
