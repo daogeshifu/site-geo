@@ -2,7 +2,7 @@ import { renderContentAuditReport } from './content-report.js';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
 import { renderSeoAuditReport } from './seo-report.js?v=20260909-checklist';
-import { renderSiteAuditReport } from './site-report.js';
+import { renderSiteAuditReport } from './site-report.js?v=20260911-final-layout';
 import { createSiteLinksExplorer } from './site-links.js';
 import {
   getTaskStepOrder,
@@ -66,7 +66,7 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v4-checklist:';
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v6-final-layout:';
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';

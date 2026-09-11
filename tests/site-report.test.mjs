@@ -44,7 +44,19 @@ test('combined audit report follows the overview, issues, AI cognition, and dime
     visibility: { score: 42, issues: ['AI crawler 被阻止'], recommendations: ['调整 robots.txt'], checks: { allowed_ai_crawlers: 4, total_ai_crawlers_checked: 6 } },
     content: { score: 70 },
     schema: { score: 70 },
-    platform: { score: 70 }
+    platform: {
+      score: 70,
+      platform_scores: {
+        chatgpt: { platform_score: 76, optimization_focus: '可引用事实', primary_gap: '证据不足', preferred_sources: ['官网', '行业媒体'], key_recommendations: ['增加数据来源'] },
+        perplexity: { platform_score: 62 },
+        grok: { platform_score: 99 }
+      }
+    },
+    page_diagnostics: [{
+      page_type: 'homepage', source: 'core', url: 'https://example.com', overall_score: 66,
+      citability_score: 61, content_score: 72, technical_score: 68, schema_score: 40,
+      issue_details: { content: ['缺少来源'] }, recommendation_details: { content: ['补充引用'] }
+    }]
   });
 
   assert.match(html, /combined-report-hero/);
@@ -59,10 +71,30 @@ test('combined audit report follows the overview, issues, AI cognition, and dime
   assert.match(html, /值得信赖/);
   assert.match(html, /结构化不足/);
   assert.match(html, /6 个汇总维度评估/);
-  assert.ok(html.indexOf('combined-radar-panel') < html.indexOf('combined-report-main'));
+  assert.ok(html.indexOf('combined-score-panel') < html.indexOf('combined-report-main'));
+  assert.ok(html.indexOf('combined-report-main') < html.indexOf('combined-radar-panel'));
   assert.ok(html.indexOf('问题清单') < html.indexOf('AI 认知图'));
   assert.ok(html.indexOf('AI 认知图') < html.indexOf('6 个汇总维度评估'));
   assert.match(html, /SEO 覆盖清单/);
+  assert.match(html, /summary-insight-section risk/);
+  assert.match(html, /platform-readiness-card platform-chatgpt/);
+  assert.doesNotMatch(html, />Grok</);
+  assert.doesNotMatch(html, /优先行动计划/);
+  assert.doesNotMatch(html, /Observation Layer/);
+  assert.doesNotMatch(html, /指标说明/);
+  assert.match(html, /<h4>页面诊断<\/h4>/);
+  assert.match(html, /AI 可引用性/);
+  assert.match(html, /首页/);
+});
+
+test('page diagnostics title follows the report language', () => {
+  const html = render({
+    summary: { composite_geo_score: 60 },
+    page_diagnostics: [{ page_type: 'product', url: 'https://example.com/p', overall_score: 60 }]
+  }, 'en');
+  assert.match(html, /<h4>Page Diagnostics<\/h4>/);
+  assert.match(html, /AI Citability/);
+  assert.doesNotMatch(html, /<h4>页面诊断<\/h4>/);
 });
 
 test('combined audit report explains missing SEO data for older cached tasks', () => {

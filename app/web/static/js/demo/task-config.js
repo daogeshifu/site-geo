@@ -56,8 +56,7 @@ export const PLATFORM_LABELS = {
   google_ai_mode: 'Google AI Mode',
   chatgpt: 'ChatGPT',
   perplexity: 'Perplexity',
-  gemini: 'Gemini',
-  grok: 'Grok'
+  gemini: 'Gemini'
 };
 
 export const CONTENT_GEO_FACTOR_LABELS = {
