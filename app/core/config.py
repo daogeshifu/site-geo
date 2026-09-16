@@ -109,7 +109,7 @@ class Settings:
 
     # LLM 调用配置（OpenRouter）
     llm_request_timeout_seconds: float = _get_float("LLM_REQUEST_TIMEOUT_SECONDS", 30.0)
-    default_openrouter_model: str = os.getenv("DEFAULT_OPENROUTER_MODEL", "openai/gpt-4.1")
+    default_openrouter_model: str = os.getenv("DEFAULT_OPENROUTER_MODEL", "openai/gpt-5.6-sol")
     openrouter_api_key: str | None = os.getenv("OPENROUTER_API_KEY")
     openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     openrouter_site_url: str = os.getenv("OPENROUTER_SITE_URL", "http://127.0.0.1:8023")
