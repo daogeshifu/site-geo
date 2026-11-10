@@ -49,6 +49,8 @@ button, summary, a, input, select { -webkit-tap-highlight-color: transparent; }
 .field input:not([type=checkbox]), .field select { min-width: 0; height: 40px; border-radius: 7px; border-color: #dce5e7; background-color: #fbfcfd; font-size: 12px; }
 .field .inp-icon { font-size: 12px; }
 .field .has-icon { padding-left: 32px; }
+.field-hint { margin-top: 6px; color: #8a999e; font-size: 10px; line-height: 1.5; }
+.model-fixed-hint { color: #8a999e; font-size: 12px; line-height: 1.6; }
 .advanced-config { border-block: 1px solid #e8eeef; margin: 0 0 16px; }
 .advanced-config > summary { padding: 13px 0; font-size: 12px; font-weight: 600; cursor: pointer; }
 .advanced-config > summary span { display: block; margin: 4px 0 0 14px; color: var(--muted); font-size: 10px; font-weight: 400; }
@@ -56,6 +58,8 @@ button, summary, a, input, select { -webkit-tap-highlight-color: transparent; }
 .toggle-wrap { flex-wrap: wrap; gap: 6px; }
 .toggle-lbl { font-size: 11px; color: #405b63; }
 .toggle-hint { font-size: 10px; margin: 0; color: #8a999e; }
+.toggle-disabled { color: #9aa7ac; cursor: not-allowed; opacity: .58; pointer-events: none; }
+.toggle-disabled .toggle-lbl { color: #8a999e; }
 input[type=checkbox] { accent-color: var(--accent); }
 #full-audit-row { grid-template-columns: 1fr 80px; align-items: center; }
 #full-audit-row .field { margin: 0; }

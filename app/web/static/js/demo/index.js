@@ -16,6 +16,8 @@ import {
   tx
 } from './shared.js';
 
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.6-sol';
+
 /* ── Tabs ── */
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.setAttribute('role', 'tab');
@@ -134,17 +136,12 @@ function applyAuditUrlState() {
   if (languages.has(feedbackLang)) $('feedback-lang').value = feedbackLang;
   if ($('target-locale') && targetLocales.has(targetLocale)) $('target-locale').value = targetLocale;
   if (params.has('full_audit')) $('full-audit').checked = readBooleanParam(params, 'full_audit');
-  if (params.has('build_knowledge_graph')) $('build-knowledge-graph').checked = readBooleanParam(params, 'build_knowledge_graph');
+  $('build-knowledge-graph').checked = false;
   if (params.has('force_refresh')) $('force').checked = readBooleanParam(params, 'force_refresh');
   if (params.get('max_pages')) {
     const pages = Number(params.get('max_pages'));
     if (Number.isFinite(pages)) $('max-pages').value = String(Math.max(5, Math.min(10000, Math.round(pages))));
   }
-  if (params.get('model')) $('model').value = params.get('model');
-
-  const isPremium = $('mode').value === 'premium';
-  $('model').disabled = !isPremium;
-  $('model').style.opacity = isPremium ? '1' : '0.45';
   $('max-pages').disabled = !$('full-audit').checked;
   $('max-pages').style.opacity = $('full-audit').checked ? '1' : '0.45';
 
@@ -166,13 +163,12 @@ function syncAuditUrl(taskId = null, { replace = false } = {}) {
   params.set('mode', $('mode').value);
   params.set('feedback_lang', $('feedback-lang').value);
   params.set('full_audit', $('full-audit').checked ? '1' : '0');
-  params.set('build_knowledge_graph', $('build-knowledge-graph').checked ? '1' : '0');
+  params.set('build_knowledge_graph', '0');
   params.set('force_refresh', $('force').checked ? '1' : '0');
   if ($('full-audit').checked) params.set('max_pages', $('max-pages').value || '12');
   const targetLocale = $('target-locale')?.value || '';
   if (targetLocale) params.set('target_locale', targetLocale);
-  const model = $('model').value.trim();
-  if ($('mode').value === 'premium' && model) params.set('model', model);
+  if ($('mode').value === 'premium') params.set('model', DEFAULT_OPENROUTER_MODEL);
   if (taskId && TASK_ID_PATTERN.test(taskId)) params.set('task_id', taskId);
 
   const nextUrl = `${window.location.pathname}?${params.toString()}`;
@@ -441,7 +437,8 @@ function applyAuditScopeUi() {
   $('task-type').disabled = single;
   $('mode').disabled = single;
   $('full-audit').disabled = single;
-  $('build-knowledge-graph').disabled = single;
+  $('build-knowledge-graph').disabled = true;
+  $('build-knowledge-graph').checked = false;
   $('max-pages').min = single ? '1' : '5';
   if (single) {
     $('mode').value = 'standard';
@@ -462,9 +459,6 @@ function applyAuditScopeUi() {
   $('full-audit-row').style.display = !single && config.fullAuditVisible ? 'grid' : 'none';
   $('max-pages').disabled = single || !config.fullAuditVisible || !$('full-audit').checked;
   $('max-pages').style.opacity = $('max-pages').disabled ? '0.45' : '1';
-  const premium = !single && $('mode').value === 'premium';
-  $('model').disabled = !premium;
-  $('model').style.opacity = premium ? '1' : '0.45';
   for (const key of ['site-links', 'llm', 'compare']) {
     const tab = document.querySelector(`[data-tab="${key}"]`);
     if (tab) {
@@ -860,10 +854,8 @@ function renderTimeline(steps) {
     if ($('target-locale')) {
       $('target-locale').value = task.target_locale || '';
     }
-    if (typeof task.build_knowledge_graph === 'boolean') {
-      $('build-knowledge-graph').checked = task.build_knowledge_graph;
-    }
-    syncGraphTabs(Boolean(task.build_knowledge_graph));
+    $('build-knowledge-graph').checked = false;
+    syncGraphTabs(false);
     applyTaskTypeUi(task.task_type);
     const shortId = task.task_id ? task.task_id.slice(0, 10) + '…' : '—';
     $('task-id').textContent     = shortId;
@@ -1111,7 +1103,7 @@ function renderTimeline(steps) {
       force_refresh: $('force').checked,
       full_audit: taskType !== 'site_content_audit' && $('full-audit').checked,
       feedback_lang: $('feedback-lang').value,
-      build_knowledge_graph: $('build-knowledge-graph').checked
+      build_knowledge_graph: false
     };
     const targetLocale = $('target-locale')?.value || '';
     if (targetLocale) body.target_locale = targetLocale;
@@ -1120,9 +1112,7 @@ function renderTimeline(steps) {
       body.max_pages = Math.max(5, Math.min(10000, Number.isFinite(parsedPages) ? parsedPages : 12));
     }
     if (mode === 'premium') {
-      body.llm = { provider: 'openrouter' };
-      const model = $('model').value.trim();
-      if (model) body.llm.model = model;
+      body.llm = { provider: 'openrouter', model: DEFAULT_OPENROUTER_MODEL };
     }
 
     const requestBody = withAuditScope(body, getSelectedAuditScope());
@@ -1206,11 +1196,6 @@ function renderTimeline(steps) {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     $('task-type').dispatchEvent(new Event('change'));
   });
-  $('mode').addEventListener('change', () => {
-    const isPremium = $('mode').value === 'premium';
-    $('model').disabled = !isPremium;
-    $('model').style.opacity = isPremium ? '1' : '0.45';
-  });
   $('task-type').addEventListener('change', () => {
     clearAllGraphPolling();
     currentTask = { task_type: getSelectedTaskType(), audit_scope: getSelectedAuditScope(), status: 'idle' };
@@ -1260,15 +1245,10 @@ function renderTimeline(steps) {
     applyTaskTypeUi();
   });
   $('max-pages').addEventListener('input', () => applyTaskTypeUi());
-  $('build-knowledge-graph').addEventListener('change', () => {
-    syncGraphTabs($('build-knowledge-graph').checked);
-    renderTimeline(currentTask?.steps || {});
-  });
-
   /* ── Init ── */
   const locationTaskId = applyAuditUrlState();
   applyTaskTypeUi();
-  syncGraphTabs($('build-knowledge-graph').checked);
+  syncGraphTabs(false);
   renderTimeline({});
   setGraphPlaceholder('structure', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示结构图谱。', 'Structure graph will appear after the task starts.'));
   setGraphPlaceholder('entity', currentTask, tx(getReportLang(currentTask), '等待任务开始后展示实体图谱。', 'Entity graph will appear after the task starts.'));

@@ -139,6 +139,9 @@ def test_demo_defaults_and_explanations_live_in_docs():
     soup = BeautifulSoup(html, "html.parser")
     assert soup.select_one('#task-type option[selected]')["value"] == "site_seo_audit"
     assert "checked" not in soup.select_one('#build-knowledge-graph').attrs
+    assert "disabled" in soup.select_one('#build-knowledge-graph').attrs
+    assert soup.select_one('#model') is None
+    assert "GPT-5.6 Sol（默认）" in soup.select_one('#model-hint').text
     assert soup.select_one('[data-tab="site-links"]')
     assert "汇总层维度业务落成" not in html
     api_docs = client.get("/api-doc").text
