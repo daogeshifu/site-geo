@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
   <link rel="stylesheet" href="/static/css/workspace.css?v=20260911-final-layout" />
+  <link rel="stylesheet" href="/static/css/single-page.css?v=20261110-scope" />
 </head>
 <body>
 
@@ -72,6 +73,14 @@
       </div>
       <div class="card-body">
         <form id="audit-form">
+          <div class="field">
+            <label for="audit-scope">诊断范围</label>
+            <select id="audit-scope">
+              <option value="site" selected>整站诊断</option>
+              <option value="page">单页诊断</option>
+            </select>
+            <div id="audit-scope-hint" class="field-hint">按站点范围发现并采样页面。</div>
+          </div>
           <div class="row-2">
             <div class="field">
               <label>任务类型</label>
@@ -595,6 +604,6 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<script type="module" src="/static/js/demo/index.js?v=20260911-final-layout"></script>
+<script type="module" src="/static/js/demo/index.js?v=20261110-scope"></script>
 </body>
 </html>

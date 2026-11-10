@@ -3,6 +3,7 @@ export const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
 export const SITE_SEO_STEP_ORDER = ['discovery', 'seo', 'summary'];
 export const STEP_ICON = {
   discovery: '🔍',
+  page: '📄',
   visibility: '👁',
   technical: '⚙️',
   content: '📝',
@@ -74,7 +75,8 @@ export function getTaskTypeConfig(taskType = 'site_geo_audit') {
   return TASK_TYPE_CONFIG[taskType] || TASK_TYPE_CONFIG.site_geo_audit;
 }
 
-export function getTaskStepOrder(taskType = 'site_geo_audit') {
+export function getTaskStepOrder(taskType = 'site_geo_audit', auditScope = 'site') {
+  if (auditScope === 'page') return ['page', 'summary'];
   if (taskType === 'site_content_audit') return SITE_CONTENT_STEP_ORDER;
   if (taskType === 'site_seo_audit') return SITE_SEO_STEP_ORDER;
   return SITE_GEO_STEP_ORDER;

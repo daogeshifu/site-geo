@@ -40,6 +40,8 @@ class CacheService:
         feedback_lang: str = "en",
         task_type: str = "site_geo_audit",
         target_locale: str | None = None,
+        audit_scope: str = "site",
+        country: str | None = None,
     ) -> tuple[str, str, str]:
         """生成缓存键，返回 (sha256_digest, normalized_url, domain)
 
@@ -64,6 +66,9 @@ class CacheService:
             f"{task_type}|schema={task_schema_version}|{scope_key}|{mode}|{provider}|{model}"
             f"|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}|target_locale={target_locale or 'auto'}"
         )
+        if audit_scope == "page":
+            # Never reuse the site/directory namespace for an individual URL.
+            raw_key = f"page-v2|{normalized_url}|{mode}|{feedback_lang}|{target_locale or 'auto'}|{country or ''}|{task_type}"
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return digest, normalized_url, domain
 

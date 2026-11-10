@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.audit import (
     ContentAuditResult,
@@ -20,7 +20,7 @@ from app.models.discovery import DiscoveryResult
 # 审计模式：standard（规则驱动）或 premium（LLM 增强）
 AuditMode = Literal["standard", "premium"]
 FeedbackLang = Literal["en", "zh"]
-TargetLocale = Literal["en", "de", "nl", "fr", "zh"]
+TargetLocale = Literal["en", "de", "nl", "fr", "zh", "es", "ar", "tr"]
 TaskType = Literal["site_geo_audit", "site_content_audit", "site_seo_audit"]
 # 目前仅支持 OpenRouter 作为 LLM 提供商
 LLMProvider = Literal["openrouter"]
@@ -45,7 +45,23 @@ class UrlRequest(BaseModel):
     llm: LLMConfig | None = None          # 可选 LLM 配置（premium 模式专用）
     observation: ObservationInput | None = None  # 可选观测层输入，不参与评分
     full_audit: bool = False
-    max_pages: int = Field(default=12, ge=5, le=10000)
+    max_pages: int = Field(default=12, ge=1, le=10000)
+    audit_scope: Literal["site", "page"] = "site"
+    country: str | None = Field(default=None, pattern=r"^[A-Za-z]{2}$")
+
+    @model_validator(mode="after")
+    def validate_audit_scope(self):
+        if self.audit_scope == "page":
+            if self.mode != "standard":
+                raise ValueError("Page scope currently supports standard rule-based diagnosis only")
+            self.full_audit = False
+            self.max_pages = 1
+            self.build_knowledge_graph = False
+        elif self.max_pages < 5:
+            raise ValueError("Site scope requires max_pages >= 5")
+        if self.country:
+            self.country = self.country.upper()
+        return self
     target_locale: TargetLocale | None = None   # 目标站点语言版本（与反馈语言分离）
     feedback_lang: FeedbackLang = "en"
     build_knowledge_graph: bool = False

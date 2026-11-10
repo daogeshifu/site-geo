@@ -14,6 +14,7 @@ from app.services.audit.content import ContentService
 from app.services.discovery.discovery import DiscoveryService
 from app.services.reporting.observation import ObservationService
 from app.services.audit.page_content import PageContentAuditService
+from app.services.audit.single_page import SinglePageAuditService
 from app.services.audit.page_diagnostics import PageDiagnosticsService
 from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
@@ -128,6 +129,8 @@ class TaskService:
                 request.feedback_lang,
                 request.task_type,
                 request.target_locale,
+                audit_scope=request.audit_scope,
+                country=request.country,
             )
         except ValueError as exc:
             raise AppError(400, "invalid URL", str(exc)) from exc
@@ -136,13 +139,15 @@ class TaskService:
         cached_record = None if request.force_refresh or request.observation else self.cache_service.get(cache_key)
         task_id = uuid4().hex
         now = self._utcnow()
-        step_order = self._step_order_for(request.task_type)
+        step_order = ["page", "summary"] if request.audit_scope == "page" else self._step_order_for(request.task_type)
         task = AuditTask(
             task_id=task_id,
             url=request.url,
             normalized_url=normalized_url,
             domain=domain,
             cache_key=cache_key,
+            audit_scope=request.audit_scope,
+            country=request.country,
             task_type=request.task_type,
             mode=request.mode,
             llm=request.llm,
@@ -154,7 +159,7 @@ class TaskService:
             build_knowledge_graph=request.build_knowledge_graph,
             cached=bool(cached_record),
             force_refresh=request.force_refresh,
-            storage_backend=self.asset_store.backend,
+            storage_backend="file" if request.audit_scope == "page" else self.asset_store.backend,
             created_at=now,
             updated_at=now,
             step_order=step_order,
@@ -180,7 +185,7 @@ class TaskService:
                 task.site_asset_summary = discovery_payload["asset_summary"]
                 task.storage_backend = discovery_payload["asset_summary"].get("backend", task.storage_backend)
             self.tasks[task_id] = task
-            if self.asset_store.available:
+            if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)
                 except Exception:
@@ -193,7 +198,7 @@ class TaskService:
         # 新任务：注册后在后台启动审计协程
         async with self._lock:
             self.tasks[task_id] = task
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
@@ -276,13 +281,21 @@ class TaskService:
         task.status = "running"
         task.current_step = task.step_order[0] if task.step_order else "running"
         task.updated_at = self._utcnow()
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
                 pass
         try:
-            if task.task_type == "site_content_audit":
+            if task.audit_scope == "page":
+                await self._update_step(task, "page", "running")
+                task.result = await SinglePageAuditService().audit(
+                    task.url, country=task.country, target_locale=task.target_locale,
+                    feedback_lang=task.feedback_lang,
+                )
+                await self._update_step(task, "page", "completed", task.result["page"])
+                await self._update_step(task, "summary", "completed", task.result["summary"])
+            elif task.task_type == "site_content_audit":
                 task.result = await self._run_site_content_task(task)
             elif task.task_type == "site_seo_audit":
                 task.result = await self._run_site_seo_task(task)
@@ -313,7 +326,7 @@ class TaskService:
             task.progress_percent = 100
             task.completed_at = self._utcnow()
             task.updated_at = task.completed_at
-            if self.asset_store.available:
+            if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)
                 except Exception:
@@ -322,9 +335,10 @@ class TaskService:
             # 任何步骤失败都标记整体任务失败
             task.status = "failed"
             task.error = str(exc)
+            task.error_details = getattr(exc, "errors", None)
             task.current_step = "failed"
             task.updated_at = self._utcnow()
-            if self.asset_store.available:
+            if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)
                 except Exception:
@@ -431,7 +445,7 @@ class TaskService:
             )
         if isinstance(task.result, dict):
             task.result["discovery"] = discovery.model_dump(mode="json")
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
@@ -559,7 +573,7 @@ class TaskService:
                     graph_version=self.site_graph_service.GRAPH_VERSION,
                     persist=True,
                 )
-            if self.asset_store.available:
+            if self.asset_store.available and task.audit_scope != "page":
                 await self.asset_store.save_task(task)
         except Exception as exc:
             await self._update_graph_job(
@@ -633,7 +647,7 @@ class TaskService:
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
@@ -755,7 +769,7 @@ class TaskService:
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
@@ -802,7 +816,7 @@ class TaskService:
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
         await self._update_step(task, "discovery", "completed", discovery_payload)
-        if self.asset_store.available:
+        if self.asset_store.available and task.audit_scope != "page":
             try:
                 await self.asset_store.save_task(task)
             except Exception:
