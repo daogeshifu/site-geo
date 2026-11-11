@@ -6,7 +6,12 @@
   <title>网站 SEO+GEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
+<<<<<<< HEAD
   <link rel="stylesheet" href="/static/css/workspace.css?v=20260930-echarts-cloud" />
+=======
+  <link rel="stylesheet" href="/static/css/workspace.css?v=20260916-fixed-model" />
+  <link rel="stylesheet" href="/static/css/single-page.css?v=20261110-scope" />
+>>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
 </head>
 <body>
 
@@ -72,6 +77,14 @@
       </div>
       <div class="card-body">
         <form id="audit-form">
+          <div class="field">
+            <label for="audit-scope">诊断范围</label>
+            <select id="audit-scope">
+              <option value="site" selected>整站诊断</option>
+              <option value="page">单页诊断</option>
+            </select>
+            <div id="audit-scope-hint" class="field-hint">按站点范围发现并采样页面。</div>
+          </div>
           <div class="row-2">
             <div class="field">
               <label>任务类型</label>
@@ -336,8 +349,12 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
+<<<<<<< HEAD
 <script src="/static/js/vendor/echarts-5.6.0.min.js"></script>
 <script src="/static/js/vendor/echarts-wordcloud-2.1.0.min.js"></script>
 <script type="module" src="/static/js/demo/index.js?v=20260930-echarts-cloud"></script>
+=======
+<script type="module" src="/static/js/demo/index.js?v=20261110-scope-merge"></script>
+>>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
 </body>
 </html>

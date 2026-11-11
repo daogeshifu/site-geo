@@ -1,4 +1,5 @@
 import { renderContentAuditReport } from './content-report.js';
+import { withAuditScope, renderSinglePageReport } from './page-audit.js?v=20261110-scope';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
 import { mountPerceptionClouds } from './perception-cloud.js';
@@ -9,7 +10,7 @@ import {
   getTaskStepOrder,
   getTaskTypeConfig,
   STEP_ICON
-} from './task-config.js';
+} from './task-config.js?v=20261110-scope';
 import {
   $,
   escapeHtml,
@@ -69,7 +70,12 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
+<<<<<<< HEAD
 const REPORT_CACHE_PREFIX = 'geo-audit-report:v9-echarts-cloud:';
+=======
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v7-scope:';
+let savedSiteOptions = null;
+>>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
@@ -107,7 +113,7 @@ const GRAPH_CONFIG = {
 function syncExportButtonState(task = currentTask) {
   const button = $('export-btn');
   if (!button) return;
-  const isSeoAudit = task?.task_type === 'site_seo_audit';
+  const isSeoAudit = task?.task_type === 'site_seo_audit' && task?.audit_scope !== 'page';
   button.disabled = button.classList.contains('exporting') || !demoTokenVerified || task?.status !== 'completed' || !isSeoAudit;
   button.title = isSeoAudit ? '导出问题清单和链接清单' : 'Excel 导出仅适用于网站 SEO 审计';
 }
@@ -128,6 +134,7 @@ function applyAuditUrlState() {
   const feedbackLang = params.get('feedback_lang');
   const targetLocale = params.get('target_locale') || '';
 
+  $('audit-scope').value = params.get('audit_scope') === 'page' ? 'page' : 'site';
   if (params.get('url')) $('url').value = params.get('url');
   if (taskTypes.has(taskType)) $('task-type').value = taskType;
   if (modes.has(mode)) $('mode').value = mode;
@@ -157,6 +164,7 @@ function syncAuditUrl(taskId = null, { replace = false } = {}) {
   const targetUrl = $('url').value.trim();
   if (targetUrl) params.set('url', targetUrl);
   params.set('task_type', getSelectedTaskType());
+  params.set('audit_scope', getSelectedAuditScope());
   params.set('mode', $('mode').value);
   params.set('feedback_lang', $('feedback-lang').value);
   params.set('full_audit', $('full-audit').checked ? '1' : '0');
@@ -416,6 +424,56 @@ async function initDemoAccess() {
   syncSubmitButtonState();
 }
 
+function getSelectedAuditScope() {
+  return $('audit-scope')?.value === 'page' ? 'page' : 'site';
+}
+
+function applyAuditScopeUi() {
+  const single = getSelectedAuditScope() === 'page';
+  if (single && savedSiteOptions === null) {
+    savedSiteOptions = { mode: $('mode').value, full: $('full-audit').checked, pages: $('max-pages').value, graph: $('build-knowledge-graph').checked };
+  } else if (!single && savedSiteOptions !== null) {
+    $('mode').value = savedSiteOptions.mode;
+    $('full-audit').checked = savedSiteOptions.full;
+    $('max-pages').value = savedSiteOptions.pages;
+    $('build-knowledge-graph').checked = savedSiteOptions.graph;
+    savedSiteOptions = null;
+  }
+  $('task-type').disabled = single;
+  $('mode').disabled = single;
+  $('full-audit').disabled = single;
+  $('build-knowledge-graph').disabled = true;
+  $('build-knowledge-graph').checked = false;
+  $('max-pages').min = single ? '1' : '5';
+  if (single) {
+    $('mode').value = 'standard';
+    $('full-audit').checked = false;
+    $('build-knowledge-graph').checked = false;
+    $('max-pages').value = '1';
+    $('page-heading').textContent = '单页诊断';
+    $('page-subtitle').textContent = '只检查输入链接的页面内容，不访问首页或其他页面。';
+    $('url-label').textContent = '页面完整 URL';
+    $('url').placeholder = 'https://example.com/products/example/';
+    $('sample-hint').textContent = '仅抓取当前 URL 的响应 HTML；不跟随跳转、不扩展其他页面。';
+  } else {
+    const content = getSelectedTaskType() === 'site_content_audit';
+    $('sample-hint').textContent = content ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : getSelectedTaskType() === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认分析首页与 About、服务、文章和案例关键页。';
+  }
+  $('audit-scope-hint').textContent = single ? '只诊断这一条链接，保留完整路径和查询参数。' : '按站点范围发现并采样页面。';
+  const config = getTaskTypeConfig(getSelectedTaskType());
+  $('full-audit-row').style.display = !single && config.fullAuditVisible ? 'grid' : 'none';
+  $('max-pages').disabled = single || !config.fullAuditVisible || !$('full-audit').checked;
+  $('max-pages').style.opacity = $('max-pages').disabled ? '0.45' : '1';
+  for (const key of ['site-links', 'llm', 'compare']) {
+    const tab = document.querySelector(`[data-tab="${key}"]`);
+    if (tab) {
+      tab.hidden = single;
+      if (single && tab.classList.contains('active')) document.querySelector('[data-tab="summary"]').click();
+    }
+  }
+  syncGraphTabs(!single && $('build-knowledge-graph').checked);
+}
+
 function getSelectedTaskType() {
   return $('task-type')?.value || 'site_seo_audit';
 }
@@ -439,6 +497,7 @@ function applyTaskTypeUi(taskType = null) {
     $('max-pages').disabled = !enabled;
     $('max-pages').style.opacity = enabled ? '1' : '0.45';
   }
+  applyAuditScopeUi();
   if (currentTask && currentTask.task_type !== resolvedTaskType) {
     syncExportButtonState(null);
   } else if (currentTask) {
@@ -510,6 +569,10 @@ function renderReport(task) {
     const running = ['queued', 'running'].includes(task?.status);
     const failed = task?.status === 'failed';
     host.innerHTML = `<div class="empty-orbit ${running ? 'is-scanning' : ''}"><span>G.</span><i></i><b></b></div><span class="workspace-kicker">${running ? 'ANALYSIS IN PROGRESS' : failed ? 'AUDIT INTERRUPTED' : 'YOUR NEXT OPPORTUNITY'}</span><h3>${escapeHtml(failed ? tx(lang, '本次审计未能完成', 'Audit could not be completed') : running ? tx(lang, '正在发现站点的优化机会', 'Discovering opportunities for your site') : tx(lang, '发现网站的下一次增长机会', 'Discover your next growth opportunity'))}</h3><p>${escapeHtml(failed ? task.error || tx(lang, '请检查目标 URL 后重试。', 'Check the target URL and try again.') : running ? tx(lang, '页面抓取与诊断正在进行，报告将在完成后自动呈现。', 'Crawling and analysis are underway. Your report will appear automatically.') : tx(lang, '输入站点 URL，开始一次全面的搜索健康检查。', 'Enter a site URL to start a search health check.'))}</p><div class="empty-capabilities"><span>01 · ${tx(lang, '六维健康评分', 'Health scores')}</span><span>02 · ${tx(lang, '页面抓取证据', 'Page evidence')}</span><span>03 · ${tx(lang, '优先行动建议', 'Prioritized actions')}</span></div>`;
+    return;
+  }
+  if (task?.audit_scope === 'page' || result.audit_scope === 'page') {
+    renderSinglePageReport({ task, host, lang, setCachedReportHtml });
     return;
   }
   if (task?.task_type === 'site_content_audit') {
@@ -730,9 +793,9 @@ async function loadEntityGraph(task = currentTask) {
 function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';
-    const labels = { discovery: '发现站点', seo: 'SEO 诊断', summary: '生成报告', visibility: 'AI 可见性', technical: '技术基础', content: '内容质量', schema: '结构化数据', platform: '平台适配', observation: '观测数据' };
+    const labels = { page: '指定页面诊断', discovery: '发现站点', seo: 'SEO 诊断', summary: '生成报告', visibility: 'AI 可见性', technical: '技术基础', content: '内容质量', schema: '结构化数据', platform: '平台适配', observation: '观测数据' };
     const statuses = { pending: '待执行', running: '进行中', completed: '已完成', failed: '失败', skipped: '未启用' };
-    getTaskStepOrder(currentTask?.task_type || getSelectedTaskType()).forEach((name, i) => {
+    getTaskStepOrder(currentTask?.task_type || getSelectedTaskType(), currentTask?.audit_scope || getSelectedAuditScope()).forEach((name, i) => {
       const step = steps?.[name] || { status: 'pending' };
       const preview = step.error || (step.status === 'completed' ? '结果已就绪' : step.status === 'running' ? '正在处理站点数据…' : '等待执行');
       const item = document.createElement('div');
@@ -784,6 +847,7 @@ function renderTimeline(steps) {
   /* ── Populate meta fields ── */
   function setMeta(task) {
     currentTask = task || null;
+    $('audit-scope').value = task?.audit_scope === 'page' ? 'page' : 'site';
     siteLinks.setTask(task);
     currentTaskId     = task.task_id || null;
     currentTaskStatus = task.status  || 'idle';
@@ -1012,7 +1076,7 @@ function renderTimeline(steps) {
     setSubmitBusy('提交中…');
     const taskType = getSelectedTaskType();
     const isContentAudit = taskType === 'site_content_audit';
-    currentTask = { task_type: taskType, status: 'queued' };
+    currentTask = { task_type: taskType, audit_scope: getSelectedAuditScope(), status: 'queued' };
     siteLinks.setTask(currentTask);
     document.querySelector('[data-tab="summary"]').click();
     currentStructureGraph = null;
@@ -1058,11 +1122,12 @@ function renderTimeline(steps) {
       body.llm = { provider: 'openrouter', model: DEFAULT_OPENROUTER_MODEL };
     }
 
+    const requestBody = withAuditScope(body, getSelectedAuditScope());
     try {
       const res     = await demoApiFetch(`${API_PREFIX}/tasks/audit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(requestBody)
       });
       const payload = await res.json();
       if (!payload.success) throw new Error(payload.message || '创建任务失败');
@@ -1134,9 +1199,13 @@ function renderTimeline(steps) {
   $('copy-json-btn').addEventListener('click', copyJsonOutput);
   $('export-btn').addEventListener('click', exportCurrentReport);
 
+  $('audit-scope').addEventListener('change', () => {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    $('task-type').dispatchEvent(new Event('change'));
+  });
   $('task-type').addEventListener('change', () => {
     clearAllGraphPolling();
-    currentTask = { task_type: getSelectedTaskType(), status: 'idle' };
+    currentTask = { task_type: getSelectedTaskType(), audit_scope: getSelectedAuditScope(), status: 'idle' };
     siteLinks.setTask(currentTask);
     renderReport(currentTask);
     currentStructureGraph = null;

@@ -56,6 +56,8 @@ class AuditTask(BaseModel):
     normalized_url: str    # 规范化 URL
     domain: str            # 目标域名
     cache_key: str         # SHA256 缓存键
+    audit_scope: Literal["site", "page"] = "site"
+    country: str | None = None
     task_type: TaskType = "site_seo_audit"
     mode: str = "standard"
     llm: LLMConfig | None = None
@@ -77,6 +79,7 @@ class AuditTask(BaseModel):
     updated_at: datetime
     completed_at: datetime | None = None
     error: str | None = None              # 任务失败时的全局错误信息
+    error_details: Any = None
     step_order: list[str] = Field(default_factory=list)
     steps: dict[str, TaskStep] = Field(default_factory=dict)  # 各步骤状态
     graph_jobs: dict[str, GraphJobStatus] = Field(default_factory=dict)
