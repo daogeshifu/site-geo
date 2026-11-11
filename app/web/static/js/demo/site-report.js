@@ -363,10 +363,10 @@ function renderPrioritySummary(issues) {
   }).join('');
 }
 
-function buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, lang = 'zh' }) {
+function buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, result, lang = 'zh' }) {
   const negativePattern = lang === 'zh'
-    ? /弱|不足|受限|缺失|风险|争议|低|薄弱|阻止|不可|欠缺/
-    : /weak|missing|limited|risk|controvers|low|block|insufficient|poor/i;
+    ? /弱|不足|受限|缺失|风险|争议|低|薄弱|阻止|不可|欠缺|待|模糊|不全/
+    : /weak|missing|limited|risk|controvers|low|block|insufficient|poor|unclear|light/i;
   const keywords = Array.isArray(aiPerception?.cognition_keywords)
     ? aiPerception.cognition_keywords.map(item => String(item || '').trim()).filter(Boolean)
     : [];
@@ -391,14 +391,57 @@ function buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, 
       };
 
   dimensionMeta.forEach(meta => {
-    const score = Math.max(0, Math.min(100, Number(weighted?.[meta.key]?.raw_score ?? 0)));
+    const rawScore = weighted?.[meta.key]?.raw_score;
+    if (rawScore == null) return;
+    const score = Math.max(0, Math.min(100, Number(rawScore)));
     const fallbackName = summary?.dimensions?.[meta.key]?.display_name || meta.defaultName;
     const [positiveWord, limitedWord] = perceptionLabels[meta.key] || [fallbackName, fallbackName];
     if (score >= 70) positive.push(positiveWord);
     if (score < 60) limited.push(limitedWord);
   });
 
-  const unique = items => [...new Set(items)].slice(0, 8);
+  // Every extra term is tied to an observed audit signal; absent data adds no claim.
+  const addSignal = (value, good, gap) => {
+    if (value === true) positive.push(tx(lang, good[0], good[1]));
+    if (value === false) limited.push(tx(lang, gap[0], gap[1]));
+  };
+  const site = result?.discovery?.site_signals || {};
+  const findings = result?.content?.findings || {};
+  const checks = result?.technical?.checks || {};
+  const schemaFindings = result?.schema?.findings || {};
+  const visibilityFindings = result?.visibility?.findings || {};
+  addSignal(site.company_name_detected, ['品牌身份明确', 'Clear brand identity'], ['品牌身份待确认', 'Brand identity unclear']);
+  addSignal(site.same_as_detected, ['官方账号关联', 'Official profiles linked'], ['官方账号关联缺失', 'Official profiles missing']);
+  addSignal(site.email_detected, ['联系信息透明', 'Contact details visible'], ['联系信息不足', 'Contact details missing']);
+  addSignal(findings.has_faq_any, ['问答覆盖', 'FAQ coverage'], ['问答覆盖不足', 'Limited FAQ coverage']);
+  addSignal(findings.has_reference_section_any, ['参考来源清晰', 'Sources visible'], ['参考来源不足', 'Sources missing']);
+  addSignal(findings.has_quantified_data_any, ['数据证据充分', 'Quantified evidence'], ['数据证据不足', 'Limited data evidence']);
+  addSignal(findings.has_publish_date_any, ['发布时间可见', 'Dates visible'], ['内容日期缺失', 'Content dates missing']);
+  addSignal(findings.has_author_any, ['作者信息明确', 'Authorship clear'], ['作者信息缺失', 'Authorship missing']);
+  addSignal(findings.has_inline_citations_any, ['文内引用明确', 'Inline citations present'], ['文内引用缺失', 'Inline citations missing']);
+  addSignal(findings.has_tldr_any, ['摘要易于提取', 'Summaries easy to extract'], ['摘要内容缺失', 'Summaries missing']);
+  addSignal(findings.has_answer_first_any, ['答案前置', 'Answers up front'], ['答案结构待优化', 'Answer structure needs work']);
+  addSignal(findings.has_update_log_any, ['更新记录透明', 'Update history visible'], ['更新记录缺失', 'Update history missing']);
+  if (findings.average_link_context_score != null) {
+    addSignal(Number(findings.average_link_context_score) >= 70, ['链接语义清晰', 'Clear link context'], ['链接语义偏弱', 'Weak link context']);
+  }
+  addSignal(checks.unique_h1, ['标题结构清晰', 'Clear heading structure'], ['标题结构待优化', 'Heading structure needs work']);
+  if (checks.render_blocking?.score != null) {
+    addSignal(Number(checks.render_blocking.score) >= 70, ['渲染阻塞较少', 'Low render blocking'], ['渲染阻塞风险', 'Render blocking risk']);
+  }
+  if (checks.freshness_signal_score != null) {
+    addSignal(Number(checks.freshness_signal_score) >= 70, ['更新信号明确', 'Freshness signals clear'], ['更新信号偏弱', 'Weak freshness signals']);
+  }
+  if (schemaFindings.schema_type_count != null) {
+    addSignal(Number(schemaFindings.schema_type_count) >= 3, ['实体标记丰富', 'Rich entity markup'], ['实体标记偏少', 'Sparse entity markup']);
+  }
+  const llmsScore = visibilityFindings.llms_quality?.score;
+  if (llmsScore != null) addSignal(Number(llmsScore) >= 70, ['AI 说明可用', 'AI guidance available'], ['AI 说明待完善', 'AI guidance needs work']);
+  const citation = visibilityFindings.citability;
+  const citationScore = citation?.best_page_citability?.score ?? citation?.score;
+  if (citationScore != null) addSignal(Number(citationScore) >= 70, ['页面易于引用', 'Pages easy to cite'], ['引用准备度不足', 'Citation readiness limited']);
+
+  const unique = items => [...new Set(items)].slice(0, 16);
   return {
     positive: unique(positive.length ? positive : [tx(lang, '待建立正面认知', 'Positive perception pending')]),
     limited: unique(limited.length ? limited : [tx(lang, '暂无明显受限认知', 'No strong limiting perception')])
@@ -406,9 +449,28 @@ function buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, 
 }
 
 function renderWordCloud(words, tone) {
-  return words.map((word, index) => `
-    <span class="ai-word ai-word-${tone} size-${(index % 4) + 1}">${escapeHtml(word)}</span>
-  `).join('');
+  return `<div class="ai-word-cloud-stage" data-tone="${tone}">
+    <div class="ai-word-cloud-chart" aria-hidden="true"></div>
+    <div class="ai-word-cloud-fallback">${words.map((word, index) => `
+      <span class="ai-word ai-word-${tone} size-${[1, 3, 2, 4, 2, 3][index % 6]}">${escapeHtml(word)}</span>
+    `).join('')}</div>
+  </div>`;
+}
+
+function buildKeyIssues(summary, fallback) {
+  const dimensions = Object.entries(summary?.dimensions || {})
+    .filter(([, item]) => Array.isArray(item?.issues) && item.issues.length)
+    .sort((a, b) => Number(a[1].score ?? 100) - Number(b[1].score ?? 100));
+  if (dimensions.length) {
+    return dimensions.slice(0, 5).map(([key, item]) => `${item.display_name || key}: ${item.issues[0]}`);
+  }
+  const seen = new Set();
+  return (Array.isArray(fallback) ? fallback : []).filter(item => {
+    const category = String(insightText(item)).split(/[:：]/, 1)[0].trim();
+    if (seen.has(category)) return false;
+    seen.add(category);
+    return true;
+  }).slice(0, 5);
 }
 
 function insightText(item, fallback = '') {
@@ -501,7 +563,7 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
       : tx(lang, '未提供 · 不计分', 'Not provided · Unscored')
   };
   const executive = summary?.llm_insights?.executive_summary || summary.summary || labels.noSummary;
-  const topIssues = summary?.llm_insights?.top_issues || summary.top_issues || [];
+  const topIssues = buildKeyIssues(summary, summary?.llm_insights?.top_issues || summary.top_issues || []);
   const quickWins = summary?.llm_insights?.quick_wins || summary.quick_wins || [];
   const weighted = summary.weighted_scores || {};
   const compositeScore = Math.max(0, Math.min(100, Number(summary.composite_geo_score ?? 0)));
@@ -556,7 +618,7 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
       </div>
     `;
   }).join('');
-  const cognitionWords = buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, lang });
+  const cognitionWords = buildPerceptionWords({ aiPerception, dimensionMeta, weighted, summary, result, lang });
   const pageSamples = pageProfiles.length
     ? [
         ...pageProfiles.map(([key, page]) => ({ key, source: 'core', ...page })),
@@ -771,8 +833,8 @@ export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml })
             <div><span>${escapeHtml(tx(lang, '引用概率', 'Citation'))}</span><strong>${escapeHtml(citationLabelMap[citationProbability] || citationProbability)}</strong></div>
           </div>
           <div class="ai-word-clouds">
-            <div class="ai-word-cloud positive"><h6><i></i>${escapeHtml(tx(lang, '正面认知词云', 'Positive Perception'))}</h6><div>${renderWordCloud(cognitionWords.positive, 'positive')}</div></div>
-            <div class="ai-word-cloud limited"><h6><i></i>${escapeHtml(tx(lang, '受限认知词云', 'Limited Perception'))}</h6><div>${renderWordCloud(cognitionWords.limited, 'limited')}</div></div>
+            <div class="ai-word-cloud positive"><h6><i></i>${escapeHtml(tx(lang, '正面认知词云', 'Positive Perception'))}</h6>${renderWordCloud(cognitionWords.positive, 'positive')}</div>
+            <div class="ai-word-cloud limited"><h6><i></i>${escapeHtml(tx(lang, '受限认知词云', 'Limited Perception'))}</h6>${renderWordCloud(cognitionWords.limited, 'limited')}</div>
           </div>
           <div class="ai-word-footnote">${escapeHtml(tx(lang, `最佳引用页 ${bestPageCitability.page_key || 'homepage'} · ${bestPageCitability.score ?? 0} 分 · 最弱平台 ${PLATFORM_LABELS[weakestPlatform?.[0]] || '-'} ${weakestPlatform?.[1]?.platform_score ?? '-'}`, `Best citation page ${bestPageCitability.page_key || 'homepage'} · ${bestPageCitability.score ?? 0} · Weakest platform ${PLATFORM_LABELS[weakestPlatform?.[0]] || '-'} ${weakestPlatform?.[1]?.platform_score ?? '-'}`))}</div>
         </article>

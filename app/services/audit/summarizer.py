@@ -429,13 +429,9 @@ class SummarizerService:
 
         for index, (label, payload) in enumerate(ordered_dimensions):
             display_label = self._dimension_display_name(label, feedback_lang)
-            # 提取每个维度的顶部问题（合并后最多 5 条）
-            for issue in payload["issues"]:
-                if len(top_issues) >= 5:
-                    break
-                formatted = f"{display_label}: {issue}"
-                if formatted not in top_issues:
-                    top_issues.append(formatted)
+            # 每个汇总维度仅展示首个问题，避免一个大类占满关键问题区。
+            if payload["issues"] and len(top_issues) < 5:
+                top_issues.append(f"{display_label}: {payload['issues'][0]}")
             # 提取快速行动建议（最多 5 条）
             for recommendation in payload["recommendations"]:
                 if len(quick_wins) >= 5:

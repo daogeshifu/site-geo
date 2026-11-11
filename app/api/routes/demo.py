@@ -21,18 +21,6 @@ router = APIRouter(tags=["demo"])
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "demo.html"
 GOOGLE_CRAWLER_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "google-crawler.html"
 API_DOC_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "api-doc.html"
-API_DOC_START = "<!-- API_DOC_START -->"
-API_DOC_END = "<!-- API_DOC_END -->"
-
-
-def _load_demo_and_api_content() -> tuple[str, str]:
-    """从单一模板源拆分交互首页与独立 API 文档内容。"""
-    source = TEMPLATE_PATH.read_text(encoding="utf-8")
-    start = source.index(API_DOC_START)
-    end = source.index(API_DOC_END) + len(API_DOC_END)
-    api_content = source[start + len(API_DOC_START) : source.index(API_DOC_END)]
-    demo_content = f"{source[:start]}{source[end:]}"
-    return demo_content, api_content
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -44,8 +32,7 @@ async def demo_page() -> HTMLResponse:
     - app/web/static/css/demo.css
     - app/web/static/js/demo/
     """
-    demo_content, _ = _load_demo_and_api_content()
-    return HTMLResponse(demo_content)
+    return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 @router.get("/google-crawler-test", response_class=HTMLResponse)
@@ -56,10 +43,8 @@ async def google_crawler_demo_page() -> HTMLResponse:
 
 @router.get("/api-doc", response_class=HTMLResponse)
 async def api_doc_page() -> HTMLResponse:
-    """返回产品化 API 调用说明页，Swagger 交互测试仍位于 /docs。"""
-    _, api_content = _load_demo_and_api_content()
-    shell = API_DOC_TEMPLATE_PATH.read_text(encoding="utf-8")
-    return HTMLResponse(shell.replace("{{API_DOC_CONTENT}}", api_content))
+    """返回独立的 API 接入文档，Swagger 交互测试位于 /docs。"""
+    return HTMLResponse(API_DOC_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 @router.get("/api/v1/demo/token-status", include_in_schema=False)

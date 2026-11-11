@@ -1,8 +1,9 @@
 import { renderContentAuditReport } from './content-report.js';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
+import { mountPerceptionClouds } from './perception-cloud.js';
 import { renderSeoAuditReport } from './seo-report.js?v=20260909-checklist';
-import { renderSiteAuditReport } from './site-report.js?v=20260911-final-layout';
+import { renderSiteAuditReport } from './site-report.js?v=20260930-echarts-cloud';
 import { createSiteLinksExplorer } from './site-links.js';
 import {
   getTaskStepOrder,
@@ -68,7 +69,7 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v6-final-layout:';
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v9-echarts-cloud:';
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
@@ -500,6 +501,7 @@ function renderReport(task) {
   if (cachedHtml) {
     host.className = 'report-shell';
     host.innerHTML = cachedHtml;
+    mountPerceptionClouds(host);
     return;
   }
   const result = task?.result;
@@ -519,6 +521,7 @@ function renderReport(task) {
     return;
   }
   renderSiteAuditReport({ task, host, lang, setCachedReportHtml });
+  mountPerceptionClouds(host);
 }
 
 function buildRawPayload(

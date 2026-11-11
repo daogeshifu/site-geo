@@ -102,3 +102,39 @@ test('combined audit report explains missing SEO data for older cached tasks', (
   assert.match(html, /旧缓存请强制刷新/);
   assert.match(html, /旧任务暂无 SEO 覆盖数据/);
 });
+
+test('perception clouds expand from observed signals and key issues cover distinct dimensions', () => {
+  const html = render({
+    discovery: { site_signals: { company_name_detected: true, same_as_detected: true, email_detected: false } },
+    content: { findings: { has_faq_any: true, has_reference_section_any: false, has_quantified_data_any: true, has_publish_date_any: false, has_author_any: true } },
+    technical: { checks: { unique_h1: true } },
+    schema: { findings: { schema_type_count: 1 } },
+    visibility: { findings: { llms_quality: { score: 35 }, citability: { score: 45 } } },
+    summary: {
+      composite_geo_score: 55,
+      ai_perception: { cognition_keywords: ['值得信赖', '结构待强化'] },
+      weighted_scores: {
+        'Content Quality & E-E-A-T': { raw_score: 35 },
+        'Brand Authority Signals': { raw_score: 81 },
+        'Technical Foundations': { raw_score: 76 }
+      },
+      dimensions: {
+        'Content Quality & E-E-A-T': { display_name: '内容与 E-E-A-T', score: 35, issues: ['作者缺失', '证据不足', '内容太短'] },
+        'Brand Authority Signals': { display_name: '品牌权威', score: 40, issues: ['第三方引用较少'] },
+        'Technical Foundations': { display_name: '技术基础', score: 62, issues: ['部分页面加载慢'] }
+      },
+      top_issues: ['内容与 E-E-A-T: 作者缺失', '内容与 E-E-A-T: 证据不足']
+    }
+  });
+  const positive = html.match(/<div class="ai-word-cloud positive">[\s\S]*?<\/div><\/div>/)?.[0] || '';
+  const limited = html.match(/<div class="ai-word-cloud limited">[\s\S]*?<\/div><\/div>/)?.[0] || '';
+  assert.ok((positive.match(/class="ai-word /g) || []).length >= 6);
+  assert.ok((limited.match(/class="ai-word /g) || []).length >= 6);
+  assert.match(positive, /品牌身份明确/);
+  assert.match(limited, /参考来源不足/);
+  assert.match(limited, /结构待强化/);
+  const keyIssues = html.match(/<div class="summary-insight-list risk">[\s\S]*?<\/div><\/div>/)?.[0] || '';
+  assert.equal((keyIssues.match(/内容与 E-E-A-T:/g) || []).length, 1);
+  assert.match(keyIssues, /品牌权威: 第三方引用较少/);
+  assert.match(keyIssues, /技术基础: 部分页面加载慢/);
+});

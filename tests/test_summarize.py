@@ -118,7 +118,7 @@ def test_summarize_endpoint_returns_composite_score() -> None:
             "score": 74,
             "status": "good",
             "findings": {},
-            "issues": [],
+            "issues": ["Some pages load slowly"],
             "strengths": [],
             "recommendations": [],
             "technical_score": 74,
@@ -131,7 +131,7 @@ def test_summarize_endpoint_returns_composite_score() -> None:
             "score": 70,
             "status": "good",
             "findings": {},
-            "issues": [],
+            "issues": ["Missing authors", "Missing citations", "Thin content"],
             "strengths": [],
             "recommendations": [],
             "content_score": 70,
@@ -146,7 +146,7 @@ def test_summarize_endpoint_returns_composite_score() -> None:
             "score": 55,
             "status": "fair",
             "findings": {},
-            "issues": [],
+            "issues": ["Product markup is missing"],
             "strengths": [],
             "recommendations": [],
             "structured_data_score": 55,
@@ -188,3 +188,7 @@ def test_summarize_endpoint_returns_composite_score() -> None:
     assert body["data"]["ai_perception"]["controversial_percentage"] >= 0
     assert body["data"]["ai_perception"]["positive_percentage"] + body["data"]["ai_perception"]["neutral_percentage"] + body["data"]["ai_perception"]["controversial_percentage"] == 100
     assert len(body["data"]["ai_perception"]["cognition_keywords"]) == 4
+    top_issues = body["data"]["top_issues"]
+    assert sum(issue.startswith("Content Quality & E-E-A-T:") for issue in top_issues) == 1
+    assert any(issue.startswith("Structured Data:") for issue in top_issues)
+    assert any(issue.startswith("Technical Foundations:") for issue in top_issues)

@@ -3,148 +3,337 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="GEO Audit API 接入文档：异步网站审计、任务查询、页面证据、Google 爬虫测试与评分规则。" />
   <title>API 文档 · GEO Audit</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260727" />
-  <link rel="stylesheet" href="/static/css/api-doc.css?v=20260909-checklist-anchor" />
+  <link rel="stylesheet" href="/static/css/api-doc.css?v=20261111-docs-layout" />
+  <script src="/static/js/api-doc.js?v=20261111-docs-layout" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-mark">G</span>
-      <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
-    </a>
-    <nav aria-label="主导航">
-      <a href="/">网站诊断</a>
-      <a href="/google-crawler-test">Google 爬虫测试</a>
-      <a class="active" href="/api-doc">API 文档</a>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-9 9M10 5H5v14h14v-5" /></symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" /></symbol>
+    <symbol id="icon-book" viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 0 1 2 2v14a4 4 0 0 0-4-2H4zM20 4h-6a2 2 0 0 0-2 2v14a4 4 0 0 1 4-2h4z" /></symbol>
+  </svg>
+  <a class="skip-link" href="#main-content">跳至文档正文</a>
+
+  <header class="docs-header">
+    <a class="brand" href="/" aria-label="GEO Audit 首页"><span class="brand-mark" aria-hidden="true">G</span><strong>GEO Audit</strong></a>
+    <span class="header-divider" aria-hidden="true"></span>
+    <a class="header-title" href="/api-doc" aria-current="page">开发文档</a>
+    <nav class="header-links" aria-label="主导航">
+      <a class="product-link" href="/">网站诊断</a>
+      <a class="product-link" href="/google-crawler-test">Google 爬虫测试</a>
+      <a class="button button-primary button-small" href="/docs" target="_blank" rel="noreferrer">API 调试<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a>
     </nav>
   </header>
 
-  <main class="api-doc-main">
-    <section class="api-doc-hero">
-      <div class="api-doc-copy">
-        <div class="eyebrow"><span class="live-dot"></span> Developer API</div>
-        <h1>把 GEO 诊断能力<br /><span>接入你的工作流</span></h1>
-        <p>从异步站点审计、任务轮询到 Googlebot 与渲染测试，这里集中说明请求流程、关键参数和返回结构。</p>
-        <div class="api-doc-actions">
-          <a class="try-api-button" href="/docs" target="_blank" rel="noreferrer">
-            立即测试 API
-            <span>↗</span>
-          </a>
-          <a class="back-button" href="/">返回网站诊断</a>
+  <div class="mobile-docs-bar">
+    <button class="docs-menu-toggle" type="button" aria-expanded="false" aria-controls="docs-sidebar" hidden><svg class="icon" aria-hidden="true"><use href="#icon-menu" /></svg><span>文档目录</span><span class="mobile-current" id="mobile-current">快速开始</span><svg class="icon menu-chevron" aria-hidden="true"><use href="#icon-chevron" /></svg></button>
+  </div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" id="docs-sidebar" aria-label="文档目录">
+      <div class="sidebar-heading"><svg class="icon" aria-hidden="true"><use href="#icon-book" /></svg><span>API 文档</span><span class="version">v1</span></div>
+      <nav class="docs-nav" aria-label="章节导航">
+        <div class="nav-group"><p class="nav-group-title">开始接入</p><a href="#quickstart" aria-current="location">快速开始</a><a href="#authentication">访问认证</a></div>
+        <div class="nav-group">
+          <p class="nav-group-title">接口参考</p>
+          <a href="#create-task"><span class="nav-method method-post">POST</span>创建审计任务</a>
+          <a href="#task-status"><span class="nav-method method-get">GET</span>查询任务状态</a>
+          <a href="#task-graphs"><span class="nav-method method-get">GET</span>获取任务图谱</a>
+          <a href="#task-report"><span class="nav-method method-get">GET</span>导出审计报告</a>
+          <a href="#page-evidence"><span class="nav-method method-get">GET</span>页面证据与导出</a>
+          <a href="#audit-modules"><span class="nav-method method-post">POST</span>单模块调用</a>
+          <a href="#google-crawler"><span class="nav-method method-post">POST</span>Google 爬虫测试</a>
         </div>
-      </div>
-      <div class="api-console-card" aria-label="API 快速信息">
-        <div class="console-dots"><i></i><i></i><i></i></div>
-        <span>API BASE</span>
-        <code>/api/v1</code>
-        <span>AUTH</span>
-        <code>X-Demo-Token · Demo routes only</code>
-        <span>FORMAT</span>
-        <code>application/json</code>
-      </div>
-    </section>
+        <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#geo-scoring">GEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
+      </nav>
+      <div class="sidebar-tools"><a href="/openapi.json" target="_blank" rel="noreferrer">OpenAPI 规范<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a><a href="/health" target="_blank" rel="noreferrer">服务状态<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>
+    </aside>
 
-    <section class="api-summary-grid">
-      <article><b>01</b><div><strong>创建任务</strong><small>提交 URL 和审计选项</small></div></article>
-      <article><b>02</b><div><strong>轮询状态</strong><small>跟踪阶段与进度</small></div></article>
-      <article><b>03</b><div><strong>读取结果</strong><small>报告、图谱与原始数据</small></div></article>
-    </section>
+    <main class="docs-main" id="main-content" tabindex="-1">
+      <div class="doc-intro">
+        <div class="breadcrumbs"><span>开发文档</span><span aria-hidden="true">/</span><span>接入指南</span></div>
+        <div class="doc-title"><h1>GEO Audit API</h1><span class="version">v1</span></div>
+        <p class="doc-lead">将网站审计、页面证据与 Google 爬虫诊断接入你的应用。</p>
+        <dl class="api-facts"><div><dt>基础路径</dt><dd><code>/api/v1</code></dd></div><div><dt>数据格式</dt><dd>JSON</dd></div><div><dt>访问认证</dt><dd><a href="#authentication">API Token</a></dd></div></dl>
+      </div>
 
-    <section class="crawler-api-section">
-      <div class="section-hdr"><h2>网站 SEO 审计与页面证据</h2><span>Demo 默认 SEO 审计，知识图谱按需开启</span></div>
-      <div class="api-desc">网站 SEO 审计（<code>task_type=site_seo_audit</code>）未开启 Full Audit 时最多采样 8 页；开启后默认 12 页，<code>max_pages</code> 范围为 5–10000。综合评分包含 Technical SEO、Content Quality、On-Page SEO、Schema、Performance、AI Search / GEO；配置权重分别为 22、23、20、10、10、10，计算时按总和 95 归一化。性能为启发式评估，未接入真实 CrUX/PSI。</div>
-      <div class="api-desc">站点链接展示当前任务发现的 URL。仅采样页面有抓取测量，历史记录中缺失的值显示“未记录”。新抓取会记录时间、状态码、响应耗时、部分响应头，并单独缓存 HTML 源码（每份最多 2 MB，超限标记截断）。源码以纯文本展示，缓存位于 <code>CACHE_DIR/page-sources</code>，不随任务轮询重复传输。</div>
-      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages</div>
-      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/pages/{page_id}/source</div>
-      <div class="api-endpoint"><span class="method m-get">GET</span>/api/v1/demo/tasks/{task_id}/export.xlsx</div>
-      <p class="api-desc">以上 Demo 证据接口遵循现有 <code>X-Demo-Token</code> 访问验证；<code>page_id</code> 来自对应任务的链接列表。</p>
-    </section>
+      <section class="doc-section quickstart-section" id="quickstart" data-doc-section aria-labelledby="quickstart-title">
+        <div class="section-heading"><h2 id="quickstart-title">快速开始</h2><span class="section-note">异步任务模式</span></div>
+        <p class="section-description">提交一个 URL，从创建任务开始。结果通过任务 ID 查询。</p>
+        <div class="quickstart-layout">
+          <ol class="request-flow"><li><a href="#create-task">创建审计任务</a><p>提交目标 URL，获取 <code>task_id</code>。</p></li><li><a href="#task-status">查询任务状态</a><p>每隔 1–2 秒轮询，直到任务完成或失败。</p></li><li><a href="#task-report">读取与导出结果</a><p>从 <code>result</code> 读取诊断，按需获取报告和图谱。</p></li></ol>
+          <div class="code-block quickstart-code"><div class="code-toolbar"><span>cURL</span><span class="code-caption">创建网站 SEO 审计</span></div><pre><code>curl -X POST \
+  "<span data-api-origin>http://localhost:8023</span>/api/v1/tasks/audit" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Token: YOUR_API_TOKEN" \
+  -d '{
+    "url": "https://example.com",
+    "task_type": "site_seo_audit",
+    "feedback_lang": "zh"
+  }'</code></pre></div>
+        </div>
+        <div class="doc-tip">想直接发送请求？<a href="/docs" target="_blank" rel="noreferrer">立即测试 API<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a><span>在交互式文档中查看完整请求与响应定义。</span></div>
+      </section>
 
-    <section class="crawler-api-section checklist-guide" id="seo-checklist">
-      <div class="section-hdr"><h2>检测清单说明</h2><span>六大评分维度、26 项检查与问题清单的对应关系</span></div>
-      <div class="checklist-relationship">
-        <article><b>01</b><div><strong>覆盖清单</strong><p>固定运行全部 26 项，展示通过、待优化或不适用，以及每项诊断证据。</p></div></article>
-        <article><b>02</b><div><strong>问题清单</strong><p>仅收录覆盖清单中的未通过项，并依据影响程度排序为 P0、P1、P2。</p></div></article>
-        <article><b>03</b><div><strong>六大维度</strong><p>从站点级信号汇总健康分，用于判断整体短板，不等同于问题数量求和。</p></div></article>
-      </div>
-      <div class="checklist-dimension-row" aria-label="六大评分维度">
-        <span>技术 SEO <b>22</b></span><span>内容质量 <b>23</b></span><span>页面 SEO <b>20</b></span><span>结构化数据 <b>10</b></span><span>性能体验 <b>10</b></span><span>AI 搜索 / GEO <b>10</b></span>
-      </div>
-      <div class="checklist-table-wrap">
-        <table class="checklist-table">
-          <thead><tr><th>编号</th><th>归属维度</th><th>精简事项</th><th>检查标准</th></tr></thead>
-          <tbody>
-            <tr><td>CHK-001</td><td>技术 SEO</td><td><strong>Robots</strong></td><td>robots.txt 可用且声明本站 Sitemap</td></tr>
-            <tr><td>CHK-002</td><td>技术 SEO</td><td><strong>站点地图</strong></td><td>XML Sitemap 存在、全 HTTPS、无脏数据</td></tr>
-            <tr><td>CHK-003</td><td>数据衡量（辅助）</td><td><strong>数据追踪</strong></td><td>GA4 与 GSC 验证信号均可识别</td></tr>
-            <tr><td>CHK-004</td><td>技术 SEO</td><td><strong>HTTPS</strong></td><td>HTTP 自动 301 到首选 HTTPS 地址</td></tr>
-            <tr><td>CHK-005</td><td>技术 SEO</td><td><strong>主域统一</strong></td><td>www 与非 www 统一到首选主域</td></tr>
-            <tr><td>CHK-006</td><td>技术 SEO</td><td><strong>URL 规范</strong></td><td>路径简短、语义化、小写且无冗余参数</td></tr>
-            <tr><td>CHK-007</td><td>结构化数据</td><td><strong>结构化数据</strong></td><td>按页面类型部署适配的 Schema</td></tr>
-            <tr><td>CHK-008</td><td>技术 SEO</td><td><strong>HTTP 状态</strong></td><td>核心页面无 4xx、5xx 或明显重定向链</td></tr>
-            <tr><td>CHK-009</td><td>技术 SEO</td><td><strong>移动适配</strong></td><td>Viewport 与移动端基础适配正常</td></tr>
-            <tr><td>CHK-010</td><td>性能体验</td><td><strong>页面性能</strong></td><td>响应、阻塞资源与核心页面负担可控</td></tr>
-            <tr><td>CHK-011</td><td>技术 SEO</td><td><strong>多语言</strong></td><td>hreflang 与目标语言版本一致</td></tr>
-            <tr><td>CHK-012</td><td>技术 SEO</td><td><strong>索引指令</strong></td><td>Noindex 未误伤应收录的核心页面</td></tr>
-            <tr><td>CHK-013</td><td>技术 SEO</td><td><strong>JS 渲染</strong></td><td>初始 HTML 可见核心标题、正文和链接</td></tr>
-            <tr><td>CHK-014</td><td>页面 SEO</td><td><strong>页面标题</strong></td><td>Title 唯一、含主题词且长度合适</td></tr>
-            <tr><td>CHK-015</td><td>页面 SEO</td><td><strong>页面描述</strong></td><td>Meta Description 完整且长度合适</td></tr>
-            <tr><td>CHK-016</td><td>页面 SEO</td><td><strong>标题层级</strong></td><td>H 标签层级合理且核心页仅一个 H1</td></tr>
-            <tr><td>CHK-017</td><td>技术 SEO</td><td><strong>规范链接</strong></td><td>Canonical 与首选最终 URL 对齐</td></tr>
-            <tr><td>CHK-018</td><td>技术 SEO</td><td><strong>语言声明</strong></td><td>HTML lang 属性准确且完整</td></tr>
-            <tr><td>CHK-019</td><td>页面 SEO</td><td><strong>图片文本</strong></td><td>内容图片具备描述性 Alt 文本</td></tr>
-            <tr><td>CHK-020</td><td>页面 SEO</td><td><strong>内部链接</strong></td><td>锚文本语义清晰且无异常 nofollow</td></tr>
-            <tr><td>CHK-021</td><td>性能体验</td><td><strong>页面体量</strong></td><td>HTML 与页面负担处于合理范围</td></tr>
-            <tr><td>CHK-022</td><td>性能体验</td><td><strong>图片加载</strong></td><td>懒加载与图片尺寸声明合理</td></tr>
-            <tr><td>CHK-023</td><td>内容质量</td><td><strong>内容深度</strong></td><td>核心主题覆盖与页面深度充足</td></tr>
-            <tr><td>CHK-024</td><td>内容质量</td><td><strong>内容可信度</strong></td><td>作者、日期、案例等 E-E-A-T 信号完整</td></tr>
-            <tr><td>CHK-025</td><td>内容质量</td><td><strong>内容引用</strong></td><td>具备引用、FAQ 与 answer-first 结构</td></tr>
-            <tr><td>CHK-026</td><td>AI 搜索 / GEO</td><td><strong>AI 可见性</strong></td><td>AI 抓取、实体与可引用结构达到基础水平</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="checklist-footnote">说明：权重为当前原始配置，计算综合分时按总和 95 归一化；“数据追踪”属于辅助诊断事项，不单独形成第七个评分维度。</p>
-    </section>
+      <section class="doc-section" id="authentication" data-doc-section aria-labelledby="authentication-title">
+        <h2 id="authentication-title">访问认证</h2>
+        <p>启用访问保护时，请在所有 <code>/api/v1/</code> 业务请求中携带有效 Token。推荐使用 <code>X-API-Token</code> 请求头。</p>
+        <div class="code-block code-block-light"><div class="code-toolbar"><span>请求头</span></div><pre><code>X-API-Token: YOUR_API_TOKEN</code></pre></div>
+        <p class="muted-text">兼容 <code>X-Demo-Token</code> 与 <code>Authorization: Bearer &lt;token&gt;</code>。在 <a href="/docs" target="_blank" rel="noreferrer">API 调试页面</a>点击 Authorize 填入 Token 即可。</p>
+        <dl class="response-notes"><div><dt><code>401</code></dt><dd>Token 缺失或无效，请检查请求头。</dd></div><div><dt><code>429</code></dt><dd>Token 调用额度已用尽，请检查可用额度。</dd></div></dl>
+      </section>
 
-    {{API_DOC_CONTENT}}
+      <div class="chapter-heading"><h2>API 调用步骤</h2><p>优先使用异步任务；需要独立诊断时，可直接调用单个模块。</p></div>
 
-    <section class="crawler-api-section">
-      <div class="section-hdr">
-        <h2>Google 爬虫测试 API</h2>
-        <span>独立运行抓取、渲染或一次返回两项结果</span>
-      </div>
-      <div class="crawler-endpoint-grid">
-        <article>
-          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/googlebot</div>
-          <p>检查 robots.txt、HTTP、索引指令和初始 HTML。</p>
-        </article>
-        <article>
-          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/google-render</div>
-          <p>运行抓取前置检查与 Chromium JavaScript 渲染诊断。</p>
-        </article>
-        <article>
-          <div class="api-endpoint"><span class="method m-post">POST</span>/api/v1/google-crawler/test</div>
-          <p>一次返回 Googlebot 和 Google Render 两个结果。</p>
-        </article>
-      </div>
-      <div class="code-snippet"><pre>{
+      <section class="doc-section endpoint-section" id="create-task" data-doc-section aria-labelledby="create-task-title">
+        <h3 class="endpoint-title" id="create-task-title">创建审计任务</h3>
+        <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/tasks/audit</code></div>
+        <p>提交目标 URL；<code>site_geo_audit</code> 对应“网站 SEO+GEO 审计”，后台异步启动 discovery → seo + GEO 六维模块 → observation → summary 流水线。若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</p>
+        <h4 class="subheading">请求参数</h4>
+        <div class="table-wrap" role="region" aria-label="创建审计任务的请求参数" tabindex="0"><table class="parameter-table"><thead><tr><th scope="col">参数</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead><tbody>
+<tr><th scope="row"><code>url</code><span class="param-required">必填</span></th><td><span class="param-type">string</span></td><td>目标网站 URL（自动规范化）</td></tr>
+<tr><th scope="row"><code>task_type</code></th><td><span class="param-type">string</span></td><td><code>"site_seo_audit"</code>（默认）、<code>"site_geo_audit"</code>（网站 SEO+GEO 审计）或 <code>"site_content_audit"</code></td></tr>
+<tr><th scope="row"><code>mode</code></th><td><span class="param-type">string</span></td><td><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</td></tr>
+<tr><th scope="row"><code>force_refresh</code></th><td><span class="param-type">boolean</span></td><td>true 则跳过 7 天缓存强制重新审计</td></tr>
+<tr><th scope="row"><code>target_locale</code></th><td><span class="param-type">string</span></td><td>可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</td></tr>
+<tr><th scope="row"><code>feedback_lang</code></th><td><span class="param-type">string</span></td><td><code>"en"</code>（默认）或 <code>"zh"</code>；仅控制报告返回语言，不控制目标站点语言版本</td></tr>
+<tr><th scope="row"><code>full_audit</code></th><td><span class="param-type">boolean</span></td><td>可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></td></tr>
+<tr><th scope="row"><code>max_pages</code></th><td><span class="param-type">int</span></td><td>Full Audit 范围 5–10000，默认 12；网站 SEO 审计未开启 Full Audit 时最多采样 8 页</td></tr>
+<tr><th scope="row"><code>build_knowledge_graph</code></th><td><span class="param-type">boolean</span></td><td>是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>false</code>，开启后即使构建失败也不会中断审计</td></tr>
+<tr><th scope="row"><code>observation</code></th><td><span class="param-type">object</span></td><td>可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</td></tr>
+<tr><th scope="row"><code>llm.provider</code></th><td><span class="param-type">string</span></td><td>premium 模式下固定 <code>"openrouter"</code></td></tr>
+<tr><th scope="row"><code>llm.model</code></th><td><span class="param-type">string</span></td><td>当前固定使用 <code>"openai/gpt-5.6-sol"</code></td></tr>
+</tbody></table></div>
+        <details class="reference-details example-details"><summary>完整请求示例<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>JSON</span></div><pre><code>{
+  "url": "https://example.com",
+  "task_type": "site_seo_audit",
+  "mode": "premium",
+  "target_locale": "nl",
+  "feedback_lang": "zh",
+  "full_audit": true,
+  "max_pages": 12,
+  "build_knowledge_graph": false,
+  "force_refresh": false,
+  "llm": { "provider": "openrouter", "model": "openai/gpt-5.6-sol" }
+}</code></pre></div></details>
+        <p class="doc-note">抓取范围限定为当前 host 与语言路径。例如 <code>www.ecoflow.com/de/</code> 只抓取 <code>/de/</code>，<code>de.ecoflow.com</code> 会作为独立站点处理。</p>
+      </section>
+
+      <section class="doc-section endpoint-section" id="task-status" data-doc-section aria-labelledby="task-status-title">
+        <h3 class="endpoint-title" id="task-status-title">查询任务状态</h3>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}</code></div>
+        <p>建议每隔 1–2 秒查询一次。当 <code>status</code> 为 <code>completed</code> 或 <code>failed</code> 时停止轮询。<code>steps</code> 实时反映各模块的执行状态。</p>
+        <div class="task-lifecycle" aria-label="任务状态流转"><code>queued</code><span aria-hidden="true">→</span><code>running</code><span aria-hidden="true">→</span><span><code class="status-completed">completed</code><span class="status-or">或</span><code class="status-failed">failed</code></span></div>
+        <div class="table-wrap" role="region" aria-label="任务状态的响应字段" tabindex="0"><table class="parameter-table"><thead><tr><th scope="col">字段</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead><tbody>
+<tr><th scope="row"><code>status</code></th><td><span class="param-type">string</span></td><td>queued → running → completed | failed</td></tr>
+<tr><th scope="row"><code>progress_percent</code></th><td><span class="param-type">int</span></td><td>0–100，按完成步骤数计算</td></tr>
+<tr><th scope="row"><code>cached</code></th><td><span class="param-type">boolean</span></td><td>命中缓存时为 true，直接返回历史结果</td></tr>
+<tr><th scope="row"><code>llm_model_used</code></th><td><span class="param-type">boolean</span></td><td>只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</td></tr>
+<tr><th scope="row"><code>result</code></th><td><span class="param-type">object</span></td><td>completed 后包含完整的 visibility / technical / content / schema / platform / observation / summary；full audit 时额外返回 <code>page_diagnostics</code>，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</td></tr>
+</tbody></table></div>
+        <details class="reference-details example-details"><summary>响应结构示意<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>响应结构示意</span></div><pre><code>// 响应结构示意
+{
+  "success": true,
+  "data": {
+    "task_id": "abc123",
+    "status": "completed",          // queued | running | completed | failed
+    "progress_percent": 100,
+    "cached": false,
+    "llm_model_used": true,
+    "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
+    "result": {
+      "visibility": { "score": 72, "status": "good", "llm_enhanced": true, ... },
+      "technical":  { "score": 85, ... },
+      "content":    { "score": 60, ... },
+      "schema":     { "score": 45, ... },
+      "platform":   { "chatgpt": { "platform_score": 68 }, ... },
+      "discovery":  { "scope_root_url": "https://www.ecoflow.com/de/", ... },
+      "page_diagnostics": [ { "page_type": "product", "overall_score": 71, ... } ],
+      "observation":{ "provided": false, "scored": false, ... },
+      "summary":    {
+        "composite_geo_score": 70,
+        "summary": "...",
+        "ai_perception": {
+          "positive_percentage": 58,
+          "neutral_percentage": 29,
+          "controversial_percentage": 13,
+          "cognition_keywords": ["Thought Leader", "Well-structured", "Evidence-led", "Trustworthy"]
+        }
+      }
+    }
+  }
+}</code></pre></div></details>
+        <p class="doc-note">任务完成后，<code>summary.ai_perception</code> 返回 AI 对站点的认知百分比分布及 4 个认知标签。</p>
+      </section>
+
+      <section class="doc-section endpoint-section" id="task-graphs" data-doc-section aria-labelledby="task-graphs-title">
+        <div class="section-heading"><h3 class="endpoint-title" id="task-graphs-title">获取任务图谱</h3><span class="optional-label">可选</span></div>
+        <p>创建任务时设置 <code>build_knowledge_graph=true</code>。结构图谱与实体图谱复用同一批页面快照，独立异步构建，构建失败不会中断审计。</p>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}/structure-graph</code></div><p class="endpoint-description">结构图谱：站点、页面、产品或服务、sameAs、内外链及证据关系。</p>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}/entity-graph</code></div><p class="endpoint-description">实体图谱：品牌、产品名、特性、规格、使用场景及评价类文本实体。</p>
+      </section>
+
+      <section class="doc-section endpoint-section" id="task-report" data-doc-section aria-labelledby="task-report-title">
+        <h3 class="endpoint-title" id="task-report-title">导出审计报告</h3>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}/report</code></div>
+        <p>任务完成后，获取完整 Markdown 报告，用于渲染或保存为文件。仅在 <code>status=completed</code> 时可用。</p>
+      </section>
+
+      <section class="doc-section endpoint-section" id="page-evidence" data-doc-section aria-labelledby="page-evidence-title">
+        <h3 class="endpoint-title" id="page-evidence-title">页面证据与导出</h3>
+        <p>获取任务发现的 URL、采样页面的抓取记录，以及 Excel 报告。以下 Demo 接口使用相同的 Token 访问验证。</p>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/demo/tasks/{task_id}/pages</code></div><p class="endpoint-description">站点链接与页面抓取记录，包括抓取时间、状态码、响应耗时及部分响应头。未采样或历史缺失的数据标记为“未记录”。</p>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/demo/tasks/{task_id}/pages/{page_id}/source</code></div><p class="endpoint-description">读取页面 HTML 源码。<code>page_id</code> 来自对应任务的链接列表；源码以纯文本展示，不随任务轮询重复传输。</p>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/demo/tasks/{task_id}/export.xlsx</code></div><p class="endpoint-description">导出当前任务的网站 SEO 审计 Excel 报告。</p>
+        <p class="doc-note">每份源码最多缓存 2 MB，超限时标记截断。缓存保存在 <code>CACHE_DIR/page-sources</code>。</p>
+      </section>
+
+      <section class="doc-section endpoint-section" id="audit-modules" data-doc-section aria-labelledby="audit-modules-title">
+        <div class="section-heading"><h3 class="endpoint-title" id="audit-modules-title">单模块调用</h3><span class="optional-label">高级用法</span></div>
+        <p>同步调用独立模块，适用于实时集成或调试，无需创建异步任务。<code>/api/v1/audit/full</code> 同样支持 Full Audit 与抓取作用域限制。</p>
+        <div class="endpoint-list">
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/visibility</code><span>AI 可见性</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/technical</code><span>技术基础</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/content</code><span>内容质量</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/schema</code><span>结构化数据</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/platform</code><span>平台适配</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/full</code><span>全量审计，含 summary，无缓存</span></div>
+        </div>
+        <details class="reference-details example-details"><summary>请求体示例<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>请求体示例</span></div><pre><code>// 单模块请求体（Body 字段相同）
+{ "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12, "build_knowledge_graph": false }
+
+// premium 模式下可附加 LLM 配置
+{ "url": "https://www.ecoflow.com/de/", "mode": "premium", "feedback_lang": "zh", "full_audit": true, "max_pages": 20, "build_knowledge_graph": true,
+  "llm": { "provider": "openrouter", "model": "openai/gpt-5.6-sol" } }</code></pre></div></details>
+      </section>
+
+      <section class="doc-section endpoint-section" id="google-crawler" data-doc-section aria-labelledby="google-crawler-title">
+        <h3 class="endpoint-title" id="google-crawler-title">Google 爬虫测试 API</h3>
+        <p>独立运行 Googlebot 抓取、Chromium 渲染诊断，或一次返回两项测试结果。</p>
+        <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/googlebot</code></div><p class="endpoint-description">检查 robots.txt、HTTP 状态、索引指令和初始 HTML。</p>
+        <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/google-render</code></div><p class="endpoint-description">运行抓取前置检查与 Chromium JavaScript 渲染诊断。</p>
+        <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/test</code></div><p class="endpoint-description">一次返回 Googlebot 与 Google Render 两项结果。</p>
+        <div class="code-block"><div class="code-toolbar"><span>JSON</span><span class="code-caption">通用请求体</span></div><pre><code>{
   "url": "https://example.com/"
-}</pre></div>
-    </section>
+}</code></pre></div>
+      </section>
 
-    <section class="api-final-cta">
-      <div>
-        <span>Ready to test?</span>
-        <h2>在交互式 OpenAPI 中发送第一个请求</h2>
-      </div>
-      <a href="/docs" target="_blank" rel="noreferrer">立即测试 <span>↗</span></a>
-    </section>
-  </main>
+      <section class="doc-section" id="seo-checklist" data-doc-section aria-labelledby="seo-checklist-title">
+        <h2 id="seo-checklist-title">检测清单说明</h2>
+        <p>网站 SEO 审计固定运行 26 项检查，覆盖六大评分维度。清单展示诊断证据，问题清单仅收录未通过项，并按影响程度分为 P0、P1、P2。</p>
+        <div class="checklist-concepts"><div><h3>覆盖清单</h3><p>全部检查项，标记通过、待优化或不适用。</p></div><div><h3>问题清单</h3><p>未通过项及其优先级，帮助安排修复。</p></div><div><h3>维度评分</h3><p>按站点信号汇总，不等于问题数量求和。</p></div></div>
+        <h3 class="subheading">SEO 评分权重</h3>
+        <dl class="seo-weights"><div><dt>技术 SEO</dt><dd>22</dd></div><div><dt>内容质量</dt><dd>23</dd></div><div><dt>页面 SEO</dt><dd>20</dd></div><div><dt>结构化数据</dt><dd>10</dd></div><div><dt>性能体验</dt><dd>10</dd></div><div><dt>AI 搜索 / GEO</dt><dd>10</dd></div></dl>
+        <p class="doc-note">权重按总和 95 归一化。“数据追踪”是辅助诊断事项，不单独形成第七个评分维度。性能为启发式评估，未接入真实 CrUX / PSI。</p>
+        <p class="doc-note"><code>task_type=site_seo_audit</code> 未开启 Full Audit 时最多采样 8 页；开启后默认 12 页，<code>max_pages</code> 范围为 5–10000。</p>
+        <div class="checklist-controls" hidden><label class="checklist-search"><span class="sr-only">搜索检查项</span><input type="search" id="checklist-search" placeholder="搜索检查项或编号" /></label><label><span class="sr-only">按评分维度筛选</span><select id="checklist-dimension"><option value="">全部维度</option><option>技术 SEO</option><option>内容质量</option><option>页面 SEO</option><option>结构化数据</option><option>性能体验</option><option>AI 搜索 / GEO</option><option>数据衡量（辅助）</option></select></label><span class="checklist-count" id="checklist-count" role="status" aria-live="polite">26 项检查</span></div>
+        <div class="table-wrap" role="region" aria-label="26 项 SEO 检测清单" tabindex="0"><table class="checklist-table"><thead><tr><th scope="col">编号</th><th scope="col">归属维度</th><th scope="col">检查项</th><th scope="col">检查标准</th></tr></thead><tbody>
+<tr><td>CHK-001</td><td>技术 SEO</td><td><strong>Robots</strong></td><td>robots.txt 可用且声明本站 Sitemap</td></tr>
+<tr><td>CHK-002</td><td>技术 SEO</td><td><strong>站点地图</strong></td><td>XML Sitemap 存在、全 HTTPS、无脏数据</td></tr>
+<tr><td>CHK-003</td><td>数据衡量（辅助）</td><td><strong>数据追踪</strong></td><td>GA4 与 GSC 验证信号均可识别</td></tr>
+<tr><td>CHK-004</td><td>技术 SEO</td><td><strong>HTTPS</strong></td><td>HTTP 自动 301 到首选 HTTPS 地址</td></tr>
+<tr><td>CHK-005</td><td>技术 SEO</td><td><strong>主域统一</strong></td><td>www 与非 www 统一到首选主域</td></tr>
+<tr><td>CHK-006</td><td>技术 SEO</td><td><strong>URL 规范</strong></td><td>路径简短、语义化、小写且无冗余参数</td></tr>
+<tr><td>CHK-007</td><td>结构化数据</td><td><strong>结构化数据</strong></td><td>按页面类型部署适配的 Schema</td></tr>
+<tr><td>CHK-008</td><td>技术 SEO</td><td><strong>HTTP 状态</strong></td><td>核心页面无 4xx、5xx 或明显重定向链</td></tr>
+<tr><td>CHK-009</td><td>技术 SEO</td><td><strong>移动适配</strong></td><td>Viewport 与移动端基础适配正常</td></tr>
+<tr><td>CHK-010</td><td>性能体验</td><td><strong>页面性能</strong></td><td>响应、阻塞资源与核心页面负担可控</td></tr>
+<tr><td>CHK-011</td><td>技术 SEO</td><td><strong>多语言</strong></td><td>hreflang 与目标语言版本一致</td></tr>
+<tr><td>CHK-012</td><td>技术 SEO</td><td><strong>索引指令</strong></td><td>Noindex 未误伤应收录的核心页面</td></tr>
+<tr><td>CHK-013</td><td>技术 SEO</td><td><strong>JS 渲染</strong></td><td>初始 HTML 可见核心标题、正文和链接</td></tr>
+<tr><td>CHK-014</td><td>页面 SEO</td><td><strong>页面标题</strong></td><td>Title 唯一、含主题词且长度合适</td></tr>
+<tr><td>CHK-015</td><td>页面 SEO</td><td><strong>页面描述</strong></td><td>Meta Description 完整且长度合适</td></tr>
+<tr><td>CHK-016</td><td>页面 SEO</td><td><strong>标题层级</strong></td><td>H 标签层级合理且核心页仅一个 H1</td></tr>
+<tr><td>CHK-017</td><td>技术 SEO</td><td><strong>规范链接</strong></td><td>Canonical 与首选最终 URL 对齐</td></tr>
+<tr><td>CHK-018</td><td>技术 SEO</td><td><strong>语言声明</strong></td><td>HTML lang 属性准确且完整</td></tr>
+<tr><td>CHK-019</td><td>页面 SEO</td><td><strong>图片文本</strong></td><td>内容图片具备描述性 Alt 文本</td></tr>
+<tr><td>CHK-020</td><td>页面 SEO</td><td><strong>内部链接</strong></td><td>锚文本语义清晰且无异常 nofollow</td></tr>
+<tr><td>CHK-021</td><td>性能体验</td><td><strong>页面体量</strong></td><td>HTML 与页面负担处于合理范围</td></tr>
+<tr><td>CHK-022</td><td>性能体验</td><td><strong>图片加载</strong></td><td>懒加载与图片尺寸声明合理</td></tr>
+<tr><td>CHK-023</td><td>内容质量</td><td><strong>内容深度</strong></td><td>核心主题覆盖与页面深度充足</td></tr>
+<tr><td>CHK-024</td><td>内容质量</td><td><strong>内容可信度</strong></td><td>作者、日期、案例等 E-E-A-T 信号完整</td></tr>
+<tr><td>CHK-025</td><td>内容质量</td><td><strong>内容引用</strong></td><td>具备引用、FAQ 与 answer-first 结构</td></tr>
+<tr><td>CHK-026</td><td>AI 搜索 / GEO</td><td><strong>AI 可见性</strong></td><td>AI 抓取、实体与可引用结构达到基础水平</td></tr>
+<tr class="checklist-empty" hidden><td colspan="4">没有匹配的检查项，请更换关键词或选择其他维度。</td></tr></tbody></table></div>
+      </section>
 
-  <footer>
-    <p>GEO Audit API · FastAPI powered</p>
-    <a href="/health" target="_blank" rel="noreferrer">服务状态 ↗</a>
-  </footer>
+      <section class="doc-section" id="geo-scoring" data-doc-section aria-labelledby="geo-scoring-title">
+        <h2 id="geo-scoring-title">GEO 打分维度与规则</h2>
+        <p>GEO 综合分由以下六个维度加权计算，单维度原始分满分为 100 分。展开查看各维度的指标与计算权重。</p>
+        <div class="dimension-list">
+<details class="reference-details"><summary><span class="dimension-name">AI 可见性</span><span class="dimension-subtitle">抓取权限与内容可引用性</span><span class="dimension-weight">25%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.32</span></div>
+<div class="dim-row"><span class="dim-row-label">snapshot citability</span><span class="dim-row-val">×0.40</span></div>
+<div class="dim-row"><span class="dim-row-label">llms.txt 有效性</span><span class="dim-row-val">×0.12</span></div>
+<div class="dim-row"><span class="dim-row-label">基础实体存在</span><span class="dim-row-val">×0.16</span></div>
+<div class="dim-row dim-row-note"><span class="dim-row-label">citability 基于 snapshot 中 homepage 与最佳页面的 answer-first、信息密度、数据点、分块结构和 FAQ / 作者 / 日期信号综合评估</span></div>
+</div></details>
+<details class="reference-details"><summary><span class="dimension-name">品牌权威</span><span class="dimension-subtitle">品牌信号与实体一致性</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">外链质量</span><span class="dim-row-val">25%</span></div>
+<div class="dim-row"><span class="dim-row-label">品牌提及覆盖</span><span class="dim-row-val">25%</span></div>
+<div class="dim-row"><span class="dim-row-label">sameAs / Entity 一致性</span><span class="dim-row-val">25%</span></div>
+<div class="dim-row"><span class="dim-row-label">企业信息完整度</span><span class="dim-row-val">25%</span></div>
+<div class="dim-row"><span class="dim-row-label">站外数据源</span><span class="dim-row-val">Semrush Backlinks Overview</span></div>
+<div class="dim-row"><span class="dim-row-label">结构预留</span><span class="dim-row-val">已抽离 BrandAuthorityService 边界</span></div>
+</div></details>
+<details class="reference-details"><summary><span class="dimension-name">内容与 E-E-A-T</span><span class="dimension-subtitle">内容质量与专业可信度</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 个子分均值</span></div>
+<div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">字数 / FAQ / 作者 / 日期 / 数据 / 标题 / answer-first</span></div>
+<div class="dim-row"><span class="dim-row-label">experience</span><span class="dim-row-val">案例 / 量化结果 / 服务页深度 / About</span></div>
+<div class="dim-row"><span class="dim-row-label">expertise</span><span class="dim-row-val">服务页深度 / 文章深度 / answer-first / heading quality</span></div>
+<div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">作者 / 资质 / sameAs / contact / 日期</span></div>
+<div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">page_profiles 中的 service / article / about / case_study</span></div>
+</div></details>
+<details class="reference-details"><summary><span class="dimension-name">技术基础</span><span class="dimension-subtitle">抓取、索引、性能与安全</span><span class="dimension-weight">15%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">16 pts</span></div>
+<div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">8 / 10</span></div>
+<div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">5 / 5</span></div>
+<div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8 / 4</span></div>
+<div class="dim-row"><span class="dim-row-label">性能 / 渲染阻塞</span><span class="dim-row-val">8 / 8</span></div>
+<div class="dim-row"><span class="dim-row-label">图片 / OG / Twitter / hreflang</span><span class="dim-row-val">8 / 5 / 3 / 4</span></div>
+</div></details>
+<details class="reference-details"><summary><span class="dimension-name">结构化数据</span><span class="dimension-subtitle">Schema 语义与实体关系</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">JSON-LD / Organization</span><span class="dim-row-val">12 / 14</span></div>
+<div class="dim-row"><span class="dim-row-label">WebSite / Service / Article</span><span class="dim-row-val">10 / 10 / 10</span></div>
+<div class="dim-row"><span class="dim-row-label">FAQPage / Product / DefinedTerm</span><span class="dim-row-val">8 / 10 / 8</span></div>
+<div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">8 pts</span></div>
+<div class="dim-row"><span class="dim-row-label">稳定 @id</span><span class="dim-row-val">5 pts</span></div>
+<div class="dim-row"><span class="dim-row-label">关系丰富度</span><span class="dim-row-val">5 pts</span></div>
+</div></details>
+<details class="reference-details"><summary><span class="dimension-name">平台适配</span><span class="dimension-subtitle">AI 搜索平台的适配程度</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
+<div class="dim-row"><span class="dim-row-label">汇总方式</span><span class="dim-row-val">战略权重加权</span></div>
+<div class="dim-row"><span class="dim-row-label">ChatGPT</span><span class="dim-row-val">22% · crawler + llms + citability + brand</span></div>
+<div class="dim-row"><span class="dim-row-label">Google AI Mode</span><span class="dim-row-val">18% · topic breadth + entity graph + schema</span></div>
+<div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val">18% · citability + schema + FAQ + metadata</span></div>
+<div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val">16% · cited evidence + brand + schema</span></div>
+<div class="dim-row"><span class="dim-row-label">Gemini / Grok</span><span class="dim-row-val">13% / 13% · authority / social amplification</span></div>
+</div></details>
+</div>
+        <div class="score-legend"><span>分级标准</span><ul><li><code>0–24</code> critical</li><li><code>25–44</code> poor</li><li><code>45–64</code> fair</li><li><code>65–84</code> good</li><li><code>85–100</code> strong</li></ul></div>
+      </section>
+
+      <section class="doc-section" id="data-sources" data-doc-section aria-labelledby="data-sources-title">
+        <h2 id="data-sources-title">数据来源与运行机制</h2><p>查阅评分字段、数据来源、快照复用和 AI 增强的具体规则。</p><div class="business-list">
+<details class="reference-details"><summary><span>AI 可见性</span><span class="dimension-weight">25%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.32 × AI crawler 放行率 + 0.40 × snapshot citability + 0.12 × llms.txt 有效性 + 0.16 × 基础实体存在</code></li><li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、构建 snapshot 页面画像，并复用 homepage / about / service / article / case_study 的实体信号</li><li><strong>细项规则</strong>：citability 综合 answer-first、信息密度、数据点、分块结构与 FAQ / 作者 / 日期信号，输出 <code>homepage_citability</code>、<code>best_page_citability</code> 和 <code>citation_probability</code></li></ul></div></details>
+<details class="reference-details"><summary><span>品牌权威</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs / Entity 一致性 + 0.25 × 企业信息完整度</code></li><li><strong>数据来源</strong>：站内品牌信号 + Schema sameAs + sitemap / canonical 一致性 + Semrush Backlinks Overview</li><li><strong>结构预留</strong>：当前仍由 <code>visibility</code> 产出品牌总分，但代码层已预留 <code>BrandAuthorityService</code> 边界，方便后续独立服务化</li></ul></div></details>
+<details class="reference-details"><summary><span>内容与 E-E-A-T</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li><li><strong>内容总分</strong>：服务页深度、文章页深度、FAQ、作者、日期、量化数据、标题质量、answer-first、信息密度、分块结构、引用来源区、内联引用与链接语义共同构成</li><li><strong>E-E-A-T 细项</strong>：Experience 看案例与量化结果；Expertise 看服务页/文章深度与结构；Authority 看作者、资质、sameAs 与参考来源；Trust 看联系信息、日期、更新记录与证据引用</li><li><strong>数据来源</strong>：优先复用 <code>discovery.page_profiles</code>，不再为了内容审计重复抓取这些关键页面</li></ul></div></details>
+<details class="reference-details"><summary><span>技术基础</span><span class="dimension-weight">15%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li><li><strong>计算公式</strong>：<code>HTTPS8 + SSR10 + Meta5 + Canonical5 + lang4 + uniqueH1 4 + Sitemap8 + robots 指令4 + 性能8 + 渲染阻塞8 + 安全头16 + 图片4 + OG5 + Twitter3 + hreflang4 + freshness headers4</code></li><li><strong>数据来源</strong>：最终 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li><li><strong>细项说明</strong>：<code>response_time_ms</code> 已纳入正式性能评分；新增检查唯一 H1 与 <code>ETag / Last-Modified</code> 新鲜度信号；图片优化由 lazyload 与显式尺寸比例组成</li></ul></div></details>
+<details class="reference-details"><summary><span>结构化数据</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li><li><strong>计算公式</strong>：<code>JSON-LD + Organization + WebSite + Service + Article + FAQPage + Product + BreadcrumbList + machine dates + sameAs + @id + visible-content alignment</code></li><li><strong>数据来源</strong>：优先复用 snapshot 中各页面的 <code>json_ld_blocks</code>，统一汇总 <code>@type</code>、<code>sameAs</code>、稳定 <code>@id</code>、机器可读日期以及 Schema 与页面可见内容的一致性</li><li><strong>接入要点</strong>：schema 既参与综合分，也被平台适配模块复用，尤其影响 Google AI Mode、AI Overviews 与 Gemini</li></ul></div></details>
+<details class="reference-details"><summary><span>平台适配</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，按平台战略权重汇总后再按 <code>×0.10</code> 计入综合分</li><li><strong>平台权重</strong>：ChatGPT 22%，Google AI Mode 18%，Google AI Overviews 18%，Perplexity 16%，Gemini 13%，Grok 13%</li><li><strong>数据来源</strong>：不额外抓取，直接复用 discovery snapshot、visibility、schema 与 metadata 结果</li><li><strong>输出结果</strong>：分别产出 <code>chatgpt / google_ai_mode / google_ai_overviews / perplexity / gemini / grok</code> 的分数、优化焦点、主缺口与建议</li></ul></div></details>
+<details class="reference-details"><summary><span>发现层与复用机制</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>发现层升级</strong>：当前 discovery 已升级为 <code>snapshot-v3</code>，默认抓取 homepage、about、service、article、case_study；full audit 时继续扩展到更多内部页</li><li><strong>抓取作用域</strong>：按“精确 host + 语言路径前缀”限制范围；例如 <code>www.ecoflow.com/de/</code> 只抓 <code>/de/</code>，不会抓 <code>de.ecoflow.com</code> 或 <code>/fr/</code></li><li><strong>统一画像</strong>：每个页面都输出 title、meta、canonical、lang、headings、word_count、FAQ / 作者 / 日期、引用来源区、TL;DR、链接语义、JSON-LD 摘要、entity signals 等统一 profile</li><li><strong>复用机制</strong>：<code>audit_full</code> 支持直接传入已有 <code>discovery</code>，存在时复用，不再重复执行 discover</li><li><strong>提示机制</strong>：当输入 URL 不是首页或语言首页时，结果中会增加“非首页，数据可能有偏差”的提示，但不会强制改写输入页</li></ul></div></details>
+<details class="reference-details"><summary><span>Observation Layer / 不计分</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>定位</strong>：可选上传 GA4、日志或人工引用观测，用于展示实际观测结果，不属于 6 个计分维度</li><li><strong>默认行为</strong>：大部分用户只输入 <code>url</code> 即可；未上传 observation 时仍可完成完整审计</li><li><strong>展示内容</strong>：可呈现 AI sessions、来源平台拆分、citation observations 与 measurement maturity</li><li><strong>评分规则</strong>：无论是否上传，<code>composite_geo_score</code> 都不会被 observation 改写</li></ul></div></details>
+<details class="reference-details"><summary><span>会员 AI 增强 / 机制说明</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div></details>
+</div>
+      </section>
+
+      <div class="docs-next"><div><strong>开始你的第一次调用</strong><p>在交互式文档中验证参数，查看实际响应。</p></div><a class="button button-primary" href="/docs" target="_blank" rel="noreferrer">立即测试 API<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>
+      <footer class="docs-footer"><span>GEO Audit API</span><a href="#quickstart">返回快速开始<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></a></footer>
+    </main>
+  </div>
+  <div class="copy-feedback" role="status" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
