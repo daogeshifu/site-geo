@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="GEO Audit API 接入文档：异步网站审计、任务查询、页面证据、Google 爬虫测试与评分规则。" />
   <title>API 文档 · GEO Audit</title>
-  <link rel="stylesheet" href="/static/css/api-doc.css?v=20261111-docs-layout" />
+  <link rel="stylesheet" href="/static/css/api-doc.css?v=20261111-scoring-cards" />
   <script src="/static/js/api-doc.js?v=20261111-docs-layout" defer></script>
 </head>
 <body>
@@ -48,7 +48,7 @@
           <a href="#audit-modules"><span class="nav-method method-post">POST</span>单模块调用</a>
           <a href="#google-crawler"><span class="nav-method method-post">POST</span>Google 爬虫测试</a>
         </div>
-        <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#geo-scoring">GEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
+        <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#seo-scoring">SEO 评分规则</a><a href="#geo-scoring">GEO 评分规则</a><a href="#seo-geo-scoring">SEO+GEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
       </nav>
       <div class="sidebar-tools"><a href="/openapi.json" target="_blank" rel="noreferrer">OpenAPI 规范<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a><a href="/health" target="_blank" rel="noreferrer">服务状态<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>
     </aside>
@@ -238,9 +238,7 @@
         <h2 id="seo-checklist-title">检测清单说明</h2>
         <p>网站 SEO 审计固定运行 26 项检查，覆盖六大评分维度。清单展示诊断证据，问题清单仅收录未通过项，并按影响程度分为 P0、P1、P2。</p>
         <div class="checklist-concepts"><div><h3>覆盖清单</h3><p>全部检查项，标记通过、待优化或不适用。</p></div><div><h3>问题清单</h3><p>未通过项及其优先级，帮助安排修复。</p></div><div><h3>维度评分</h3><p>按站点信号汇总，不等于问题数量求和。</p></div></div>
-        <h3 class="subheading">SEO 评分权重</h3>
-        <dl class="seo-weights"><div><dt>技术 SEO</dt><dd>22</dd></div><div><dt>内容质量</dt><dd>23</dd></div><div><dt>页面 SEO</dt><dd>20</dd></div><div><dt>结构化数据</dt><dd>10</dd></div><div><dt>性能体验</dt><dd>10</dd></div><div><dt>AI 搜索 / GEO</dt><dd>10</dd></div></dl>
-        <p class="doc-note">权重按总和 95 归一化。“数据追踪”是辅助诊断事项，不单独形成第七个评分维度。性能为启发式评估，未接入真实 CrUX / PSI。</p>
+        <p class="doc-note">26项清单用于展示检查证据；各维度的实际权重与计算方式见 <a href="#seo-scoring">SEO 评分规则</a>。</p>
         <p class="doc-note"><code>task_type=site_seo_audit</code> 未开启 Full Audit 时最多采样 8 页；开启后默认 12 页，<code>max_pages</code> 范围为 5–10000。</p>
         <div class="checklist-controls" hidden><label class="checklist-search"><span class="sr-only">搜索检查项</span><input type="search" id="checklist-search" placeholder="搜索检查项或编号" /></label><label><span class="sr-only">按评分维度筛选</span><select id="checklist-dimension"><option value="">全部维度</option><option>技术 SEO</option><option>内容质量</option><option>页面 SEO</option><option>结构化数据</option><option>性能体验</option><option>AI 搜索 / GEO</option><option>数据衡量（辅助）</option></select></label><span class="checklist-count" id="checklist-count" role="status" aria-live="polite">26 项检查</span></div>
         <div class="table-wrap" role="region" aria-label="26 项 SEO 检测清单" tabindex="0"><table class="checklist-table"><thead><tr><th scope="col">编号</th><th scope="col">归属维度</th><th scope="col">检查项</th><th scope="col">检查标准</th></tr></thead><tbody>
@@ -273,46 +271,101 @@
 <tr class="checklist-empty" hidden><td colspan="4">没有匹配的检查项，请更换关键词或选择其他维度。</td></tr></tbody></table></div>
       </section>
 
-      <section class="doc-section" id="geo-scoring" data-doc-section aria-labelledby="geo-scoring-title">
-        <h2 id="geo-scoring-title">GEO 打分维度与规则</h2>
+      <section class="doc-section scoring-section" id="seo-scoring" data-doc-section aria-labelledby="seo-scoring-title">
+        <div class="section-heading"><h2 id="seo-scoring-title">SEO 评分规则</h2><span class="section-note">seo-audit-v1</span></div>
+        <p>评估搜索健康度。六个维度使用原始权重22、23、20、10、10、10，合计95；下方百分比为归一化后的实际占比。</p>
+        <div class="scoring-formula"><strong>SEO总分</strong><p>Σ（维度分 × 原始权重）÷ 95</p><span>维度分均为0–100；百分比显示值经四舍五入，计算使用原始权重。</span></div>
+        <div class="scoring-grid" aria-label="SEO六维评分细项"><article class="scoring-card" data-seo-dimension="technical" data-raw-weight="22" aria-labelledby="seo-technical-title">
+  <header class="scoring-card-header"><h3 id="seo-technical-title">技术 SEO</h3><span class="scoring-weight">23.16%</span></header>
+  <p class="scoring-basis">原始权重 22 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">HTTPS / SSR信号</span><strong class="scoring-rule-value">8 / 10分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">描述 / Canonical / 语言</span><strong class="scoring-rule-value">5 / 5 / 4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">唯一H1 / Sitemap / 地图声明</span><strong class="scoring-rule-value">4 / 8 / 4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">OG / Twitter / hreflang</span><strong class="scoring-rule-value">5 / 3 / 4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">安全响应头</span><strong class="scoring-rule-value">16分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">响应速度 / 渲染阻塞</span><strong class="scoring-rule-value">8 / 8分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">图片加载与尺寸</span><strong class="scoring-rule-value">4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">ETag或Last-Modified</span><strong class="scoring-rule-value">4分</strong></li></ul>
+  <p class="scoring-card-formula">技术分 = 各项得分之和，上限100分。</p>
+  <p class="scoring-card-note">SSR为HTML体积与词数的近似判断；安全头、社交卡片和响应头属于这套SEO支持规则，不进入新版GEO总分。</p>
+</article>
+<article class="scoring-card" data-seo-dimension="content_quality" data-raw-weight="23" aria-labelledby="seo-content-title">
+  <header class="scoring-card-header"><h3 id="seo-content-title">内容质量</h3><span class="scoring-weight">24.21%</span></header>
+  <p class="scoring-basis">原始权重 23 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">内容总分</span><strong class="scoring-rule-value">占20%</strong><p class="scoring-rule-note">服务页深度15、文章深度20；FAQ8、作者10、日期7、量化12；来源区6、内联引用4、摘要4；标题12、密度10、分块8、链接6、答案前置8。</p></li><li class="scoring-rule"><span class="scoring-rule-label">经验</span><strong class="scoring-rule-value">占20%</strong><p class="scoring-rule-note">案例30、量化结果20、服务页深度20、关于页30。</p></li><li class="scoring-rule"><span class="scoring-rule-label">专业度</span><strong class="scoring-rule-value">占20%</strong><p class="scoring-rule-note">服务页深度35、文章深度25、答案前置20、标题质量10、信息密度10。</p></li><li class="scoring-rule"><span class="scoring-rule-label">权威性</span><strong class="scoring-rule-value">占20%</strong><p class="scoring-rule-note">关于页25、作者20、奖项20、认证15、sameAs20、参考来源10。</p></li><li class="scoring-rule"><span class="scoring-rule-label">可信度</span><strong class="scoring-rule-value">占20%</strong><p class="scoring-rule-note">联系页25；电话、邮箱、地址、日期、作者各15；内联引用10、更新记录5。</p></li></ul>
+  <p class="scoring-card-formula">内容质量分 = 上述五个子分的均值。</p>
+  <p class="scoring-card-note">子分各自限制在0–100分。服务页按200/400词、文章按400/800词分档；部分经验/专业规则另有词数阈值。这是现有SEO规则，GEO不采用统一字数要求。</p>
+</article>
+<article class="scoring-card" data-seo-dimension="on_page" data-raw-weight="20" aria-labelledby="seo-on-page-title">
+  <header class="scoring-card-header"><h3 id="seo-on-page-title">页面 SEO</h3><span class="scoring-weight">21.05%</span></header>
+  <p class="scoring-basis">原始权重 20 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">采样页标题齐全</span><strong class="scoring-rule-value">25分</strong><p class="scoring-rule-note">所有采样页均有Title。</p></li><li class="scoring-rule"><span class="scoring-rule-label">采样页描述齐全</span><strong class="scoring-rule-value">20分</strong><p class="scoring-rule-note">所有采样页均有Meta Description。</p></li><li class="scoring-rule"><span class="scoring-rule-label">每页仅一个H1</span><strong class="scoring-rule-value">20分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">图片Alt覆盖达标</span><strong class="scoring-rule-value">15分</strong><p class="scoring-rule-note">各采样页覆盖率均不低于80%。</p></li><li class="scoring-rule"><span class="scoring-rule-label">链接语义达标</span><strong class="scoring-rule-value">20分</strong><p class="scoring-rule-note">关键页画像的链接语义均值达到55。</p></li></ul>
+  <p class="scoring-card-formula">页面SEO分 = 五项得分之和。</p>
+  <p class="scoring-card-note">标题长度、描述长度等仍出现在覆盖清单中；清单通过率不直接等于本维度分数。</p>
+</article>
+<article class="scoring-card" data-seo-dimension="schema" data-raw-weight="10" aria-labelledby="seo-schema-title">
+  <header class="scoring-card-header"><h3 id="seo-schema-title">结构化数据</h3><span class="scoring-weight">10.53%</span></header>
+  <p class="scoring-basis">原始权重 10 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">JSON-LD / Organization / WebSite</span><strong class="scoring-rule-value">8 / 12 / 6分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">Service / Article / Product</span><strong class="scoring-rule-value">各9分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">FAQPage / DefinedTerm</span><strong class="scoring-rule-value">7 / 5分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">sameAs</span><strong class="scoring-rule-value">8分</strong><p class="scoring-rule-note">至少存在一个引用。</p></li><li class="scoring-rule"><span class="scoring-rule-label">稳定ID / 实体关系</span><strong class="scoring-rule-value">各4分</strong><p class="scoring-rule-note">至少2个实体ID；至少3条关系。</p></li><li class="scoring-rule"><span class="scoring-rule-label">BreadcrumbList</span><strong class="scoring-rule-value">4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">发布日期 / 更新日期</span><strong class="scoring-rule-value">各4分</strong></li><li class="scoring-rule"><span class="scoring-rule-label">标记与正文一致性</span><strong class="scoring-rule-value">最高7分</strong><p class="scoring-rule-note">一致性分≥60得7分，≥30得3分，其余0分。</p></li></ul>
+  <p class="scoring-card-formula">结构化数据分 = 各项得分之和。</p>
+  <p class="scoring-card-note">SEO沿用类型覆盖累加规则；新版GEO按当前页面类型检查适用性，两套规则分别计算。</p>
+</article>
+<article class="scoring-card" data-seo-dimension="performance" data-raw-weight="10" aria-labelledby="seo-performance-title">
+  <header class="scoring-card-header"><h3 id="seo-performance-title">性能体验</h3><span class="scoring-weight">10.53%</span></header>
+  <p class="scoring-basis">原始权重 10 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">响应时间档位分</span><strong class="scoring-rule-value">占45%</strong><p class="scoring-rule-note">≤300ms得100；≤800ms得78；≤1500ms得58；其余35。</p></li><li class="scoring-rule"><span class="scoring-rule-label">渲染阻塞风险分</span><strong class="scoring-rule-value">占25%</strong></li><li class="scoring-rule"><span class="scoring-rule-label">图片懒加载比例</span><strong class="scoring-rule-value">占15%</strong><p class="scoring-rule-note">比例先换算为0–100分。</p></li><li class="scoring-rule"><span class="scoring-rule-label">采样页HTML体量</span><strong class="scoring-rule-value">占15%</strong><p class="scoring-rule-note">无页面超过250,000字符得100分，否则55分。</p></li></ul>
+  <p class="scoring-card-formula">性能分 = 响应分×45% + 阻塞分×25% + 懒加载分×15% + 体量分×15%。</p>
+  <p class="scoring-card-note">这是响应、资源与体量的启发式评分，未接入真实CrUX或PageSpeed现场测量。</p>
+</article>
+<article class="scoring-card" data-seo-dimension="ai_search" data-raw-weight="10" aria-labelledby="seo-ai-search-title">
+  <header class="scoring-card-header"><h3 id="seo-ai-search-title">AI 搜索支持</h3><span class="scoring-weight">10.53%</span></header>
+  <p class="scoring-basis">原始权重 10 / 95</p>
+  <ul class="scoring-rules"><li class="scoring-rule"><span class="scoring-rule-label">历史可见性支持分</span><strong class="scoring-rule-value">占55%</strong><p class="scoring-rule-note">爬虫放行32%、可引用结构40%、llms.txt质量12%、基础实体16%。</p></li><li class="scoring-rule"><span class="scoring-rule-label">品牌权威支持分</span><strong class="scoring-rule-value">占15%</strong><p class="scoring-rule-note">外链质量、站内品牌覆盖、实体一致性、企业信息各占25%；外链不可用时按有效项归一。</p></li><li class="scoring-rule"><span class="scoring-rule-label">结构化数据分</span><strong class="scoring-rule-value">占10%</strong></li><li class="scoring-rule"><span class="scoring-rule-label">答案前置信号</span><strong class="scoring-rule-value">占10%</strong><p class="scoring-rule-note">任一关键页满足得100分，否则45分。</p></li><li class="scoring-rule"><span class="scoring-rule-label">参考来源区信号</span><strong class="scoring-rule-value">占10%</strong><p class="scoring-rule-note">任一关键页满足得100分，否则40分。</p></li></ul>
+  <p class="scoring-card-formula">AI搜索支持分 = 五项支持分按上述比例加权。</p>
+  <p class="scoring-card-note">该维度复用现有SEO支持模型，不是新版站内GEO分，也不代表真实AI引用表现。</p>
+</article></div>
+        <p class="doc-note">适用于 <code>task_type=site_seo_audit</code>，以及SEO+GEO任务中的SEO部分。结果读取 <code>result.seo.overall_score</code>。26项检查清单用于定位问题，不按通过项数量直接计算总分。</p>
+      </section>
+
+      <section class="doc-section scoring-section" id="geo-scoring" data-doc-section aria-labelledby="geo-scoring-title">
+        <div class="section-heading"><h2 id="geo-scoring-title">GEO 评分规则</h2><span class="section-note">onsite-geo-v1</span></div>
         <p><code>onsite-geo-v1</code>：23项检查、六维共100分。每个检查仅归属一个计分维度。适用范围为公开且期望被检索的页面；评分表示站内就绪度，不是引用概率。</p>
-        <div class="dimension-list">
-<details class="reference-details" data-geo-dimension="access" data-weight="20"><summary><span class="dimension-name">访问与抓取可达性</span><span class="dimension-weight">20%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-001" data-points="5"><span class="dim-row-label">GEO-001 · HTTP与HTTPS可用</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-002" data-points="7"><span class="dim-row-label">GEO-002 · 目标路径检索爬虫规则</span><span class="dim-row-val">7分</span></div>
-<div class="dim-row" data-geo-check="GEO-003" data-points="5"><span class="dim-row-label">GEO-003 · 当前抓取无访问挑战</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-004" data-points="3"><span class="dim-row-label">GEO-004 · 抓取稳定性</span><span class="dim-row-val">3分</span></div>
-</div></details>
-<details class="reference-details" data-geo-dimension="discovery" data-weight="15"><summary><span class="dimension-name">页面发现与可索引性</span><span class="dimension-weight">15%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-005" data-points="5"><span class="dim-row-label">GEO-005 · 可抓取导航与内链</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-006" data-points="4"><span class="dim-row-label">GEO-006 · 发现机制有效覆盖</span><span class="dim-row-val">4分</span></div>
-<div class="dim-row" data-geo-check="GEO-007" data-points="3"><span class="dim-row-label">GEO-007 · 规范网址与跳转一致</span><span class="dim-row-val">3分</span></div>
-<div class="dim-row" data-geo-check="GEO-008" data-points="3"><span class="dim-row-label">GEO-008 · 索引与摘要指令</span><span class="dim-row-val">3分</span></div>
-</div></details>
-<details class="reference-details" data-geo-dimension="extraction" data-weight="20"><summary><span class="dimension-name">正文读取与信息提取</span><span class="dimension-weight">20%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-009" data-points="10"><span class="dim-row-label">GEO-009 · 核心正文可提取</span><span class="dim-row-val">10分</span></div>
-<div class="dim-row" data-geo-check="GEO-010" data-points="6"><span class="dim-row-label">GEO-010 · 关键信息载体完整</span><span class="dim-row-val">6分</span></div>
-<div class="dim-row" data-geo-check="GEO-011" data-points="4"><span class="dim-row-label">GEO-011 · 原始与渲染正文一致</span><span class="dim-row-val">4分</span></div>
-</div></details>
-<details class="reference-details" data-geo-dimension="answers" data-weight="25"><summary><span class="dimension-name">内容价值与答案适配</span><span class="dimension-weight">25%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-012" data-points="7"><span class="dim-row-label">GEO-012 · 页面主题与正文对应</span><span class="dim-row-val">7分</span></div>
-<div class="dim-row" data-geo-check="GEO-013" data-points="5"><span class="dim-row-label">GEO-013 · 结论或关键信息易定位</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-014" data-points="5"><span class="dim-row-label">GEO-014 · 段落自包含与组织</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-015" data-points="5"><span class="dim-row-label">GEO-015 · 页面任务所需信息</span><span class="dim-row-val">5分</span></div>
-<div class="dim-row" data-geo-check="GEO-016" data-points="3"><span class="dim-row-label">GEO-016 · 具体表达与低冗余</span><span class="dim-row-val">3分</span></div>
-</div></details>
-<details class="reference-details" data-geo-dimension="trust" data-weight="15"><summary><span class="dimension-name">站内可信度与时效性</span><span class="dimension-weight">15%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-017" data-points="4"><span class="dim-row-label">GEO-017 · 发布主体或责任团队</span><span class="dim-row-val">4分</span></div>
-<div class="dim-row" data-geo-check="GEO-018" data-points="6"><span class="dim-row-label">GEO-018 · 关键主张依据可追溯</span><span class="dim-row-val">6分</span></div>
-<div class="dim-row" data-geo-check="GEO-019" data-points="3"><span class="dim-row-label">GEO-019 · 日期与适用版本</span><span class="dim-row-val">3分</span></div>
-<div class="dim-row" data-geo-check="GEO-020" data-points="2"><span class="dim-row-label">GEO-020 · 跨页面关键事实一致</span><span class="dim-row-val">2分</span></div>
-</div></details>
-<details class="reference-details" data-geo-dimension="semantics" data-weight="5"><summary><span class="dimension-name">元数据与实体语义</span><span class="dimension-weight">5%</span></summary><div class="dimension-body">
-<div class="dim-row" data-geo-check="GEO-021" data-points="2"><span class="dim-row-label">GEO-021 · 标题及语言元数据</span><span class="dim-row-val">2分</span></div>
-<div class="dim-row" data-geo-check="GEO-022" data-points="1"><span class="dim-row-label">GEO-022 · 实体命名及标识一致</span><span class="dim-row-val">1分</span></div>
-<div class="dim-row" data-geo-check="GEO-023" data-points="2"><span class="dim-row-label">GEO-023 · 适用Schema及正文一致性</span><span class="dim-row-val">2分</span></div>
-</div></details>
-</div>
+        <div class="scoring-formula"><strong>GEO总分</strong><p>Σ（有效维度分 × 维度权重）÷ 有效权重之和</p><span>维度分按已核验的适用项计算；同时展示未知项、证据覆盖率及分数区间。</span></div>
+        <div class="scoring-grid" aria-label="GEO六维评分细项"><article class="scoring-card" data-geo-dimension="access" data-weight="20" aria-labelledby="geo-access-title">
+  <header class="scoring-card-header"><h3 id="geo-access-title">访问与抓取可达性</h3><span class="scoring-weight">20%</span></header>
+  <p class="scoring-basis">全局满分分配 20分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-001" data-points="5"><span class="scoring-rule-label">HTTP与HTTPS可用<span class="scoring-rule-code">GEO-001</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-002" data-points="7"><span class="scoring-rule-label">目标路径检索爬虫规则<span class="scoring-rule-code">GEO-002</span></span><strong class="scoring-rule-value">7分</strong></li><li class="scoring-rule" data-geo-check="GEO-003" data-points="5"><span class="scoring-rule-label">当前抓取无访问挑战<span class="scoring-rule-code">GEO-003</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-004" data-points="3"><span class="scoring-rule-label">抓取稳定性<span class="scoring-rule-code">GEO-004</span></span><strong class="scoring-rule-value">3分</strong></li></ul>
+
+  <p class="scoring-card-note">按目标页面路径检查检索权限；单次请求无法证明持续稳定性，相关项保留待核验。</p>
+</article>
+<article class="scoring-card" data-geo-dimension="discovery" data-weight="15" aria-labelledby="geo-discovery-title">
+  <header class="scoring-card-header"><h3 id="geo-discovery-title">页面发现与可索引性</h3><span class="scoring-weight">15%</span></header>
+  <p class="scoring-basis">全局满分分配 15分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-005" data-points="5"><span class="scoring-rule-label">可抓取导航与内链<span class="scoring-rule-code">GEO-005</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-006" data-points="4"><span class="scoring-rule-label">发现机制有效覆盖<span class="scoring-rule-code">GEO-006</span></span><strong class="scoring-rule-value">4分</strong></li><li class="scoring-rule" data-geo-check="GEO-007" data-points="3"><span class="scoring-rule-label">规范网址与跳转一致<span class="scoring-rule-code">GEO-007</span></span><strong class="scoring-rule-value">3分</strong></li><li class="scoring-rule" data-geo-check="GEO-008" data-points="3"><span class="scoring-rule-label">索引与摘要指令<span class="scoring-rule-code">GEO-008</span></span><strong class="scoring-rule-value">3分</strong></li></ul>
+
+  <p class="scoring-card-note">检查页面能否被发现及是否允许索引；实际搜索收录另行验证。</p>
+</article>
+<article class="scoring-card" data-geo-dimension="extraction" data-weight="20" aria-labelledby="geo-extraction-title">
+  <header class="scoring-card-header"><h3 id="geo-extraction-title">正文读取与信息提取</h3><span class="scoring-weight">20%</span></header>
+  <p class="scoring-basis">全局满分分配 20分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-009" data-points="10"><span class="scoring-rule-label">核心正文可提取<span class="scoring-rule-code">GEO-009</span></span><strong class="scoring-rule-value">10分</strong></li><li class="scoring-rule" data-geo-check="GEO-010" data-points="6"><span class="scoring-rule-label">关键信息载体完整<span class="scoring-rule-code">GEO-010</span></span><strong class="scoring-rule-value">6分</strong></li><li class="scoring-rule" data-geo-check="GEO-011" data-points="4"><span class="scoring-rule-label">原始与渲染正文一致<span class="scoring-rule-code">GEO-011</span></span><strong class="scoring-rule-value">4分</strong></li></ul>
+
+  <p class="scoring-card-note">直接检查正文和信息载体；未完成浏览器对照时，对应项目为待核验。</p>
+</article>
+<article class="scoring-card" data-geo-dimension="answers" data-weight="25" aria-labelledby="geo-answers-title">
+  <header class="scoring-card-header"><h3 id="geo-answers-title">内容价值与答案适配</h3><span class="scoring-weight">25%</span></header>
+  <p class="scoring-basis">全局满分分配 25分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-012" data-points="7"><span class="scoring-rule-label">页面主题与正文对应<span class="scoring-rule-code">GEO-012</span></span><strong class="scoring-rule-value">7分</strong></li><li class="scoring-rule" data-geo-check="GEO-013" data-points="5"><span class="scoring-rule-label">结论或关键信息易定位<span class="scoring-rule-code">GEO-013</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-014" data-points="5"><span class="scoring-rule-label">段落自包含与组织<span class="scoring-rule-code">GEO-014</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-015" data-points="5"><span class="scoring-rule-label">页面任务所需信息<span class="scoring-rule-code">GEO-015</span></span><strong class="scoring-rule-value">5分</strong></li><li class="scoring-rule" data-geo-check="GEO-016" data-points="3"><span class="scoring-rule-label">具体表达与低冗余<span class="scoring-rule-code">GEO-016</span></span><strong class="scoring-rule-value">3分</strong></li></ul>
+
+  <p class="scoring-card-note">主题、位置、组织及任务结构属于可观测代理指标，不等于事实已核查。</p>
+</article>
+<article class="scoring-card" data-geo-dimension="trust" data-weight="15" aria-labelledby="geo-trust-title">
+  <header class="scoring-card-header"><h3 id="geo-trust-title">站内可信度与时效性</h3><span class="scoring-weight">15%</span></header>
+  <p class="scoring-basis">全局满分分配 15分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-017" data-points="4"><span class="scoring-rule-label">发布主体或责任团队<span class="scoring-rule-code">GEO-017</span></span><strong class="scoring-rule-value">4分</strong></li><li class="scoring-rule" data-geo-check="GEO-018" data-points="6"><span class="scoring-rule-label">关键主张依据可追溯<span class="scoring-rule-code">GEO-018</span></span><strong class="scoring-rule-value">6分</strong></li><li class="scoring-rule" data-geo-check="GEO-019" data-points="3"><span class="scoring-rule-label">日期与适用版本<span class="scoring-rule-code">GEO-019</span></span><strong class="scoring-rule-value">3分</strong></li><li class="scoring-rule" data-geo-check="GEO-020" data-points="2"><span class="scoring-rule-label">跨页面关键事实一致<span class="scoring-rule-code">GEO-020</span></span><strong class="scoring-rule-value">2分</strong></li></ul>
+
+  <p class="scoring-card-note">日期与版本按页面用途判断；缺少跨页事实审核证据时保留待核验。</p>
+</article>
+<article class="scoring-card" data-geo-dimension="semantics" data-weight="5" aria-labelledby="geo-semantics-title">
+  <header class="scoring-card-header"><h3 id="geo-semantics-title">元数据与实体语义</h3><span class="scoring-weight">5%</span></header>
+  <p class="scoring-basis">全局满分分配 5分</p>
+  <ul class="scoring-rules"><li class="scoring-rule" data-geo-check="GEO-021" data-points="2"><span class="scoring-rule-label">标题及语言元数据<span class="scoring-rule-code">GEO-021</span></span><strong class="scoring-rule-value">2分</strong></li><li class="scoring-rule" data-geo-check="GEO-022" data-points="1"><span class="scoring-rule-label">实体命名及标识一致<span class="scoring-rule-code">GEO-022</span></span><strong class="scoring-rule-value">1分</strong></li><li class="scoring-rule" data-geo-check="GEO-023" data-points="2"><span class="scoring-rule-label">适用Schema及正文一致性<span class="scoring-rule-code">GEO-023</span></span><strong class="scoring-rule-value">2分</strong></li></ul>
+
+  <p class="scoring-card-note">按当前页面类型检查适用性，不要求堆齐Schema类型或强制FAQ。</p>
+</article></div>
         <h3 class="subheading">统一计分与阻断规则</h3>
         <ul><li>单项 value 在0–1之间；确定性检查为0/1，覆盖型按比例，明确的部分满足可为0.5。每项包含状态、证据、判定方式和建议。</li>
 <li>状态分为 pass、partial、fail、unknown、na。不适用项剔除；未检测或证据不足为unknown，绝不当作通过。</li>
@@ -329,6 +382,38 @@
 <li>GEO-011复用可选Chromium渲染；未启用、失败、截断或未验证抓取权限时为unknown。正文直接从main/article/role=main或body提取，剔除导航、页脚、脚本、隐藏节点，不根据字数猜SSR。</li>
 <li>默认检查Googlebot、bingbot、OAI-SearchBot、PerplexityBot的目标路径规则，训练许可不计分；模拟请求成功不代表真实AI爬虫或指定地区访问成功。</li></ul>
       </section>
+      <section class="doc-section scoring-section" id="seo-geo-scoring" data-doc-section aria-labelledby="seo-geo-scoring-title">
+        <div class="section-heading"><h2 id="seo-geo-scoring-title">SEO+GEO 评分规则</h2><span class="section-note">两套独立评分</span></div>
+        <p>一次采集页面证据，分别运行SEO和GEO引擎。组合任务复用各自的评分规则，不平均、不相加，不生成第三个合成分。</p>
+        <div class="scoring-grid" aria-label="SEO与GEO组合计分说明">
+          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-seo-title">
+            <header class="scoring-card-header"><h3 id="combined-seo-title">SEO部分</h3><span class="scoring-weight">0–100</span></header>
+            <p class="scoring-basis">沿用SEO六维和原始权重</p>
+            <p class="scoring-card-formula">SEO分 = Σ（SEO维度分 × 原始权重）÷ 95</p>
+            <ul class="scoring-copy-list"><li>包含SEO自身的技术、页面、内容、性能和支持信号。</li><li>外链、OG/Twitter等按原SEO规则处理。</li><li>评分含义与独立SEO任务一致。</li></ul>
+            <dl class="scoring-fields"><dt>结果字段</dt><dd><code>result.seo.overall_score</code></dd><dt>摘要字段</dt><dd><code>summary.seo_score</code></dd></dl>
+            <a class="scoring-reference" href="#seo-scoring">查看上方SEO细项</a>
+          </article>
+          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-geo-title">
+            <header class="scoring-card-header"><h3 id="combined-geo-title">GEO部分</h3><span class="scoring-weight">0–100</span></header>
+            <p class="scoring-basis">复用onsite-geo-v1六维规则</p>
+            <p class="scoring-card-formula">GEO分 = Σ（有效维度分 × 权重）÷ 有效权重之和</p>
+            <ul class="scoring-copy-list"><li>使用20%、15%、20%、25%、15%、5%的六维权重。</li><li>保留逐页证据、关键阻断、未知项和覆盖率。</li><li>评分含义与独立GEO任务一致。</li></ul>
+            <dl class="scoring-fields"><dt>结果字段</dt><dd><code>result.geo.score</code></dd><dt>摘要字段</dt><dd><code>summary.geo_score</code></dd></dl>
+            <a class="scoring-reference" href="#geo-scoring">查看上方GEO细项</a>
+          </article>
+          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-result-title">
+            <header class="scoring-card-header"><h3 id="combined-result-title">组合结果的读取</h3><span class="scoring-result-tag">分别呈现</span></header>
+            <p class="scoring-basis">同一批证据，各自计算分数</p>
+            <div class="scoring-example"><span>SEO <strong>78</strong></span><span>GEO <strong>72.5</strong></span></div>
+            <p class="scoring-card-note">仅作字段读取示例，不是新的合成分。</p>
+            <ul class="scoring-copy-list"><li>SEO摘要保存在<code>result.seo_summary</code>。</li><li>GEO就绪状态和暂定区间随GEO分一起读取。</li><li><code>composite_geo_score</code>是GEO分的兼容别名。</li></ul>
+            <dl class="scoring-fields"><dt>合成分字段</dt><dd><code>summary.combined_score = null</code></dd><dt>任务类型</dt><dd><code>site_geo_audit</code></dd></dl>
+          </article>
+        </div>
+        <p class="doc-note">同一站点的SEO分与GEO分用于回答不同问题，不能相互替代。比较优化前后变化时，应使用相同评分版本、页面集合与采样设置。</p>
+      </section>
+
       <section class="doc-section" id="data-sources" data-doc-section aria-labelledby="data-sources-title">
         <h2 id="data-sources-title">数据来源与运行机制</h2>
         <h3 class="subheading">汇总层维度业务落成：三种站点任务独立评分</h3>
