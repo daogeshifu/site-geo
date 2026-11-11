@@ -34,6 +34,10 @@ def task_site_pages(task) -> list[dict]:
         add(profile.get("final_url"), {**profile, "page_type": name}, "discovery")
     for profile in discovery.get("additional_page_profiles", []):
         add(profile.get("final_url"), profile, "full_audit")
+    geo_step = task.steps.get("geo")
+    geo = result.get("geo") or (geo_step.data if geo_step else None) or {}
+    for sample in geo.get("pages", []):
+        add(sample.get("url") or sample.get("final_url"), sample, "geo_sample")
     seo_step = task.steps.get("seo")
     seo = result.get("seo") or (seo_step.data if seo_step else None) or {}
     for sample in seo.get("sampled_pages", []):

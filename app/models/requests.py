@@ -21,7 +21,7 @@ from app.models.discovery import DiscoveryResult
 AuditMode = Literal["standard", "premium"]
 FeedbackLang = Literal["en", "zh"]
 TargetLocale = Literal["en", "de", "nl", "fr", "zh", "es", "ar", "tr"]
-TaskType = Literal["site_geo_audit", "site_content_audit", "site_seo_audit"]
+TaskType = Literal["site_geo_only_audit", "site_geo_audit", "site_content_audit", "site_seo_audit"]
 # 目前仅支持 OpenRouter 作为 LLM 提供商
 LLMProvider = Literal["openrouter"]
 

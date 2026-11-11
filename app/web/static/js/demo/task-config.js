@@ -1,4 +1,5 @@
-export const SITE_GEO_STEP_ORDER = ['discovery', 'seo', 'visibility', 'technical', 'content', 'schema', 'platform', 'observation', 'summary'];
+export const SITE_GEO_STEP_ORDER = ['discovery', 'seo', 'geo', 'observation', 'summary'];
+export const SITE_GEO_ONLY_STEP_ORDER = ['discovery', 'geo', 'observation', 'summary'];
 export const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
 export const SITE_SEO_STEP_ORDER = ['discovery', 'seo', 'summary'];
 export const STEP_ICON = {
@@ -8,6 +9,7 @@ export const STEP_ICON = {
   technical: '⚙️',
   content: '📝',
   seo: '📈',
+  geo: '🔎',
   schema: '🏷️',
   platform: '🌐',
   observation: '📎',
@@ -17,10 +19,19 @@ export const STEP_ICON = {
 };
 
 export const TASK_TYPE_CONFIG = {
+  site_geo_only_audit: {
+    heading: { zh: '网站 GEO 审计', en: 'Website GEO Audit' },
+    subtitle: {
+      zh: '检查页面能否被发现、抓取、读取与准确引用，输出六维就绪度、关键阻断和逐页证据。',
+      en: 'Measure on-site GEO readiness across six dimensions, with blockers, coverage, and page evidence.'
+    },
+    urlLabel: { zh: '站点 URL', en: 'Site URL' },
+    placeholder: 'https://example.com', fullAuditVisible: true, exportable: true
+  },
   site_geo_audit: {
     heading: { zh: '网站 SEO+GEO 审计', en: 'Website SEO + GEO Audit' },
     subtitle: {
-      zh: '一次完成搜索引擎健康度与 AI 可见性诊断，输出分级问题、证据和可执行建议。',
+      zh: '共享页面证据，分别输出 SEO 健康分与 GEO 就绪分，两项分数独立计算。',
       en: 'Audit search health and AI visibility together, with prioritized issues, evidence, and actionable recommendations.'
     },
     urlLabel: { zh: '目标 URL', en: 'Target URL' },
@@ -71,13 +82,14 @@ export const CONTENT_GEO_FACTOR_LABELS = {
   structure_clarity: { zh: '结构清晰度', en: 'Structure clarity' }
 };
 
-export function getTaskTypeConfig(taskType = 'site_geo_audit') {
-  return TASK_TYPE_CONFIG[taskType] || TASK_TYPE_CONFIG.site_geo_audit;
+export function getTaskTypeConfig(taskType = 'site_geo_only_audit') {
+  return TASK_TYPE_CONFIG[taskType] || TASK_TYPE_CONFIG.site_geo_only_audit;
 }
 
-export function getTaskStepOrder(taskType = 'site_geo_audit', auditScope = 'site') {
+export function getTaskStepOrder(taskType = 'site_geo_only_audit', auditScope = 'site') {
   if (auditScope === 'page') return ['page', 'summary'];
   if (taskType === 'site_content_audit') return SITE_CONTENT_STEP_ORDER;
   if (taskType === 'site_seo_audit') return SITE_SEO_STEP_ORDER;
+  if (taskType === 'site_geo_only_audit') return SITE_GEO_ONLY_STEP_ORDER;
   return SITE_GEO_STEP_ORDER;
 }

@@ -66,13 +66,13 @@
         <p class="section-description">提交一个 URL，从创建任务开始。结果通过任务 ID 查询。</p>
         <div class="quickstart-layout">
           <ol class="request-flow"><li><a href="#create-task">创建审计任务</a><p>提交目标 URL，获取 <code>task_id</code>。</p></li><li><a href="#task-status">查询任务状态</a><p>每隔 1–2 秒轮询，直到任务完成或失败。</p></li><li><a href="#task-report">读取与导出结果</a><p>从 <code>result</code> 读取诊断，按需获取报告和图谱。</p></li></ol>
-          <div class="code-block quickstart-code"><div class="code-toolbar"><span>cURL</span><span class="code-caption">创建网站 SEO 审计</span></div><pre><code>curl -X POST \
+          <div class="code-block quickstart-code"><div class="code-toolbar"><span>cURL</span><span class="code-caption">创建网站 GEO 审计</span></div><pre><code>curl -X POST \
   "<span data-api-origin>http://localhost:8023</span>/api/v1/tasks/audit" \
   -H "Content-Type: application/json" \
   -H "X-API-Token: YOUR_API_TOKEN" \
   -d '{
     "url": "https://example.com",
-    "task_type": "site_seo_audit",
+    "task_type": "site_geo_only_audit",
     "feedback_lang": "zh"
   }'</code></pre></div>
         </div>
@@ -92,17 +92,24 @@
       <section class="doc-section endpoint-section" id="create-task" data-doc-section aria-labelledby="create-task-title">
         <h3 class="endpoint-title" id="create-task-title">创建审计任务</h3>
         <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/tasks/audit</code></div>
-        <p>提交目标 URL；<code>site_geo_audit</code> 对应“网站 SEO+GEO 审计”，后台异步启动 discovery → seo + GEO 六维模块 → observation → summary 流水线。若启用 <code>build_knowledge_graph=true</code>，会在 discovery 完成后复用同一批页面快照，异步分叉执行“结构图谱”和“实体图谱”两个子阶段。启用 <code>full_audit=true</code> 时会追加逐页诊断结果，且抓取严格限制在当前 URL 的 host 与语言作用域内。</p>
+        <p>新增 <code>site_geo_only_audit</code>：网站 GEO 审计，执行 discovery → geo → observation → summary。保留 <code>site_geo_audit</code> 表示网站 SEO+GEO 审计，执行 discovery → seo + geo → observation → summary，共享同一批页面证据。</p>
+        <div class="table-wrap"><table><thead><tr><th>任务类型</th><th>评分口径</th><th>结果位置</th></tr></thead><tbody>
+<tr><td><code>site_geo_only_audit</code> 网站 GEO 审计</td><td>站内六维就绪度，onsite-geo-v1；不含外链、OG/Twitter卡片、一般安全响应头或平台推测分</td><td><code>result.geo.score</code> / <code>summary.geo_score</code></td></tr>
+<tr><td><code>site_seo_audit</code> 网站 SEO 审计</td><td>SEO既有六维、权重按95归一；外链为品牌权威支持信号，OG/Twitter属于技术支持检查</td><td><code>result.seo.overall_score</code> / <code>summary.overall_score</code></td></tr>
+<tr><td><code>site_geo_audit</code> 网站 SEO+GEO 审计</td><td>分别运行上述两套评分，共享证据但不平均、不合成第三个总分</td><td><code>result.seo</code> + <code>result.geo</code>；<code>summary.seo_score</code> 与 <code>summary.geo_score</code></td></tr>
+<tr><td><code>site_content_audit</code> 网站内容审计</td><td>单篇内容评分，独立于上述站点评分</td><td><code>result.content</code> / <code>result.summary</code></td></tr>
+</tbody></table></div>
+        <p class="doc-note">页面默认首选网站 GEO 审计。为兼容已有调用，API省略 task_type 时仍默认 site_seo_audit；请显式传入所需类型。三种站点任务均按精确 host 与语言路径限制抓取；图谱可选、独立构建。</p>
         <h4 class="subheading">请求参数</h4>
         <div class="table-wrap" role="region" aria-label="创建审计任务的请求参数" tabindex="0"><table class="parameter-table"><thead><tr><th scope="col">参数</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead><tbody>
 <tr><th scope="row"><code>url</code><span class="param-required">必填</span></th><td><span class="param-type">string</span></td><td>目标网站 URL（自动规范化）</td></tr>
-<tr><th scope="row"><code>task_type</code></th><td><span class="param-type">string</span></td><td><code>"site_seo_audit"</code>（默认）、<code>"site_geo_audit"</code>（网站 SEO+GEO 审计）或 <code>"site_content_audit"</code></td></tr>
-<tr><th scope="row"><code>mode</code></th><td><span class="param-type">string</span></td><td><code>"standard"</code>（默认）或 <code>"premium"</code>（启用 LLM 增强）</td></tr>
+<tr><th scope="row"><code>task_type</code></th><td><span class="param-type">string</span></td><td><code>"site_geo_only_audit"</code>（网站 GEO 审计）、<code>"site_seo_audit"</code>（API默认）、<code>"site_geo_audit"</code>（网站 SEO+GEO 审计）、<code>"site_content_audit"</code></td></tr>
+<tr><th scope="row"><code>mode</code></th><td><span class="param-type">string</span></td><td><code>"standard"</code>（默认）或 <code>"premium"</code>（SEO/内容可启用 LLM 增强；新版GEO始终规则计分）</td></tr>
 <tr><th scope="row"><code>force_refresh</code></th><td><span class="param-type">boolean</span></td><td>true 则跳过 7 天缓存强制重新审计</td></tr>
 <tr><th scope="row"><code>target_locale</code></th><td><span class="param-type">string</span></td><td>可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</td></tr>
 <tr><th scope="row"><code>feedback_lang</code></th><td><span class="param-type">string</span></td><td><code>"en"</code>（默认）或 <code>"zh"</code>；仅控制报告返回语言，不控制目标站点语言版本</td></tr>
-<tr><th scope="row"><code>full_audit</code></th><td><span class="param-type">boolean</span></td><td>可选，启用后扩展抓取更多内部页并返回 <code>page_diagnostics</code></td></tr>
-<tr><th scope="row"><code>max_pages</code></th><td><span class="param-type">int</span></td><td>Full Audit 范围 5–10000，默认 12；网站 SEO 审计未开启 Full Audit 时最多采样 8 页</td></tr>
+<tr><th scope="row"><code>full_audit</code></th><td><span class="param-type">boolean</span></td><td>启用后扩展采样；新版GEO无论是否启用，均返回已采样页面的逐页证据</td></tr>
+<tr><th scope="row"><code>max_pages</code></th><td><span class="param-type">int</span></td><td>Full Audit 范围 5–10000，默认 12；三种站点审计未开启 Full Audit 时最多采样 8 页</td></tr>
 <tr><th scope="row"><code>build_knowledge_graph</code></th><td><span class="param-type">boolean</span></td><td>是否在 discovery 后基于 MySQL 页面快照构建站点知识图谱；默认 <code>false</code>，开启后即使构建失败也不会中断审计</td></tr>
 <tr><th scope="row"><code>observation</code></th><td><span class="param-type">object</span></td><td>可选观测层输入，支持 GA4 / 来源拆分 / 人工引用观测；仅展示，不计分</td></tr>
 <tr><th scope="row"><code>llm.provider</code></th><td><span class="param-type">string</span></td><td>premium 模式下固定 <code>"openrouter"</code></td></tr>
@@ -110,7 +117,7 @@
 </tbody></table></div>
         <details class="reference-details example-details"><summary>完整请求示例<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>JSON</span></div><pre><code>{
   "url": "https://example.com",
-  "task_type": "site_seo_audit",
+  "task_type": "site_geo_only_audit",
   "mode": "premium",
   "target_locale": "nl",
   "feedback_lang": "zh",
@@ -133,7 +140,7 @@
 <tr><th scope="row"><code>progress_percent</code></th><td><span class="param-type">int</span></td><td>0–100，按完成步骤数计算</td></tr>
 <tr><th scope="row"><code>cached</code></th><td><span class="param-type">boolean</span></td><td>命中缓存时为 true，直接返回历史结果</td></tr>
 <tr><th scope="row"><code>llm_model_used</code></th><td><span class="param-type">boolean</span></td><td>只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</td></tr>
-<tr><th scope="row"><code>result</code></th><td><span class="param-type">object</span></td><td>completed 后包含完整的 visibility / technical / content / schema / platform / observation / summary；full audit 时额外返回 <code>page_diagnostics</code>，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</td></tr>
+<tr><th scope="row"><code>result</code></th><td><span class="param-type">object</span></td><td>completed 后按任务类型返回 geo 和/或 seo，以及 discovery、summary；新版GEO还返回 observation 和 page_diagnostics，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</td></tr>
 </tbody></table></div>
         <details class="reference-details example-details"><summary>响应结构示意<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>响应结构示意</span></div><pre><code>// 响应结构示意
 {
@@ -146,28 +153,31 @@
     "llm_model_used": true,
     "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
     "result": {
-      "visibility": { "score": 72, "status": "good", "llm_enhanced": true, ... },
-      "technical":  { "score": 85, ... },
-      "content":    { "score": 60, ... },
-      "schema":     { "score": 45, ... },
-      "platform":   { "chatgpt": { "platform_score": 68 }, ... },
-      "discovery":  { "scope_root_url": "https://www.ecoflow.com/de/", ... },
-      "page_diagnostics": [ { "page_type": "product", "overall_score": 71, ... } ],
-      "observation":{ "provided": false, "scored": false, ... },
-      "summary":    {
-        "composite_geo_score": 70,
-        "summary": "...",
-        "ai_perception": {
-          "positive_percentage": 58,
-          "neutral_percentage": 29,
-          "controversial_percentage": 13,
-          "cognition_keywords": ["Thought Leader", "Well-structured", "Evidence-led", "Trustworthy"]
-        }
+      "geo": {
+        "scoring_version": "onsite-geo-v1",
+        "score": 72.5,
+        "status": "provisional",
+        "readiness_status": "unverified",
+        "provisional": true,
+        "score_range": [65.2, 75.8],
+        "coverage": { "evidence_coverage": 0.894, "sampled_pages": 8, ... },
+        "dimensions": { "access": {...}, "discovery": {...}, "extraction": {...}, "answers": {...}, "trust": {...}, "semantics": {...} },
+        "pages": [...], "blockers": [...], "auxiliary": { "scored": false, ... }
+      },
+      "seo": { "overall_score": 78, ... },  // 仅SEO+GEO任务包含
+      "seo_summary": {...},                 // SEO独立摘要
+      "discovery": { "scope_root_url": "https://example.com/", ... },
+      "observation": { "provided": false, "scored": false },
+      "summary": {
+        "scoring_version": "onsite-geo-v1",
+        "geo_score": 72.5, "seo_score": 78,
+        "combined_score": null,
+        "composite_geo_score": 72.5
       }
     }
   }
 }</code></pre></div></details>
-        <p class="doc-note">任务完成后，<code>summary.ai_perception</code> 返回 AI 对站点的认知百分比分布及 4 个认知标签。</p>
+        <p class="doc-note">上述为SEO+GEO响应结构示意，数值仅作字段示例。纯GEO不返回seo；纯SEO使用原SEO摘要。<code>composite_geo_score</code>仅是新版GEO分的兼容别名，不是SEO+GEO合成分；新版不输出推算的引用概率或AI认知百分比。</p>
       </section>
 
       <section class="doc-section endpoint-section" id="task-graphs" data-doc-section aria-labelledby="task-graphs-title">
@@ -180,7 +190,7 @@
       <section class="doc-section endpoint-section" id="task-report" data-doc-section aria-labelledby="task-report-title">
         <h3 class="endpoint-title" id="task-report-title">导出审计报告</h3>
         <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}/report</code></div>
-        <p>任务完成后，获取完整 Markdown 报告，用于渲染或保存为文件。仅在 <code>status=completed</code> 时可用。</p>
+        <p>网站GEO、SEO及SEO+GEO任务完成后，可获取完整 Markdown 报告；组合报告包含两套独立评分。仅在 <code>status=completed</code> 时可用。</p>
       </section>
 
       <section class="doc-section endpoint-section" id="page-evidence" data-doc-section aria-labelledby="page-evidence-title">
@@ -194,14 +204,16 @@
 
       <section class="doc-section endpoint-section" id="audit-modules" data-doc-section aria-labelledby="audit-modules-title">
         <div class="section-heading"><h3 class="endpoint-title" id="audit-modules-title">单模块调用</h3><span class="optional-label">高级用法</span></div>
-        <p>同步调用独立模块，适用于实时集成或调试，无需创建异步任务。<code>/api/v1/audit/full</code> 同样支持 Full Audit 与抓取作用域限制。</p>
+        <p><code>POST /api/v1/audit/geo</code> 同步运行新版站内GEO，支持传入discovery复用快照；返回GeoAuditResult本体。<code>POST /api/v1/audit/seo</code>运行SEO。以下visibility / technical / content / schema / platform / full端点保留旧版模块行为；<code>/audit/full</code>仍为历史geo-audit-v3，不能代替新版GEO或SEO+GEO任务。</p>
         <div class="endpoint-list">
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/geo</code><span>新版站内GEO六维审计</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/seo</code><span>独立SEO审计</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/visibility</code><span>AI 可见性</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/technical</code><span>技术基础</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/content</code><span>内容质量</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/schema</code><span>结构化数据</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/platform</code><span>平台适配</span></div>
-          <div><span class="method method-post">POST</span><code>/api/v1/audit/full</code><span>全量审计，含 summary，无缓存</span></div>
+          <div><span class="method method-post">POST</span><code>/api/v1/audit/full</code><span>历史GEO v3全量审计，含summary</span></div>
         </div>
         <details class="reference-details example-details"><summary>请求体示例<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>请求体示例</span></div><pre><code>// 单模块请求体（Body 字段相同）
 { "url": "https://example.com", "mode": "standard", "feedback_lang": "zh", "full_audit": true, "max_pages": 12, "build_knowledge_graph": false }
@@ -263,71 +275,71 @@
 
       <section class="doc-section" id="geo-scoring" data-doc-section aria-labelledby="geo-scoring-title">
         <h2 id="geo-scoring-title">GEO 打分维度与规则</h2>
-        <p>GEO 综合分由以下六个维度加权计算，单维度原始分满分为 100 分。展开查看各维度的指标与计算权重。</p>
+        <p><code>onsite-geo-v1</code>：23项检查、六维共100分。每个检查仅归属一个计分维度。适用范围为公开且期望被检索的页面；评分表示站内就绪度，不是引用概率。</p>
         <div class="dimension-list">
-<details class="reference-details"><summary><span class="dimension-name">AI 可见性</span><span class="dimension-subtitle">抓取权限与内容可引用性</span><span class="dimension-weight">25%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">AI crawler 放行率</span><span class="dim-row-val">×0.32</span></div>
-<div class="dim-row"><span class="dim-row-label">snapshot citability</span><span class="dim-row-val">×0.40</span></div>
-<div class="dim-row"><span class="dim-row-label">llms.txt 有效性</span><span class="dim-row-val">×0.12</span></div>
-<div class="dim-row"><span class="dim-row-label">基础实体存在</span><span class="dim-row-val">×0.16</span></div>
-<div class="dim-row dim-row-note"><span class="dim-row-label">citability 基于 snapshot 中 homepage 与最佳页面的 answer-first、信息密度、数据点、分块结构和 FAQ / 作者 / 日期信号综合评估</span></div>
+<details class="reference-details" data-geo-dimension="access" data-weight="20"><summary><span class="dimension-name">访问与抓取可达性</span><span class="dimension-weight">20%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-001" data-points="5"><span class="dim-row-label">GEO-001 · HTTP与HTTPS可用</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-002" data-points="7"><span class="dim-row-label">GEO-002 · 目标路径检索爬虫规则</span><span class="dim-row-val">7分</span></div>
+<div class="dim-row" data-geo-check="GEO-003" data-points="5"><span class="dim-row-label">GEO-003 · 当前抓取无访问挑战</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-004" data-points="3"><span class="dim-row-label">GEO-004 · 抓取稳定性</span><span class="dim-row-val">3分</span></div>
 </div></details>
-<details class="reference-details"><summary><span class="dimension-name">品牌权威</span><span class="dimension-subtitle">品牌信号与实体一致性</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">外链质量</span><span class="dim-row-val">25%</span></div>
-<div class="dim-row"><span class="dim-row-label">品牌提及覆盖</span><span class="dim-row-val">25%</span></div>
-<div class="dim-row"><span class="dim-row-label">sameAs / Entity 一致性</span><span class="dim-row-val">25%</span></div>
-<div class="dim-row"><span class="dim-row-label">企业信息完整度</span><span class="dim-row-val">25%</span></div>
-<div class="dim-row"><span class="dim-row-label">站外数据源</span><span class="dim-row-val">Semrush Backlinks Overview</span></div>
-<div class="dim-row"><span class="dim-row-label">结构预留</span><span class="dim-row-val">已抽离 BrandAuthorityService 边界</span></div>
+<details class="reference-details" data-geo-dimension="discovery" data-weight="15"><summary><span class="dimension-name">页面发现与可索引性</span><span class="dimension-weight">15%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-005" data-points="5"><span class="dim-row-label">GEO-005 · 可抓取导航与内链</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-006" data-points="4"><span class="dim-row-label">GEO-006 · 发现机制有效覆盖</span><span class="dim-row-val">4分</span></div>
+<div class="dim-row" data-geo-check="GEO-007" data-points="3"><span class="dim-row-label">GEO-007 · 规范网址与跳转一致</span><span class="dim-row-val">3分</span></div>
+<div class="dim-row" data-geo-check="GEO-008" data-points="3"><span class="dim-row-label">GEO-008 · 索引与摘要指令</span><span class="dim-row-val">3分</span></div>
 </div></details>
-<details class="reference-details"><summary><span class="dimension-name">内容与 E-E-A-T</span><span class="dimension-subtitle">内容质量与专业可信度</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">汇总公式</span><span class="dim-row-val">5 个子分均值</span></div>
-<div class="dim-row"><span class="dim-row-label">content_score</span><span class="dim-row-val">字数 / FAQ / 作者 / 日期 / 数据 / 标题 / answer-first</span></div>
-<div class="dim-row"><span class="dim-row-label">experience</span><span class="dim-row-val">案例 / 量化结果 / 服务页深度 / About</span></div>
-<div class="dim-row"><span class="dim-row-label">expertise</span><span class="dim-row-val">服务页深度 / 文章深度 / answer-first / heading quality</span></div>
-<div class="dim-row"><span class="dim-row-label">authority / trust</span><span class="dim-row-val">作者 / 资质 / sameAs / contact / 日期</span></div>
-<div class="dim-row"><span class="dim-row-label">页面来源</span><span class="dim-row-val">page_profiles 中的 service / article / about / case_study</span></div>
+<details class="reference-details" data-geo-dimension="extraction" data-weight="20"><summary><span class="dimension-name">正文读取与信息提取</span><span class="dimension-weight">20%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-009" data-points="10"><span class="dim-row-label">GEO-009 · 核心正文可提取</span><span class="dim-row-val">10分</span></div>
+<div class="dim-row" data-geo-check="GEO-010" data-points="6"><span class="dim-row-label">GEO-010 · 关键信息载体完整</span><span class="dim-row-val">6分</span></div>
+<div class="dim-row" data-geo-check="GEO-011" data-points="4"><span class="dim-row-label">GEO-011 · 原始与渲染正文一致</span><span class="dim-row-val">4分</span></div>
 </div></details>
-<details class="reference-details"><summary><span class="dimension-name">技术基础</span><span class="dimension-subtitle">抓取、索引、性能与安全</span><span class="dimension-weight">15%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">安全响应头</span><span class="dim-row-val">16 pts</span></div>
-<div class="dim-row"><span class="dim-row-label">HTTPS / SSR</span><span class="dim-row-val">8 / 10</span></div>
-<div class="dim-row"><span class="dim-row-label">Meta / Canonical</span><span class="dim-row-val">5 / 5</span></div>
-<div class="dim-row"><span class="dim-row-label">Sitemap / robots 指令</span><span class="dim-row-val">8 / 4</span></div>
-<div class="dim-row"><span class="dim-row-label">性能 / 渲染阻塞</span><span class="dim-row-val">8 / 8</span></div>
-<div class="dim-row"><span class="dim-row-label">图片 / OG / Twitter / hreflang</span><span class="dim-row-val">8 / 5 / 3 / 4</span></div>
+<details class="reference-details" data-geo-dimension="answers" data-weight="25"><summary><span class="dimension-name">内容价值与答案适配</span><span class="dimension-weight">25%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-012" data-points="7"><span class="dim-row-label">GEO-012 · 页面主题与正文对应</span><span class="dim-row-val">7分</span></div>
+<div class="dim-row" data-geo-check="GEO-013" data-points="5"><span class="dim-row-label">GEO-013 · 结论或关键信息易定位</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-014" data-points="5"><span class="dim-row-label">GEO-014 · 段落自包含与组织</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-015" data-points="5"><span class="dim-row-label">GEO-015 · 页面任务所需信息</span><span class="dim-row-val">5分</span></div>
+<div class="dim-row" data-geo-check="GEO-016" data-points="3"><span class="dim-row-label">GEO-016 · 具体表达与低冗余</span><span class="dim-row-val">3分</span></div>
 </div></details>
-<details class="reference-details"><summary><span class="dimension-name">结构化数据</span><span class="dimension-subtitle">Schema 语义与实体关系</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">JSON-LD / Organization</span><span class="dim-row-val">12 / 14</span></div>
-<div class="dim-row"><span class="dim-row-label">WebSite / Service / Article</span><span class="dim-row-val">10 / 10 / 10</span></div>
-<div class="dim-row"><span class="dim-row-label">FAQPage / Product / DefinedTerm</span><span class="dim-row-val">8 / 10 / 8</span></div>
-<div class="dim-row"><span class="dim-row-label">sameAs</span><span class="dim-row-val">8 pts</span></div>
-<div class="dim-row"><span class="dim-row-label">稳定 @id</span><span class="dim-row-val">5 pts</span></div>
-<div class="dim-row"><span class="dim-row-label">关系丰富度</span><span class="dim-row-val">5 pts</span></div>
+<details class="reference-details" data-geo-dimension="trust" data-weight="15"><summary><span class="dimension-name">站内可信度与时效性</span><span class="dimension-weight">15%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-017" data-points="4"><span class="dim-row-label">GEO-017 · 发布主体或责任团队</span><span class="dim-row-val">4分</span></div>
+<div class="dim-row" data-geo-check="GEO-018" data-points="6"><span class="dim-row-label">GEO-018 · 关键主张依据可追溯</span><span class="dim-row-val">6分</span></div>
+<div class="dim-row" data-geo-check="GEO-019" data-points="3"><span class="dim-row-label">GEO-019 · 日期与适用版本</span><span class="dim-row-val">3分</span></div>
+<div class="dim-row" data-geo-check="GEO-020" data-points="2"><span class="dim-row-label">GEO-020 · 跨页面关键事实一致</span><span class="dim-row-val">2分</span></div>
 </div></details>
-<details class="reference-details"><summary><span class="dimension-name">平台适配</span><span class="dimension-subtitle">AI 搜索平台的适配程度</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="dimension-body">
-<div class="dim-row"><span class="dim-row-label">汇总方式</span><span class="dim-row-val">战略权重加权</span></div>
-<div class="dim-row"><span class="dim-row-label">ChatGPT</span><span class="dim-row-val">22% · crawler + llms + citability + brand</span></div>
-<div class="dim-row"><span class="dim-row-label">Google AI Mode</span><span class="dim-row-val">18% · topic breadth + entity graph + schema</span></div>
-<div class="dim-row"><span class="dim-row-label">Google AI Overviews</span><span class="dim-row-val">18% · citability + schema + FAQ + metadata</span></div>
-<div class="dim-row"><span class="dim-row-label">Perplexity</span><span class="dim-row-val">16% · cited evidence + brand + schema</span></div>
-<div class="dim-row"><span class="dim-row-label">Gemini / Grok</span><span class="dim-row-val">13% / 13% · authority / social amplification</span></div>
+<details class="reference-details" data-geo-dimension="semantics" data-weight="5"><summary><span class="dimension-name">元数据与实体语义</span><span class="dimension-weight">5%</span></summary><div class="dimension-body">
+<div class="dim-row" data-geo-check="GEO-021" data-points="2"><span class="dim-row-label">GEO-021 · 标题及语言元数据</span><span class="dim-row-val">2分</span></div>
+<div class="dim-row" data-geo-check="GEO-022" data-points="1"><span class="dim-row-label">GEO-022 · 实体命名及标识一致</span><span class="dim-row-val">1分</span></div>
+<div class="dim-row" data-geo-check="GEO-023" data-points="2"><span class="dim-row-label">GEO-023 · 适用Schema及正文一致性</span><span class="dim-row-val">2分</span></div>
 </div></details>
 </div>
-        <div class="score-legend"><span>分级标准</span><ul><li><code>0–24</code> critical</li><li><code>25–44</code> poor</li><li><code>45–64</code> fair</li><li><code>65–84</code> good</li><li><code>85–100</code> strong</li></ul></div>
+        <h3 class="subheading">统一计分与阻断规则</h3>
+        <ul><li>单项 value 在0–1之间；确定性检查为0/1，覆盖型按比例，明确的部分满足可为0.5。每项包含状态、证据、判定方式和建议。</li>
+<li>状态分为 pass、partial、fail、unknown、na。不适用项剔除；未检测或证据不足为unknown，绝不当作通过。</li>
+<li>维度分 = 已测项加权得分 ÷ 已测适用项满分 × 100；总分按六维固定权重汇总。某维度完全未测时，仅暂算其余维度，并扩大分数上下界；不得给就绪结论。</li>
+<li>维度证据覆盖率 = 已测适用分值 ÷ 全部适用分值；总覆盖率按维度权重汇总。score_range下界将未知项设0，上界设1；暂定分由已测项计算。</li>
+<li>先逐页计分；页面类型等权，同类型页面等权。候选URL按类型轮询采样；失败页面保留。sample_coverage是已采样/已知候选，total_site_pages未知时不声称全站覆盖。</li>
+<li>HTTP失败、当前访问挑战、无核心正文、误设noindex或目标检索渠道robots阻断，按页面/渠道列出blockers。readiness_status=blocked不能被高总分抵消；含未知项时provisional=true，不能宣称已验证就绪。</li>
+<li>仅全部适用项已核验、无阻断且分数≥85时给ready；其余已核验结果为needs_work。普通分级仍使用0–24、25–44、45–64、65–84、85–100五档。</li></ul>
+        <h3 class="subheading">页面类型与证据边界</h3>
+        <ul><li>商品看名称、说明、规格/报价；文档看主题、解释、步骤/代码/参考；工具看用途、带标签输入与操作；首页/服务/关于/联系页看用途、说明及下一步；文章等看解释与内容分节。无固定字数、标题长度或FAQ强制要求。</li>
+<li>GEO-012至016是题文关键词覆盖、首段/关键信息位置、指代及标题跳级、任务结构、重复与空泛表达等结构代理，evidence_type=structural_proxy；不等于语义和事实已核验。</li>
+<li>GEO-018检查被识别的数字/研究/测试主张附近是否有来源链接，不自动确认来源真实性；无此类主张为na。GEO-019按页面类型检查可解析、非未来的日期或适用版本，不能由ETag/Last-Modified推断内容新鲜度。</li>
+<li>GEO-004单次抓取不足以判断持续稳定性，保留unknown；GEO-020缺少已审核跨页事实清单时保留unknown，不用品牌名称一致冒充事实一致。</li>
+<li>GEO-011复用可选Chromium渲染；未启用、失败、截断或未验证抓取权限时为unknown。正文直接从main/article/role=main或body提取，剔除导航、页脚、脚本、隐藏节点，不根据字数猜SSR。</li>
+<li>默认检查Googlebot、bingbot、OAI-SearchBot、PerplexityBot的目标路径规则，训练许可不计分；模拟请求成功不代表真实AI爬虫或指定地区访问成功。</li></ul>
       </section>
-
       <section class="doc-section" id="data-sources" data-doc-section aria-labelledby="data-sources-title">
-        <h2 id="data-sources-title">数据来源与运行机制</h2><p>查阅评分字段、数据来源、快照复用和 AI 增强的具体规则。</p><div class="business-list">
-<details class="reference-details"><summary><span>AI 可见性</span><span class="dimension-weight">25%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.ai_visibility_score</code>，再按 <code>×0.25</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.32 × AI crawler 放行率 + 0.40 × snapshot citability + 0.12 × llms.txt 有效性 + 0.16 × 基础实体存在</code></li><li><strong>数据来源</strong>：抓取 <code>robots.txt</code>、请求 <code>/llms.txt</code>、构建 snapshot 页面画像，并复用 homepage / about / service / article / case_study 的实体信号</li><li><strong>细项规则</strong>：citability 综合 answer-first、信息密度、数据点、分块结构与 FAQ / 作者 / 日期信号，输出 <code>homepage_citability</code>、<code>best_page_citability</code> 和 <code>citation_probability</code></li></ul></div></details>
-<details class="reference-details"><summary><span>品牌权威</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>visibility.brand_authority_score</code>，再按 <code>×0.20</code> 计入综合分</li><li><strong>计算公式</strong>：<code>0.25 × 外链质量 + 0.25 × 品牌提及覆盖 + 0.25 × sameAs / Entity 一致性 + 0.25 × 企业信息完整度</code></li><li><strong>数据来源</strong>：站内品牌信号 + Schema sameAs + sitemap / canonical 一致性 + Semrush Backlinks Overview</li><li><strong>结构预留</strong>：当前仍由 <code>visibility</code> 产出品牌总分，但代码层已预留 <code>BrandAuthorityService</code> 边界，方便后续独立服务化</li></ul></div></details>
-<details class="reference-details"><summary><span>内容与 E-E-A-T</span><span class="dimension-weight">20%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：<code>(content_score + experience + expertise + authoritativeness + trustworthiness) / 5</code> 后，再按 <code>×0.20</code> 计入综合分</li><li><strong>内容总分</strong>：服务页深度、文章页深度、FAQ、作者、日期、量化数据、标题质量、answer-first、信息密度、分块结构、引用来源区、内联引用与链接语义共同构成</li><li><strong>E-E-A-T 细项</strong>：Experience 看案例与量化结果；Expertise 看服务页/文章深度与结构；Authority 看作者、资质、sameAs 与参考来源；Trust 看联系信息、日期、更新记录与证据引用</li><li><strong>数据来源</strong>：优先复用 <code>discovery.page_profiles</code>，不再为了内容审计重复抓取这些关键页面</li></ul></div></details>
-<details class="reference-details"><summary><span>技术基础</span><span class="dimension-weight">15%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>technical.technical_score</code>，再按 <code>×0.15</code> 计入综合分</li><li><strong>计算公式</strong>：<code>HTTPS8 + SSR10 + Meta5 + Canonical5 + lang4 + uniqueH1 4 + Sitemap8 + robots 指令4 + 性能8 + 渲染阻塞8 + 安全头16 + 图片4 + OG5 + Twitter3 + hreflang4 + freshness headers4</code></li><li><strong>数据来源</strong>：最终 URL、首页 HTML、响应头、<code>robots.txt</code>、<code>sitemap.xml</code></li><li><strong>细项说明</strong>：<code>response_time_ms</code> 已纳入正式性能评分；新增检查唯一 H1 与 <code>ETag / Last-Modified</code> 新鲜度信号；图片优化由 lazyload 与显式尺寸比例组成</li></ul></div></details>
-<details class="reference-details"><summary><span>结构化数据</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>schema.structured_data_score</code>，再按 <code>×0.10</code> 计入综合分</li><li><strong>计算公式</strong>：<code>JSON-LD + Organization + WebSite + Service + Article + FAQPage + Product + BreadcrumbList + machine dates + sameAs + @id + visible-content alignment</code></li><li><strong>数据来源</strong>：优先复用 snapshot 中各页面的 <code>json_ld_blocks</code>，统一汇总 <code>@type</code>、<code>sameAs</code>、稳定 <code>@id</code>、机器可读日期以及 Schema 与页面可见内容的一致性</li><li><strong>接入要点</strong>：schema 既参与综合分，也被平台适配模块复用，尤其影响 Google AI Mode、AI Overviews 与 Gemini</li></ul></div></details>
-<details class="reference-details"><summary><span>平台适配</span><span class="dimension-weight">10%</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>汇总取值</strong>：直接取 <code>platform.platform_optimization_score</code>，按平台战略权重汇总后再按 <code>×0.10</code> 计入综合分</li><li><strong>平台权重</strong>：ChatGPT 22%，Google AI Mode 18%，Google AI Overviews 18%，Perplexity 16%，Gemini 13%，Grok 13%</li><li><strong>数据来源</strong>：不额外抓取，直接复用 discovery snapshot、visibility、schema 与 metadata 结果</li><li><strong>输出结果</strong>：分别产出 <code>chatgpt / google_ai_mode / google_ai_overviews / perplexity / gemini / grok</code> 的分数、优化焦点、主缺口与建议</li></ul></div></details>
-<details class="reference-details"><summary><span>发现层与复用机制</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>发现层升级</strong>：当前 discovery 已升级为 <code>snapshot-v3</code>，默认抓取 homepage、about、service、article、case_study；full audit 时继续扩展到更多内部页</li><li><strong>抓取作用域</strong>：按“精确 host + 语言路径前缀”限制范围；例如 <code>www.ecoflow.com/de/</code> 只抓 <code>/de/</code>，不会抓 <code>de.ecoflow.com</code> 或 <code>/fr/</code></li><li><strong>统一画像</strong>：每个页面都输出 title、meta、canonical、lang、headings、word_count、FAQ / 作者 / 日期、引用来源区、TL;DR、链接语义、JSON-LD 摘要、entity signals 等统一 profile</li><li><strong>复用机制</strong>：<code>audit_full</code> 支持直接传入已有 <code>discovery</code>，存在时复用，不再重复执行 discover</li><li><strong>提示机制</strong>：当输入 URL 不是首页或语言首页时，结果中会增加“非首页，数据可能有偏差”的提示，但不会强制改写输入页</li></ul></div></details>
-<details class="reference-details"><summary><span>Observation Layer / 不计分</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>定位</strong>：可选上传 GA4、日志或人工引用观测，用于展示实际观测结果，不属于 6 个计分维度</li><li><strong>默认行为</strong>：大部分用户只输入 <code>url</code> 即可；未上传 observation 时仍可完成完整审计</li><li><strong>展示内容</strong>：可呈现 AI sessions、来源平台拆分、citation observations 与 measurement maturity</li><li><strong>评分规则</strong>：无论是否上传，<code>composite_geo_score</code> 都不会被 observation 改写</li></ul></div></details>
-<details class="reference-details"><summary><span>会员 AI 增强 / 机制说明</span><svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="business-body"><ul><li><strong>单独展示原因</strong>：该部分不属于 6 个汇总维度之一，而是 <code>premium</code> 模式下对规则结果的语义增强与总结补充</li><li><strong>触发条件</strong>：<code>mode=premium</code> + 有效 OpenRouter API Key</li><li><strong>增强范围</strong>：当前覆盖 <code>visibility / content / platform / summary</code> 四个模块；technical 与 schema 仍保持规则制以保证确定性</li><li><strong>回退保障</strong>：LLM 调用失败时自动降级为规则结果，<code>llm_enhanced=false</code>；同域名结果默认缓存 7 天，<code>force_refresh=true</code> 可强制刷新</li></ul></div></details>
-</div>
+        <h2 id="data-sources-title">数据来源与运行机制</h2>
+        <h3 class="subheading">汇总层维度业务落成：三种站点任务独立评分</h3>
+        <ul><li>纯GEO不请求Semrush；组合审计通过一次发现、一次页面证据收集，将同一批HTTP响应与源码分别交给SEO和GEO，不重复抓取同一份审计页面。SEO的域名变体探测及可选浏览器渲染属于独立测量。</li>
+<li>外链质量属于SEO/外部权威支持数据：现有SEO通过品牌权威支持分间接使用外链；OG/Twitter卡片在SEO技术支持分中使用，不是新版GEO一级维度，也不进入GEO总分。安全响应头保留技术检查，实际阻断访问的问题计入GEO可达性。</li>
+<li>llms.txt、Content-Signal、LLM-Policy、训练授权、外链、社交卡片、一般安全头、平台推测分均不进入GEO总分。Schema只检查适用性、有效性及可见内容一致，不累计所有类型。</li>
+<li>实际收录、真实AI引用、品牌提及、流量与转化作为Observation独立展示；不因缺少这些站外观测扣站内GEO分。</li>
+<li>SEO保留seo-audit-v1权重和评分含义；组合任务的GEO与纯GEO复用同一个onsite-geo-v1引擎。不得混用两类分数或与历史geo-audit-v3直接横比。</li>
+<li>结果缓存按任务类型、评分版本、页面数量、语言、审计模式及GEO渲染开关隔离；force_refresh=true绕过结果和站点快照缓存。渲染需ALLOW_PLAYWRIGHT=true及Chromium；启用后会增加浏览器测量耗时。</li>
+<li>premium在SEO/内容审计中沿用AI增强；新版GEO分值始终规则驱动，llm_enhanced=false，不以模型推断填补未知事实。</li>
+<li>历史/audit/full及五模块仍输出geo-audit-v3，兼容旧接入；旧版引用概率与AI认知百分比属于规则推算，不是观测数据，新任务不输出。</li></ul>
       </section>
 
       <div class="docs-next"><div><strong>开始你的第一次调用</strong><p>在交互式文档中验证参数，查看实际响应。</p></div><a class="button button-primary" href="/docs" target="_blank" rel="noreferrer">立即测试 API<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>

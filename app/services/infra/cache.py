@@ -58,10 +58,12 @@ class CacheService:
             if mode == "premium"
             else "none"
         )
-        normalized_pages = max_pages if full_audit else 5
-        # The former GEO-only task now also runs the full SEO diagnosis. Keep its
-        # cache namespace separate so legacy payloads without `seo` are not reused.
-        task_schema_version = "seo-geo-v1" if task_type == "site_geo_audit" else "v1"
+        normalized_pages = max_pages if full_audit else min(max_pages, 8) if task_type != "site_content_audit" else 5
+        # The new score must never reuse legacy six-module GEO payloads.
+        task_schema_version = (
+            f"onsite-geo-v1-render-{int(settings.allow_playwright)}"
+            if task_type in {"site_geo_only_audit", "site_geo_audit"} else "v1"
+        )
         raw_key = (
             f"{task_type}|schema={task_schema_version}|{scope_key}|{mode}|{provider}|{model}"
             f"|full={int(full_audit)}|pages={normalized_pages}|lang={feedback_lang}|target_locale={target_locale or 'auto'}"

@@ -1,4 +1,5 @@
 import { renderContentAuditReport } from './content-report.js';
+import { renderGeoAuditReport } from './geo-report.js?v=20261111-onsite-geo';
 import { withAuditScope, renderSinglePageReport } from './page-audit.js?v=20261110-scope';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
@@ -10,7 +11,7 @@ import {
   getTaskStepOrder,
   getTaskTypeConfig,
   STEP_ICON
-} from './task-config.js?v=20261110-scope';
+} from './task-config.js?v=20261111-onsite-geo';
 import {
   $,
   escapeHtml,
@@ -70,12 +71,8 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
-<<<<<<< HEAD
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v9-echarts-cloud:';
-=======
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v7-scope:';
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v10-onsite-geo:';
 let savedSiteOptions = null;
->>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
 const DEMO_TOKEN_HEADER = 'X-Demo-Token';
@@ -114,8 +111,10 @@ function syncExportButtonState(task = currentTask) {
   const button = $('export-btn');
   if (!button) return;
   const isSeoAudit = task?.task_type === 'site_seo_audit' && task?.audit_scope !== 'page';
-  button.disabled = button.classList.contains('exporting') || !demoTokenVerified || task?.status !== 'completed' || !isSeoAudit;
-  button.title = isSeoAudit ? '导出问题清单和链接清单' : 'Excel 导出仅适用于网站 SEO 审计';
+  const isGeoAudit = ['site_geo_only_audit', 'site_geo_audit'].includes(task?.task_type || $('task-type')?.value) && task?.audit_scope !== 'page';
+  button.disabled = button.classList.contains('exporting') || !demoTokenVerified || task?.status !== 'completed' || !(isSeoAudit || isGeoAudit);
+  button.title = isSeoAudit ? '导出问题清单和链接清单' : isGeoAudit ? '导出 GEO 审计报告与逐页证据' : '网站审计完成后可导出';
+  if (!button.classList.contains('exporting')) button.querySelector('.export-label').textContent = isGeoAudit ? '导出报告' : '导出 Excel';
 }
 
 function readBooleanParam(params, name, fallback = false) {
@@ -125,7 +124,7 @@ function readBooleanParam(params, name, fallback = false) {
 
 function applyAuditUrlState() {
   const params = new URLSearchParams(window.location.search);
-  const taskTypes = new Set(['site_seo_audit', 'site_geo_audit', 'site_content_audit']);
+  const taskTypes = new Set(['site_geo_only_audit', 'site_seo_audit', 'site_geo_audit', 'site_content_audit']);
   const modes = new Set(['standard', 'premium']);
   const languages = new Set(['zh', 'en']);
   const targetLocales = new Set(['', 'en', 'de', 'nl', 'fr', 'zh']);
@@ -457,7 +456,7 @@ function applyAuditScopeUi() {
     $('sample-hint').textContent = '仅抓取当前 URL 的响应 HTML；不跟随跳转、不扩展其他页面。';
   } else {
     const content = getSelectedTaskType() === 'site_content_audit';
-    $('sample-hint').textContent = content ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : getSelectedTaskType() === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认分析首页与 About、服务、文章和案例关键页。';
+    $('sample-hint').textContent = content ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : getSelectedTaskType() === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认按页面类型采样最多 8 个 URL，并保留失败页面与待核验项。';
   }
   $('audit-scope-hint').textContent = single ? '只诊断这一条链接，保留完整路径和查询参数。' : '按站点范围发现并采样页面。';
   const config = getTaskTypeConfig(getSelectedTaskType());
@@ -475,7 +474,7 @@ function applyAuditScopeUi() {
 }
 
 function getSelectedTaskType() {
-  return $('task-type')?.value || 'site_seo_audit';
+  return $('task-type')?.value || 'site_geo_only_audit';
 }
 
 function applyTaskTypeUi(taskType = null) {
@@ -486,7 +485,7 @@ function applyTaskTypeUi(taskType = null) {
   $('page-subtitle').textContent = config.subtitle[lang] || config.subtitle.zh;
   $('url-label').textContent = config.urlLabel[lang] || config.urlLabel.zh;
   $('url').placeholder = config.placeholder;
-  $('sample-hint').textContent = resolvedTaskType === 'site_content_audit' ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : resolvedTaskType === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认分析首页与 About、服务、文章和案例关键页。';
+  $('sample-hint').textContent = resolvedTaskType === 'site_content_audit' ? '对当前输入的文章 URL 进行单页内容审计。' : $('full-audit').checked ? `最多采样 ${$('max-pages').value || 12} 个 URL，实际数量取决于可发现与可抓取页面。` : resolvedTaskType === 'site_seo_audit' ? '默认采样最多 8 个 URL，覆盖站点关键页面。' : '默认按页面类型采样最多 8 个 URL，并保留失败页面与待核验项。';
   $('full-audit-row').style.display = config.fullAuditVisible ? 'grid' : 'none';
   if (!config.fullAuditVisible) {
     $('full-audit').checked = false;
@@ -573,6 +572,10 @@ function renderReport(task) {
   }
   if (task?.audit_scope === 'page' || result.audit_scope === 'page') {
     renderSinglePageReport({ task, host, lang, setCachedReportHtml });
+    return;
+  }
+  if (result.geo) {
+    renderGeoAuditReport({ task, host, lang, setCachedReportHtml });
     return;
   }
   if (task?.task_type === 'site_content_audit') {
@@ -793,7 +796,7 @@ async function loadEntityGraph(task = currentTask) {
 function renderTimeline(steps) {
     const el = $('timeline');
     el.innerHTML = '';
-    const labels = { page: '指定页面诊断', discovery: '发现站点', seo: 'SEO 诊断', summary: '生成报告', visibility: 'AI 可见性', technical: '技术基础', content: '内容质量', schema: '结构化数据', platform: '平台适配', observation: '观测数据' };
+    const labels = { page: '指定页面诊断', discovery: '发现站点', seo: 'SEO 诊断', geo: 'GEO 就绪度诊断', summary: '生成报告', visibility: 'AI 可见性', technical: '技术基础', content: '内容质量', schema: '结构化数据', platform: '平台适配', observation: '观测数据' };
     const statuses = { pending: '待执行', running: '进行中', completed: '已完成', failed: '失败', skipped: '未启用' };
     getTaskStepOrder(currentTask?.task_type || getSelectedTaskType(), currentTask?.audit_scope || getSelectedAuditScope()).forEach((name, i) => {
       const step = steps?.[name] || { status: 'pending' };
@@ -892,7 +895,7 @@ function renderTimeline(steps) {
       ? ['content', 'summary']
       : task.task_type === 'site_seo_audit'
         ? ['seo', 'summary']
-        : ['visibility', 'content', 'platform', 'summary'];
+        : ['geo', 'seo', 'summary'];
     const available = modules.filter(n => result?.[n]);
     const enhanced  = modules.filter(n => result?.[n]?.llm_enhanced);
     const notes = [];
@@ -905,6 +908,12 @@ function renderTimeline(steps) {
     const llmStatus = $('llm-status');
     const notesEl   = $('llm-notes');
 
+    if (task.task_type === 'site_geo_only_audit') {
+      llmStatus.innerHTML = '<span class="badge b-default">GEO 规则评分</span>';
+      notesEl.textContent = 'GEO 六维分保持规则驱动，AI 配置不改变分值；语义类检查标明结构代理与待核验范围。';
+      return;
+    }
+
     if (task.mode !== 'premium') {
       llmStatus.innerHTML = '<span class="badge b-default">普通版无需 LLM</span>';
       notesEl.textContent = '普通版只执行规则审计，不调用 OpenRouter。';
@@ -916,7 +925,7 @@ function renderTimeline(steps) {
         ? '会员版已提交，等待 content / summary 返回增强结果。'
         : task.task_type === 'site_seo_audit'
           ? '会员版已提交，等待 seo / summary 返回增强结果。'
-          : '会员版已提交，等待 visibility / content / platform / summary 返回增强结果。';
+          : '会员版已提交，等待 SEO 增强结果；GEO 保持独立规则评分。';
       return;
     }
     if (enhanced.length > 0) {
@@ -1038,8 +1047,8 @@ function renderTimeline(steps) {
       showToast('任务尚未完成，暂时无法导出 Excel。');
       return;
     }
-    if (currentTask?.task_type !== 'site_seo_audit') {
-      showToast('Excel 导出仅适用于网站 SEO 审计。');
+    if (!['site_seo_audit', 'site_geo_only_audit', 'site_geo_audit'].includes(currentTask?.task_type) || currentTask?.audit_scope === 'page') {
+      showToast('此任务类型暂不支持报告导出。');
       return;
     }
     const button = $('export-btn');
@@ -1048,13 +1057,15 @@ function renderTimeline(steps) {
       button.classList.add('exporting');
       button.disabled = true;
       label.textContent = '生成中…';
-      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${encodeURIComponent(currentTaskId)}/export.xlsx`);
+      const isSeo = currentTask.task_type === 'site_seo_audit';
+      const suffix = isSeo ? 'export.xlsx' : 'report';
+      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${encodeURIComponent(currentTaskId)}/${suffix}`);
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, 'Excel 导出失败'));
       }
       const blob = await response.blob();
-      triggerDownload(blob, getDownloadFilename(response, 'seo-audit.xlsx'));
-      showToast('Excel 已开始下载', 'success');
+      triggerDownload(blob, getDownloadFilename(response, isSeo ? 'seo-audit.xlsx' : 'onsite-geo-report.md'));
+      showToast('审计报告已开始下载', 'success');
     } catch (err) {
       showToast(err?.message || 'Excel 导出失败');
     } finally {

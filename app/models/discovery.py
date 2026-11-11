@@ -100,6 +100,7 @@ class RobotsResult(BaseModel):
     sitemaps: list[str] = Field(default_factory=list)
     user_agents: dict[str, RobotsUserAgentRule] = Field(default_factory=dict)  # 各 AI 爬虫访问状态
     raw_preview: str = ""              # robots.txt 原始内容前 300 字符
+    raw_text: str | None = None        # 完整策略证据；None 表示旧快照未留存，不能用于路径判定
 
 
 class SitemapResult(BaseModel):

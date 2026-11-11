@@ -13,6 +13,7 @@ from app.models.discovery import (
     FetchMetadata,
     HomepageExtract,
     KeyPages,
+    BacklinkOverviewResult,
     PageProfile,
     SiteSignals,
 )
@@ -458,6 +459,7 @@ class DiscoveryService:
         max_pages: int = 12,
         force_refresh: bool = False,
         target_locale: str | None = None,
+        include_backlinks: bool = True,
     ) -> DiscoveryResult:
         """执行完整的站点快照发现流程。"""
         try:
@@ -499,6 +501,8 @@ class DiscoveryService:
                             "target_locale": target_locale,
                         },
                     )
+                    if include_backlinks and not cached_discovery.backlinks.available:
+                        cached_discovery.backlinks = await self.backlink_service.fetch_overview(cached_discovery.domain, client=client)
                     return cached_discovery
 
             scope_root_url = get_scope_root(homepage_response.final_url)
@@ -525,6 +529,8 @@ class DiscoveryService:
                                 "max_pages": max_pages,
                             },
                         )
+                        if include_backlinks and not redirected_cached.backlinks.available:
+                            redirected_cached.backlinks = await self.backlink_service.fetch_overview(redirected_cached.domain, client=client)
                         return redirected_cached
                 if actual_site:
                     cached_snapshots = await self.asset_store.load_snapshot_map(actual_site.site_id)
@@ -539,10 +545,15 @@ class DiscoveryService:
             target_domain = registered_domain(homepage_response.final_url)
             site_root_url = get_site_root(homepage_response.final_url)
             input_is_likely_homepage = is_likely_homepage_url(homepage_response.final_url)
+            async def get_backlinks():
+                if include_backlinks:
+                    return await self.backlink_service.fetch_overview(target_domain, client=client)
+                return BacklinkOverviewResult(error="Not requested for on-site GEO auditing.")
+
             robots_result, llms_result, backlinks_result = await asyncio.gather(
                 inspect_robots(homepage_response.final_url, client=client),
                 inspect_llms(homepage_response.final_url, client=client),
-                self.backlink_service.fetch_overview(target_domain, client=client),
+                get_backlinks(),
             )
             sitemap_result = await inspect_sitemap(
                 homepage_response.final_url,

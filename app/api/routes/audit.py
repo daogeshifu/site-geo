@@ -11,6 +11,7 @@ from app.services.reporting.observation import ObservationService
 from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
 from app.services.audit.seo import SeoAuditService
+from app.services.audit.geo import GeoAuditService
 from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
@@ -29,10 +30,29 @@ content_service = ContentService(shared_discovery_service)
 schema_service = SchemaService(shared_discovery_service)
 platform_service = PlatformService(shared_discovery_service)
 seo_service = SeoAuditService(shared_discovery_service)
+geo_service = GeoAuditService(shared_discovery_service)
 full_audit_service = FullAuditService(shared_discovery_service)
 # Summarizer 不依赖 Discovery，独立实例化
 summarizer_service = SummarizerService()
 observation_service = ObservationService()
+
+
+@router.post("/audit/geo")
+async def audit_geo(request: AuditModuleRequest) -> dict:
+    """站内GEO六维就绪度（onsite-geo-v1），不含SEO、外链或平台推测分。
+
+    discovery 可复用；返回逐页证据、阻断、待核验项、覆盖率和暂定分区间。
+    /audit/full 及旧模块端点继续提供历史评分，不能与此版本直接比较。
+    """
+    discovery = request.discovery or await shared_discovery_service.discover(
+        request.url, full_audit=request.full_audit, max_pages=request.max_pages,
+        target_locale=request.target_locale, include_backlinks=False,
+    )
+    result = await geo_service.audit(
+        request.url, discovery, max_pages=request.max_pages if request.full_audit else min(request.max_pages, 8),
+        feedback_lang=request.feedback_lang, mode=request.mode,
+    )
+    return success_response(result.model_dump(mode="json"))
 
 
 @router.post("/audit/visibility")

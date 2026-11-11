@@ -3,15 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>网站 SEO+GEO 审计 · GEO Audit</title>
+  <title>网站 GEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
-<<<<<<< HEAD
   <link rel="stylesheet" href="/static/css/workspace.css?v=20260930-echarts-cloud" />
-=======
-  <link rel="stylesheet" href="/static/css/workspace.css?v=20260916-fixed-model" />
   <link rel="stylesheet" href="/static/css/single-page.css?v=20261110-scope" />
->>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
+  <link rel="stylesheet" href="/static/css/geo-report.css?v=20261111-onsite-geo" />
 </head>
 <body>
 
@@ -30,8 +27,8 @@
 <div class="wrap">
   <section class="page-title audit-hero">
     <div class="audit-eyebrow"><span></span> SEARCH INTELLIGENCE / WORKSPACE</div>
-    <h1 id="page-heading">网站 SEO 审计</h1>
-    <p id="page-subtitle">洞察站点搜索表现，让每一次优化都有据可循。</p>
+    <h1 id="page-heading">网站 GEO 审计</h1>
+    <p id="page-subtitle">检查站内 GEO 就绪度，定位关键阻断与页面优化机会。</p>
     <div class="audit-feature-row" aria-label="审计能力">
       <span><b>01</b> 站点快照</span>
       <i></i>
@@ -89,7 +86,8 @@
             <div class="field">
               <label>任务类型</label>
               <select id="task-type">
-                <option value="site_seo_audit" selected>网站 SEO 审计</option>
+                <option value="site_geo_only_audit" selected>网站 GEO 审计</option>
+                <option value="site_seo_audit">网站 SEO 审计</option>
                 <option value="site_geo_audit">网站 SEO+GEO 审计</option>
                 <option value="site_content_audit">网站内容审计</option>
               </select>
@@ -349,12 +347,8 @@
   <button class="toast-close" id="toast-close">✕</button>
 </div>
 
-<<<<<<< HEAD
 <script src="/static/js/vendor/echarts-5.6.0.min.js"></script>
 <script src="/static/js/vendor/echarts-wordcloud-2.1.0.min.js"></script>
-<script type="module" src="/static/js/demo/index.js?v=20260930-echarts-cloud"></script>
-=======
-<script type="module" src="/static/js/demo/index.js?v=20261110-scope-merge"></script>
->>>>>>> 57053fcfdf31ff0a7d7850f153860a0fee1de79d
+<script type="module" src="/static/js/demo/index.js?v=20261111-onsite-geo"></script>
 </body>
 </html>

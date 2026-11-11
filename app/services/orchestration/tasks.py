@@ -19,6 +19,8 @@ from app.services.audit.page_diagnostics import PageDiagnosticsService
 from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
 from app.services.audit.seo import SeoAuditService
+from app.services.audit.geo import GeoAuditService
+from app.services.infra.audit_evidence import collect_page_evidence
 from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
@@ -39,7 +41,8 @@ class TaskService:
     """
 
     # 任务步骤的执行顺序
-    SITE_GEO_STEP_ORDER = ["discovery", "seo", "visibility", "technical", "content", "schema", "platform", "observation", "summary"]
+    SITE_GEO_STEP_ORDER = ["discovery", "seo", "geo", "observation", "summary"]
+    SITE_GEO_ONLY_STEP_ORDER = ["discovery", "geo", "observation", "summary"]
     SITE_CONTENT_STEP_ORDER = ["discovery", "content", "summary"]
     SITE_SEO_STEP_ORDER = ["discovery", "seo", "summary"]
 
@@ -58,12 +61,15 @@ class TaskService:
         self.observation_service = ObservationService()
         self.page_content_audit_service = PageContentAuditService(self.discovery_service)
         self.seo_audit_service = SeoAuditService(self.discovery_service)
+        self.geo_audit_service = GeoAuditService(self.discovery_service)
         self.page_diagnostics_service = PageDiagnosticsService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
         self._lock = asyncio.Lock()             # 保护 tasks dict 的并发访问
 
     def _step_order_for(self, task_type: str) -> list[str]:
+        if task_type == "site_geo_only_audit":
+            return list(self.SITE_GEO_ONLY_STEP_ORDER)
         if task_type == "site_content_audit":
             return list(self.SITE_CONTENT_STEP_ORDER)
         if task_type == "site_seo_audit":
@@ -635,126 +641,53 @@ class TaskService:
         asyncio.create_task(self._run_entity_graph_job(task, discovery))
 
     async def _run_site_geo_task(self, task: AuditTask) -> dict:
+        """Pure GEO and SEO+GEO share evidence, never each other's scores."""
+        combined = task.task_type == "site_geo_audit"
+        limit = task.max_pages if task.full_audit else min(task.max_pages, 8)
         await self._update_step(task, "discovery", "running")
         discovery = await self.discovery_service.discover(
-            task.url,
-            full_audit=task.full_audit,
-            max_pages=task.max_pages,
-            force_refresh=task.force_refresh,
-            target_locale=task.target_locale,
+            task.url, full_audit=task.full_audit, max_pages=task.max_pages,
+            force_refresh=task.force_refresh, target_locale=task.target_locale,
+            include_backlinks=combined,
         )
-        discovery_payload = discovery.model_dump()
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
+        discovery_payload = discovery.model_dump(mode="json")
         await self._update_step(task, "discovery", "completed", discovery_payload)
-        if self.asset_store.available and task.audit_scope != "page":
-            try:
-                await self.asset_store.save_task(task)
-            except Exception:
-                pass
         self._schedule_graph_jobs(task, discovery)
-
-        module_coroutines = {
-            "seo": self.seo_audit_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                feedback_lang=task.feedback_lang,
-                target_locale=task.target_locale,
-                max_pages=task.max_pages if task.full_audit else min(task.max_pages, 8),
-            ),
-            "visibility": self.visibility_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                feedback_lang=task.feedback_lang,
-                target_locale=task.target_locale,
-            ),
-            "technical": self.technical_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                target_locale=task.target_locale,
-            ),
-            "content": self.content_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                feedback_lang=task.feedback_lang,
-                target_locale=task.target_locale,
-            ),
-            "schema": self.schema_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                target_locale=task.target_locale,
-            ),
-            "platform": self.platform_service.audit(
-                task.url,
-                discovery,
-                mode=task.mode,
-                llm_config=task.llm,
-                feedback_lang=task.feedback_lang,
-                target_locale=task.target_locale,
-            ),
-        }
-
-        async def run_named(step_name: str, coroutine):
-            result = await coroutine
-            return step_name, result
-
-        futures = []
-        for step_name, coroutine in module_coroutines.items():
-            await self._update_step(task, step_name, "running")
-            futures.append(asyncio.create_task(run_named(step_name, coroutine)))
-
-        module_results = {}
-        for future in asyncio.as_completed(futures):
-            step_name, result = await future
-            module_results[step_name] = result
-            await self._update_step(task, step_name, "completed", result.model_dump())
-
+        evidence = await collect_page_evidence(discovery, limit)
+        await self._update_step(task, "geo", "running")
+        seo = None
+        if combined:
+            await self._update_step(task, "seo", "running")
+            geo, seo = await asyncio.gather(
+                self.geo_audit_service.audit(task.url, discovery, max_pages=limit,
+                    feedback_lang=task.feedback_lang, mode=task.mode, page_evidence=evidence),
+                self.seo_audit_service.audit(task.url, discovery, max_pages=limit,
+                    feedback_lang=task.feedback_lang, mode=task.mode, llm_config=task.llm,
+                    target_locale=task.target_locale, page_evidence=evidence),
+            )
+            await self._update_step(task, "seo", "completed", seo.model_dump(mode="json"))
+        else:
+            geo = await self.geo_audit_service.audit(task.url, discovery, max_pages=limit,
+                feedback_lang=task.feedback_lang, mode=task.mode, page_evidence=evidence)
+        await self._update_step(task, "geo", "completed", geo.model_dump(mode="json"))
         await self._update_step(task, "observation", "running")
-        observation_result = self.observation_service.build(task.observation)
-        observation_payload = observation_result.model_dump()
-        await self._update_step(task, "observation", "completed", observation_payload)
-
+        observation = self.observation_service.build(task.observation).model_dump(mode="json")
+        await self._update_step(task, "observation", "completed", observation)
         await self._update_step(task, "summary", "running")
-        summary = await self.summarizer_service.summarize(
-            url=task.url,
-            discovery=discovery,
-            visibility=module_results["visibility"],
-            technical=module_results["technical"],
-            content=module_results["content"],
-            schema=module_results["schema"],
-            platform=module_results["platform"],
-            observation=observation_result,
-            mode=task.mode,
-            llm_config=task.llm,
-            feedback_lang=task.feedback_lang,
-        )
-        summary_payload = summary.model_dump()
-        await self._update_step(task, "summary", "completed", summary_payload)
-        page_diagnostics = self.page_diagnostics_service.build(discovery, max_pages=task.max_pages) if task.full_audit else []
-
-        return {
-            "url": task.url,
-            "discovery": discovery_payload,
-            "seo": module_results["seo"].model_dump(),
-            "visibility": module_results["visibility"].model_dump(),
-            "technical": module_results["technical"].model_dump(),
-            "content": module_results["content"].model_dump(),
-            "schema": module_results["schema"].model_dump(),
-            "platform": module_results["platform"].model_dump(),
-            "page_diagnostics": [item.model_dump() for item in page_diagnostics],
-            "observation": observation_payload,
-            "summary": summary_payload,
+        summary = self.geo_audit_service.summarize(geo, seo=seo, feedback_lang=task.feedback_lang)
+        await self._update_step(task, "summary", "completed", summary)
+        payload = {
+            "url": task.url, "discovery": discovery_payload,
+            "geo": geo.model_dump(mode="json"), "summary": summary,
+            "page_diagnostics": [page.model_dump(mode="json") for page in geo.pages],
+            "observation": observation,
         }
+        if seo is not None:
+            payload["seo"] = seo.model_dump(mode="json")
+            payload["seo_summary"] = self.seo_audit_service.summarize(seo, feedback_lang=task.feedback_lang).model_dump(mode="json")
+        return payload
 
     async def _run_site_content_task(self, task: AuditTask) -> dict:
         await self._update_step(task, "discovery", "running")

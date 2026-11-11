@@ -29,7 +29,7 @@ from app.services.audit.scoring import ScoringService
 from app.services.audit.technical import TechnicalService
 from app.services.audit.visibility import VisibilityService
 from app.utils.fetcher import fetch_url
-from app.services.infra.page_sources import capture_page_metadata
+from app.services.infra.audit_evidence import PageEvidence, collect_page_evidence
 from app.utils.html_parser import parse_html
 from app.utils.url_utils import normalize_url
 
@@ -138,62 +138,33 @@ class SeoAuditService(AuditBaseService):
                 count += 1
         return count
 
-    async def _fetch_sample_pages(self, discovery, *, max_pages: int) -> list[SeoSamplePageResult]:
-        sampled = self._sample_urls(discovery, max_pages)
-        if not sampled:
-            return []
+    def _sample_from_evidence(self, item: PageEvidence, discovery) -> SeoSamplePageResult:
+        parsed = parse_html(item.final_url, item.html or "", scope_url=discovery.scope_root_url)
+        soup = BeautifulSoup(item.html or "", "lxml")
+        images = parsed["images"]
+        count = len(images)
+        meta_robots = self._extract_meta_robots(soup)
+        metadata = item.metadata()
+        # Keep transport failures visible in SEO's existing HTTP error check.
+        metadata["status_code"] = item.status_code if item.status_code is not None else 599
+        return SeoSamplePageResult(
+            url=item.url, final_url=item.final_url, page_type=item.page_type, **metadata,
+            redirected=normalize_url(item.final_url) != normalize_url(item.url),
+            title=parsed["title"], title_length=len(parsed["title"] or ""),
+            meta_description=parsed["meta_description"], meta_description_length=len(parsed["meta_description"] or ""),
+            canonical=parsed["canonical"], lang=parsed["lang"], viewport_present=bool(parsed["viewport"]),
+            h1_count=sum(h["level"] == "h1" for h in parsed["headings"]),
+            word_count=parsed["word_count"], html_length=parsed["html_length"], image_count=count,
+            alt_coverage_ratio=sum(bool((i.get("alt") or "").strip()) for i in images) / count if count else 1,
+            lazyload_ratio=sum((i.get("loading") or "").lower() == "lazy" for i in images) / count if count else 1,
+            noindex_detected="noindex" in (meta_robots + " " + item.response_headers.get("x-robots-tag", "")).lower(),
+            nofollow_internal_links=self._nofollow_internal_links(soup, item.final_url),
+            open_graph_present=bool(parsed["open_graph"]), twitter_card_present=bool(parsed["twitter_cards"]),
+        )
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.request_timeout_seconds),
-            follow_redirects=True,
-            headers={"User-Agent": settings.default_user_agent},
-        ) as client:
-            async def worker(page_type: str, url: str) -> SeoSamplePageResult | None:
-                try:
-                    response = await fetch_url(url, client=client)
-                except Exception:
-                    return None
-                parsed = parse_html(response.final_url, response.text, scope_url=discovery.scope_root_url)
-                soup = BeautifulSoup(response.text or "", "lxml")
-                meta_robots = self._extract_meta_robots(soup)
-                noindex_detected = "noindex" in meta_robots or "noindex" in (
-                    response.headers.get("x-robots-tag", "").lower()
-                )
-                images = parsed["images"]
-                image_count = len(images)
-                alt_count = sum(1 for image in images if (image.get("alt") or "").strip())
-                lazy_count = sum(1 for image in images if (image.get("loading") or "").lower() == "lazy")
-                h1_count = sum(1 for heading in parsed["headings"] if heading["level"] == "h1")
-                return SeoSamplePageResult(
-                    url=url,
-                    page_type=page_type,
-                    **(await capture_page_metadata(response)),
-                    final_url=response.final_url,
-                    redirected=normalize_url(response.final_url) != normalize_url(url),
-                    title=parsed["title"],
-                    title_length=len(parsed["title"] or ""),
-                    meta_description=parsed["meta_description"],
-                    meta_description_length=len(parsed["meta_description"] or ""),
-                    canonical=parsed["canonical"],
-                    lang=parsed["lang"],
-                    viewport_present=bool(parsed["viewport"]),
-                    h1_count=h1_count,
-                    word_count=parsed["word_count"],
-                    html_length=parsed["html_length"],
-                    image_count=image_count,
-                    alt_coverage_ratio=round((alt_count / image_count), 2) if image_count else 1.0,
-                    lazyload_ratio=round((lazy_count / image_count), 2) if image_count else 1.0,
-                    noindex_detected=noindex_detected,
-                    nofollow_internal_links=self._nofollow_internal_links(soup, response.final_url),
-                    open_graph_present=bool(parsed["open_graph"]),
-                    twitter_card_present=bool(parsed["twitter_cards"]),
-                )
-
-            results = await asyncio.gather(
-                *(worker(page_type, url) for page_type, url in sampled),
-                return_exceptions=True,
-            )
-        return [item for item in results if isinstance(item, SeoSamplePageResult)]
+    async def _fetch_sample_pages(self, discovery, *, max_pages: int, page_evidence=None) -> list[SeoSamplePageResult]:
+        evidence = page_evidence if page_evidence is not None else await collect_page_evidence(discovery, max_pages)
+        return [self._sample_from_evidence(item, discovery) for item in evidence[:max_pages]]
 
     async def _probe_variants(self, final_url: str) -> dict[str, bool]:
         parsed = urlparse(final_url)
@@ -879,6 +850,7 @@ class SeoAuditService(AuditBaseService):
         feedback_lang: str = "en",
         target_locale: str | None = None,
         max_pages: int = 12,
+        page_evidence: list[PageEvidence] | None = None,
     ) -> SeoAuditResult:
         started_at = time.perf_counter()
         resolved = await self.ensure_discovery(
@@ -896,14 +868,16 @@ class SeoAuditService(AuditBaseService):
             self.visibility_service.audit(url, resolved, mode=mode, llm_config=llm_config, feedback_lang=feedback_lang, target_locale=target_locale),
         )
 
+        if page_evidence is None:
+            page_evidence = await collect_page_evidence(resolved, max_pages)
         samples, variant_results = await asyncio.gather(
-            self._fetch_sample_pages(resolved, max_pages=max_pages),
+            self._fetch_sample_pages(resolved, max_pages=max_pages, page_evidence=page_evidence),
             self._probe_variants(resolved.final_url),
         )
 
-        homepage_response = await fetch_url(resolved.final_url)
-        homepage_soup = BeautifulSoup(homepage_response.text or "", "lxml")
-        homepage_analytics = self._detect_analytics(homepage_soup, homepage_response.text)
+        homepage_html = next((item.html for item in page_evidence if normalize_url(item.final_url) == normalize_url(resolved.final_url)), None) or ""
+        homepage_soup = BeautifulSoup(homepage_html, "lxml")
+        homepage_analytics = self._detect_analytics(homepage_soup, homepage_html)
 
         on_page_score = self.scoring.clamp_score(
             (

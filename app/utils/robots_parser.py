@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from urllib.parse import urlparse
+import re
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -19,6 +20,16 @@ AI_CRAWLERS = [
     "Google-Extended", # Google Gemini/AI Overviews 爬虫
 ]
 
+# Search/retrieval policies are evaluated separately from training permission.
+SEARCH_CRAWLERS = ["Googlebot", "bingbot", "OAI-SearchBot", "PerplexityBot"]
+
+
+def _normalize_robot_path(value: str) -> str:
+    unreserved = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
+    value = re.sub(r"%([0-9a-fA-F]{2})", lambda match: chr(int(match[1], 16))
+                   if chr(int(match[1], 16)) in unreserved else match[0].upper(), value)
+    return quote(value, safe="/%*$?=&;:+,@!()-._~")
+
 
 def _match_rule(target_path: str, rules: dict[str, list[str]]) -> bool:
     """判断 target_path 是否被允许访问
@@ -28,14 +39,29 @@ def _match_rule(target_path: str, rules: dict[str, list[str]]) -> bool:
     - Allow 胜出时返回 True，Disallow 胜出时返回 False
     - 无匹配规则时返回 True（默认允许）
     """
-    allow_matches = [path for path in rules.get("allow", []) if target_path.startswith(path or "/")]
-    disallow_matches = [path for path in rules.get("disallow", []) if target_path.startswith(path or "/")]
+    target_path = _normalize_robot_path(target_path)
+
+    def matches(paths):
+        found = []
+        for raw in paths:
+            if not raw:
+                continue  # Empty Disallow means no restriction.
+            path = _normalize_robot_path(raw)
+            anchored = path.endswith("$")
+            body = path[:-1] if anchored else path
+            pattern = "^" + re.escape(body).replace(r"\*", ".*") + ("$" if anchored else "")
+            if re.search(pattern, target_path):
+                found.append(len(body.replace("*", "").encode("utf-8")))
+        return found
+
+    allow_matches = matches(rules.get("allow", []))
+    disallow_matches = matches(rules.get("disallow", []))
 
     if not allow_matches and not disallow_matches:
         return True  # 无规则，默认允许
 
-    longest_allow = max((len(path) for path in allow_matches), default=-1)
-    longest_disallow = max((len(path) for path in disallow_matches), default=-1)
+    longest_allow = max(allow_matches, default=-1)
+    longest_disallow = max(disallow_matches, default=-1)
     return longest_allow >= longest_disallow
 
 
@@ -67,6 +93,7 @@ def _parse_robots_text(text: str) -> tuple[dict[str, dict[str, list[str]]], list
                 current_agents = []
                 seen_directive = False
             current_agents.append(content.lower() or "*")
+            rules[content.lower() or "*"]  # Preserve explicitly empty groups.
             continue
 
         if directive == "sitemap":
@@ -83,15 +110,28 @@ def _parse_robots_text(text: str) -> tuple[dict[str, dict[str, list[str]]], list
     return dict(rules), sitemaps
 
 
-def _resolve_agent_rule(agent_name: str, parsed_rules: dict[str, dict[str, list[str]]]) -> RobotsUserAgentRule:
+def _resolve_agent_rule(agent_name: str, parsed_rules: dict[str, dict[str, list[str]]], target_path: str = "/") -> RobotsUserAgentRule:
     """解析特定爬虫的访问规则
 
     优先使用精确匹配的规则，无匹配时回退到 * 通配符规则
     """
     lowered = agent_name.lower()
-    matched_agent = lowered if lowered in parsed_rules else "*"
+    candidates = [name for name in parsed_rules if name != "*" and name in lowered]
+    matched_agent = max(candidates, key=len) if candidates else "*"
     rules = parsed_rules.get(matched_agent, {"allow": [], "disallow": []})
-    return RobotsUserAgentRule(allowed=_match_rule("/", rules), matched_user_agent=matched_agent)
+    return RobotsUserAgentRule(allowed=_match_rule(target_path, rules), matched_user_agent=matched_agent)
+
+
+def inspect_robot_path(robots: RobotsResult, url: str) -> dict[str, bool | None]:
+    """Return unknown for incomplete evidence; never infer deep paths from '/'."""
+    if robots.status_code is not None and 400 <= robots.status_code < 500 and robots.status_code != 429:
+        return {agent: True for agent in SEARCH_CRAWLERS}
+    if robots.raw_text is None or (robots.status_code is not None and robots.status_code >= 400):
+        return {agent: None for agent in SEARCH_CRAWLERS}
+    parsed, _ = _parse_robots_text(robots.raw_text)
+    parts = urlparse(url)
+    path = (parts.path or "/") + ("?" + parts.query if parts.query else "")
+    return {agent: _resolve_agent_rule(agent, parsed, path).allowed for agent in SEARCH_CRAWLERS}
 
 
 async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None) -> RobotsResult:
@@ -127,4 +167,5 @@ async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None)
         sitemaps=sitemaps,
         user_agents=agents,
         raw_preview=response.text[:300],  # 前 300 字符用于调试
+        raw_text=response.text if len(response.text.encode("utf-8")) <= 512_000 else None,
     )

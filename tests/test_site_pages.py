@@ -137,7 +137,7 @@ def test_demo_defaults_and_explanations_live_in_docs():
     html = client.get("/").text
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
-    assert soup.select_one('#task-type option[selected]')["value"] == "site_seo_audit"
+    assert soup.select_one('#task-type option[selected]')["value"] == "site_geo_only_audit"
     assert "checked" not in soup.select_one('#build-knowledge-graph').attrs
     assert "disabled" in soup.select_one('#build-knowledge-graph').attrs
     assert soup.select_one('#model') is None
