@@ -47,7 +47,8 @@ export function createSiteLinksExplorer({ host, fetchApi }) {
     loading = true;
     list.setAttribute('aria-busy', 'true');
     try {
-      const response = await fetchApi(`/api/v1/demo/tasks/${encodeURIComponent(task.task_id)}/pages`);
+      const prefix = task.public_report ? '/api/v1/public/reports' : '/api/v1/demo/tasks';
+      const response = await fetchApi(`${prefix}/${encodeURIComponent(task.task_id)}/pages`);
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.message || '链接加载失败');
       if (generation !== requestGeneration) return;
@@ -76,7 +77,8 @@ export function createSiteLinksExplorer({ host, fetchApi }) {
     if (!page.source_available) { content.innerHTML = '<p class="source-notice">本次记录未保存 HTML 源代码。新审计会保存采样页面源码；历史缓存可通过强制刷新重新抓取。</p>'; return; }
     const currentId = task.task_id;
     try {
-      const response = await fetchApi(`/api/v1/demo/tasks/${encodeURIComponent(currentId)}/pages/${page.id}/source`);
+      const prefix = task.public_report ? '/api/v1/public/reports' : '/api/v1/demo/tasks';
+      const response = await fetchApi(`${prefix}/${encodeURIComponent(currentId)}/pages/${page.id}/source`);
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.message || '源码加载失败');
       if (button.getAttribute('aria-selected') !== 'true' || task?.task_id !== currentId) return;

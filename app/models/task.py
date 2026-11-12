@@ -49,7 +49,7 @@ class GraphJobStatus(BaseModel):
 
 
 class AuditTask(BaseModel):
-    """异步审计任务的完整状态模型，存储于内存中"""
+    """异步审计任务状态；完成后持久保存，可通过原任务链接恢复。"""
 
     task_id: str           # UUID 任务标识符
     url: str               # 原始输入 URL

@@ -9,6 +9,7 @@ from app.core.exceptions import AppError
 from app.models.discovery import DiscoveryResult
 from app.models.task import AuditTask, GraphJobStatus, TaskAuditRequest, TaskStep
 from app.services.infra.cache import CacheService
+from app.services.infra.task_reports import TaskReportStore
 from app.services.infra.site_graph import SiteEntityGraphService, SiteKnowledgeGraphService
 from app.services.audit.content import ContentService
 from app.services.discovery.discovery import DiscoveryService
@@ -34,7 +35,7 @@ class TaskService:
     """异步审计任务管理服务
 
     职责：
-    - 创建并追踪审计任务（内存存储，重启后丢失）
+    - 创建并追踪审计任务，持久保存已完成报告，支持重启后按链接恢复
     - 检查并返回缓存结果（支持 force_refresh 跳过）
     - 后台异步执行 7 步审计流程（discovery + 5模块 + summary）
     - 更新任务进度和步骤状态
@@ -49,6 +50,7 @@ class TaskService:
 
     def __init__(self) -> None:
         self.cache_service = CacheService()
+        self.report_store = TaskReportStore()
         self.discovery_service = DiscoveryService()
         self.asset_store = self.discovery_service.asset_store
         self.site_graph_service = SiteKnowledgeGraphService()
@@ -193,6 +195,7 @@ class TaskService:
                 task.site_asset_summary = discovery_payload["asset_summary"]
                 task.storage_backend = discovery_payload["asset_summary"].get("backend", task.storage_backend)
             self.tasks[task_id] = task
+            await asyncio.to_thread(self.report_store.save, task)
             if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)
@@ -215,13 +218,29 @@ class TaskService:
         return task
 
     async def get_task(self, task_id: str) -> AuditTask | None:
-        """按 task_id 查询任务状态（线程安全）"""
+        """Read active tasks or restore a completed report after a restart."""
         async with self._lock:
             task = self.tasks.get(task_id)
-            if task and task.task_type == "site_geo_audit" and task.result and task.result.get("geo") and task.result.get("seo") and not task.result.get("sgeo"):
-                payload = self.sgeo_audit_service.upgrade_legacy_payload(task.result, feedback_lang=task.feedback_lang)
-                return task.model_copy(update={"result": payload})
-            return task
+        if task is None:
+            task = await asyncio.to_thread(self.report_store.get, task_id)
+            if task is None and self.asset_store.available:
+                task = await self.asset_store.load_task(task_id)
+                if task is not None:
+                    order = ["page", "summary"] if task.audit_scope == "page" else self._step_order_for(task.task_type)
+                    task.step_order = order
+                    task.steps = self._new_steps(order)
+                    for name, step in task.steps.items():
+                        step.status = "completed"
+                        step.data = task.result.get(name)
+                        step.completed_at = task.completed_at
+                    await asyncio.to_thread(self.report_store.save, task)
+            if task is not None:
+                async with self._lock:
+                    task = self.tasks.setdefault(task_id, task)
+        if task and task.task_type == "site_geo_audit" and task.result and task.result.get("geo") and task.result.get("seo") and not task.result.get("sgeo"):
+            payload = self.sgeo_audit_service.upgrade_legacy_payload(task.result, feedback_lang=task.feedback_lang)
+            return task.model_copy(update={"result": payload})
+        return task
 
     async def _update_step(
         self,
@@ -286,6 +305,8 @@ class TaskService:
                 await self.asset_store.save_task(task)
             except Exception:
                 pass
+        if persist and task.status == "completed":
+            await asyncio.to_thread(self.report_store.save, task)
 
     async def _run_task(self, task_id: str) -> None:
         """后台任务执行协程：按任务类型执行不同的审计流程。"""
@@ -338,6 +359,7 @@ class TaskService:
             task.progress_percent = 100
             task.completed_at = self._utcnow()
             task.updated_at = task.completed_at
+            await asyncio.to_thread(self.report_store.save, task)
             if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)

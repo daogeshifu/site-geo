@@ -622,6 +622,38 @@ class SiteAssetStore:
         )
         return summary
 
+    async def load_task(self, task_id: str) -> AuditTask | None:
+        """Recover completed reports written before file snapshots were added."""
+        if not self.available:
+            return None
+        try:
+            row = await self.client.fetchone(
+                """
+                SELECT task_id, domain, task_type, mode, status, cache_key, url,
+                       normalized_url, feedback_lang, force_refresh, cached,
+                       full_audit, requested_max_pages, result_json,
+                       created_at, updated_at, completed_at
+                FROM geo_audit_tasks
+                WHERE task_id=%s AND status='completed'
+                """, (task_id,),
+            )
+            if row is None:
+                return None
+            result = _json_loads(row.get("result_json"), None)
+            if not isinstance(result, dict):
+                return None
+            task = AuditTask.model_validate({
+                **row, "result": result, "max_pages": row.get("requested_max_pages", 12),
+                "audit_scope": result.get("audit_scope", "site"),
+                "progress_percent": 100, "current_step": "completed", "storage_backend": "mysql",
+                "site_asset_summary": (result.get("discovery") or {}).get("asset_summary"),
+            })
+            self._recover_if_needed()
+            return task
+        except Exception as exc:
+            self._mark_degraded(exc, "load_task")
+            return None
+
     async def save_task(self, task: AuditTask) -> None:
         if not self.enabled:
             return

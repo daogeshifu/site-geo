@@ -63,6 +63,7 @@ class Settings:
     # 审计结果缓存配置
     cache_ttl_days: int = _get_int("CACHE_TTL_DAYS", 7)
     cache_dir: str = os.getenv("CACHE_DIR", ".cache/audits")
+    task_report_dir: str = os.getenv("TASK_REPORT_DIR", ".data/reports")
     demo_access_token: str = os.getenv("DEMO_ACCESS_TOKEN", "").strip()
     demo_token_db_path: str = os.getenv("DEMO_TOKEN_DB_PATH", ".data/demo_tokens.sqlite3")
     token_admin_key: str = os.getenv("TOKEN_ADMIN_KEY", "").strip()

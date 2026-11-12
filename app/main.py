@@ -22,6 +22,7 @@ from app.api.routes.discovery import router as discovery_router
 from app.api.routes.health import router as health_router
 from app.api.routes.google_crawler import router as google_crawler_router
 from app.api.routes.report import router as report_router
+from app.api.routes.public_reports import router as public_report_router
 from app.api.routes.tasks import router as task_router
 from app.api.routes.token_admin import router as token_admin_router
 from app.api.token_audit import ApiTokenAuditMiddleware
@@ -60,7 +61,7 @@ def custom_openapi() -> dict:
             continue
         for operation in operations.values():
             if isinstance(operation, dict):
-                operation["security"] = [{"ApiToken": []}]
+                operation["security"] = [] if path.startswith("/api/v1/public/reports/") else [{"ApiToken": []}]
     app.openapi_schema = schema
     return schema
 
@@ -69,6 +70,16 @@ app.openapi = custom_openapi
 
 WEB_STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 app.mount("/static", StaticFiles(directory=str(WEB_STATIC_DIR)), name="static")
+
+
+@app.middleware("http")
+async def revalidate_report_assets(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/js/demo/"):
+        # Report schemas change independently of the audit evidence. Revalidate
+        # browser modules so an older renderer cannot turn absent fields into 0.
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.exception_handler(AppError)
@@ -99,6 +110,7 @@ app.include_router(discovery_router)   # 站点快照
 app.include_router(audit_router)       # 各审计模块
 app.include_router(task_router)        # 异步任务管理
 app.include_router(report_router)      # 报告导出
+app.include_router(public_report_router)  # 已完成报告的只读分享
 app.include_router(token_admin_router)
 
 if __name__ == "__main__":

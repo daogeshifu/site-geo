@@ -1,4 +1,5 @@
 import { PLATFORM_LABELS } from './task-config.js';
+import { renderDiagnosticReport } from './diagnostic-report.js?v=20261112-report-links';
 import {
   escapeHtml,
   formatBool,
@@ -509,6 +510,9 @@ function platformMark(key) {
 }
 
 export function renderSiteAuditReport({ task, host, lang, setCachedReportHtml }) {
+  if (task?.result?.sgeo || task?.result?.geo) {
+    return renderDiagnosticReport({ task, host, lang, setCachedReportHtml });
+  }
   const result = task?.result || {};
   const summary = result.summary || {};
   const discovery = result.discovery || {};

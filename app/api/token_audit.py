@@ -26,6 +26,14 @@ _PUBLIC_API_PATHS = {
 _ROUTE_AUTH_PATHS = {
     "/api/v1/demo/verify-token",
 }
+_PUBLIC_REPORT_PATH = re.compile(
+    r"^/api/v1/public/reports/[A-Za-z0-9_-]{8,128}"
+    r"(?:/pages(?:/[A-Za-z0-9_-]+/source)?|/report)?$"
+)
+
+
+def is_public_report_request(method: str, path: str) -> bool:
+    return method in {"GET", "HEAD"} and bool(_PUBLIC_REPORT_PATH.fullmatch(path))
 
 
 def _request_id(request: Request) -> str:
@@ -64,7 +72,7 @@ def should_audit_token_request(path: str) -> bool:
 class ApiTokenAuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
-        if not should_audit_token_request(path):
+        if is_public_report_request(request.method, path) or not should_audit_token_request(path):
             return await call_next(request)
 
         started = time.perf_counter()
