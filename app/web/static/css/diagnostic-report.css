@@ -53,6 +53,10 @@
 .dr-nav a:first-child { color: #126d78; font-weight: 650; }
 .dr-blockers { background: #fff1ee; border: 1px solid #efc8bf; border-left: 3px solid #c95b45; border-radius: 7px; padding: 15px 19px; color: #8a3d31; }
 .dr-blockers ul { margin: 6px 0 0; padding-left: 20px; font-size: 12px; }
+.dr-blockers > p { margin: 6px 0 10px; font-size: 12px; }
+.dr-blockers li { margin-top: 9px; overflow-wrap: anywhere; }
+.dr-blockers li > span { font-weight: 600; }
+.dr-blockers small { display: block; margin-top: 3px; color: #925b50; font-size: 11px; }
 .diagnostic-report .report-section { background: #fff; border: 1px solid var(--dr-line); border-radius: 9px; box-shadow: none; margin: 0; min-width: 0; overflow: hidden; }
 .dr-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 19px 21px; border-bottom: 1px solid #e8eef2; background: #fff; }
 .dr-section-head h3 { display: flex; align-items: center; gap: 9px; color: #294752; font-size: 15px; font-weight: 650; }

@@ -15,6 +15,30 @@ function page(url, check) {
 }
 const check = { id: 'GEO-002', label: '路径策略', dimension: 'access', status: 'pass', max_points: 7, recommendation: '解除检索阻断', evidence: {} };
 
+test('blockers distinguish an empty extracted body from an indexing restriction in saved GEO and SGEO reports', () => {
+  for (const engine of ['GEO', 'SGEO']) {
+    const emptyPage = { ...page('https://example.com/promo/', { id: `${engine}-009`, status: 'fail' }), status_code: 200 };
+    const searchPage = { ...page('https://example.com/search/', { id: `${engine}-008`, status: 'fail' }), status_code: 200 };
+    const geo = { pages: [emptyPage, searchPage], blockers: [
+      { url: emptyPage.url, check_id: `${engine}-009`, reason: '核心正文可提取', evidence: { text_characters: 0 } },
+      { url: searchPage.url, check_id: `${engine}-008`, reason: '索引与摘要指令', evidence: { directives: ['noIndex,follow', ''] } }
+    ] };
+    const original = JSON.stringify(geo);
+    const result = { [engine === 'SGEO' ? 'sgeo' : 'geo']: geo };
+    for (const lang of ['zh', 'en']) {
+      const html = render(result, lang);
+      const blockers = html.split('<aside class="dr-blockers">')[1].split('</aside>')[0];
+      assert.match(blockers, /HTTP 200/);
+      assert.match(blockers, /noIndex,follow/);
+      assert.match(blockers, lang === 'zh' ? /本次抓取未提取到可读正文/ : /No readable main content extracted/);
+      assert.match(blockers, lang === 'zh' ? /提取正文 0 字符/ : /0 main-content characters extracted/);
+      assert.match(blockers, lang === 'zh' ? /页面声明禁止索引/ : /Page declares an indexing restriction/);
+      assert.doesNotMatch(blockers, /HTTP fetch failed|HTTP 获取未通过/);
+    }
+    assert.equal(JSON.stringify(geo), original);
+  }
+});
+
 test('mixed measured passes and unknown pages remain unverified, without inventing an issue', () => {
   const result = { geo: { dimensions: { access: { key: 'access', checks: [{ ...check, status: 'partial', evidence: { page_status_counts: { pass: 1, unknown: 1 } } }] } },
     pages: [page('https://example.com/', check), page('https://example.com/docs', { ...check, status: 'unknown' })] } };

@@ -9,6 +9,7 @@ import { renderSeoAuditReport } from './seo-report.js?v=20261112-report-links';
 import { renderSiteAuditReport } from './site-report.js?v=20261112-report-links';
 import { getCachedReportHtml as readReportCache, setCachedReportHtml as writeReportCache } from './report-cache.js?v=20261112-report-links';
 import { createSiteLinksExplorer } from './site-links.js?v=20261112-report-links';
+import { buildReportShareUrl } from './report-share.js?v=20261112-report-share';
 import {
   getTaskStepOrder,
   getTaskTypeConfig,
@@ -108,7 +109,17 @@ const GRAPH_CONFIG = {
   },
 };
 
-function syncExportButtonState(task = currentTask) {
+function syncReportActions(task = currentTask) {
+  const shareUrl = buildReportShareUrl(task, window.location.href);
+  const shareButton = $('share-report-btn');
+  shareButton.disabled = !shareUrl;
+  shareButton.title = shareUrl ? '复制免 Token 查看报告的分享链接' : '报告完成后可分享';
+  if (!shareUrl || $('report-share-url').value !== shareUrl) {
+    $('report-share-panel').hidden = true;
+    shareButton.setAttribute('aria-expanded', 'false');
+    $('report-share-url').value = '';
+    $('report-share-open').removeAttribute('href');
+  }
   const button = $('export-btn');
   if (!button) return;
   const isSeoAudit = task?.task_type === 'site_seo_audit' && task?.audit_scope !== 'page';
@@ -161,6 +172,11 @@ function getTaskIdFromLocation() {
 }
 
 function syncAuditUrl(taskId = null, { replace = false } = {}) {
+  const shareUrl = currentTask?.task_id === taskId && buildReportShareUrl(currentTask, window.location.href);
+  if (shareUrl) {
+    window.history[replace ? 'replaceState' : 'pushState']({ taskId }, '', shareUrl);
+    return;
+  }
   const params = new URLSearchParams();
   const targetUrl = $('url').value.trim();
   if (targetUrl) params.set('url', targetUrl);
@@ -301,7 +317,7 @@ function handleDemoAuthFailure(message = 'Demo token required or invalid') {
     hint: message
   });
   resetBtn();
-  syncExportButtonState(null);
+  syncReportActions(currentTask);
 }
 
 async function demoApiFetch(path, options = {}) {
@@ -500,9 +516,9 @@ function applyTaskTypeUi(taskType = null) {
   }
   applyAuditScopeUi();
   if (currentTask && currentTask.task_type !== resolvedTaskType) {
-    syncExportButtonState(null);
+    syncReportActions(null);
   } else if (currentTask) {
-    syncExportButtonState(currentTask);
+    syncReportActions(currentTask);
   }
 }
 
@@ -882,7 +898,7 @@ function renderTimeline(steps) {
       ? '会员版（规则 + OpenRouter）'
       : (task.mode ? '普通版（规则）' : '—');
     setStatusBadge(task.status || 'idle');
-    syncExportButtonState(task);
+    syncReportActions(task);
   }
 
   /* ── LLM status panel ── */
@@ -959,6 +975,7 @@ function renderTimeline(steps) {
       loadEntityGraph(task),
     ]);
     if (task.status === 'completed' || task.status === 'failed') {
+      if (task.status === 'completed') syncAuditUrl(task.task_id, { replace: true });
       resetBtn();
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (task.status === 'failed') clearAllGraphPolling();
@@ -1036,6 +1053,33 @@ function renderTimeline(steps) {
     }
   }
 
+  async function shareCurrentReport() {
+    const url = buildReportShareUrl(currentTask, window.location.href);
+    if (!url) {
+      showToast('报告完成后可生成分享链接');
+      return;
+    }
+    const input = $('report-share-url');
+    input.value = url;
+    $('report-share-open').href = url;
+    $('report-share-panel').hidden = false;
+    $('share-report-btn').setAttribute('aria-expanded', 'true');
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch { /* HTTP hosts and browser permissions may require selection-based copying. */ }
+    if (!copied) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, url.length);
+      try { copied = document.execCommand('copy'); } catch { /* The visible link can still be copied manually. */ }
+    }
+    showToast(copied ? '分享链接已复制，别人打开即可查看，无需 Token' : '分享链接已生成，请选择链接后复制', copied ? 'success' : 'error');
+  }
+
   function getDownloadFilename(response, fallback = 'seo-audit.xlsx') {
     const disposition = response.headers.get('content-disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/i);
@@ -1088,7 +1132,7 @@ function renderTimeline(steps) {
     } finally {
       button.classList.remove('exporting');
       label.textContent = '导出 Excel';
-      syncExportButtonState(currentTask);
+      syncReportActions(currentTask);
     }
   }
 
@@ -1127,7 +1171,7 @@ function renderTimeline(steps) {
     $('llm-notes').textContent = '等待会员增强状态。';
     setGraphPlaceholder('structure', currentTask);
     setGraphPlaceholder('entity', currentTask);
-    syncExportButtonState(currentTask);
+    syncReportActions(currentTask);
     renderTimeline({});
 
     const mode = $('mode').value;
@@ -1226,6 +1270,13 @@ function renderTimeline(steps) {
   $('audit-form').addEventListener('submit', e => { e.preventDefault(); startAudit(); });
   $('copy-json-btn').addEventListener('click', copyJsonOutput);
   $('export-btn').addEventListener('click', exportCurrentReport);
+  $('share-report-btn').addEventListener('click', shareCurrentReport);
+  $('report-share-copy').addEventListener('click', shareCurrentReport);
+  $('report-share-close').addEventListener('click', () => {
+    $('report-share-panel').hidden = true;
+    $('share-report-btn').setAttribute('aria-expanded', 'false');
+    $('share-report-btn').focus();
+  });
 
   $('audit-scope').addEventListener('change', () => {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -1253,7 +1304,7 @@ function renderTimeline(steps) {
     $('asset-counts').textContent = '—';
     $('asset-reuse').textContent = '—';
     $('current-mode-display').textContent = '—';
-    syncExportButtonState(null);
+    syncReportActions(null);
     setStatusBadge('idle');
     applyTaskTypeUi();
     renderTimeline({});

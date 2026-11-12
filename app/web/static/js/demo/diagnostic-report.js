@@ -280,6 +280,37 @@ function renderMethod(data, result, lang) {
     ${result.observation?.provided ? `<section class="report-section">${heading(tx(lang, '独立观测（不计分）', 'Unscored observations'))}<div class="dr-method">${kv(Object.entries(result.observation.metrics || {}))}${jsonDetails(result.observation, lang)}</div></section>` : ''}`;
 }
 
+function renderBlockers(geo, lang) {
+  if (!geo?.blockers?.length) return '';
+  const titles = {
+    '001': tx(lang, 'HTTP 获取未通过', 'HTTP fetch failed'),
+    '002': tx(lang, '检索爬虫受到 robots.txt 限制', 'Search crawlers restricted by robots.txt'),
+    '003': tx(lang, '检测到访问验证或登录挑战', 'Access verification or login challenge detected'),
+    '008': tx(lang, '页面声明禁止索引', 'Page declares an indexing restriction'),
+    '009': tx(lang, '本次抓取未提取到可读正文', 'No readable main content extracted in this fetch')
+  };
+  return `<aside class="dr-blockers"><strong>${tx(lang, '关键阻断', 'Critical blockers')}</strong>
+    <p>${tx(lang, '涵盖抓取、正文提取和索引等环节的关键问题，请按每条原因处理。', 'Critical issues can affect fetching, content extraction, or indexing. Review the reason for each page.')}</p>
+    <ul>${geo.blockers.map(blocker => {
+      const page = (geo.pages || []).find(item => item.url === blocker.url);
+      const checks = Object.values(page?.dimensions || {}).flatMap(dimension => dimension.checks || []);
+      const check = checks.find(item => item.id === blocker.check_id);
+      const evidence = { ...check?.evidence, ...blocker.evidence };
+      const rule = /^(?:GEO|SGEO)-(\d{3})$/.exec(blocker.check_id || '')?.[1];
+      const status = page?.status_code ?? checks.find(item => /^(?:GEO|SGEO)-001$/.test(item.id))?.evidence?.status_code ?? evidence.status_code;
+      const details = [status != null ? `HTTP ${status}` : ''];
+      if (rule === '009' && evidence.text_characters != null) details.push(tx(lang, `提取正文 ${evidence.text_characters} 字符`, `${evidence.text_characters} main-content characters extracted`));
+      if (rule === '008') {
+        details.push(...(Array.isArray(evidence.directives) ? evidence.directives.filter(Boolean) : []));
+        details.push(tx(lang, '实际收录状态待独立验证', 'Actual indexing requires separate verification'));
+      }
+      if (rule === '002') details.push(...Object.entries(evidence.policies || {}).filter(([, allowed]) => allowed === false).map(([name]) => name));
+      if (rule === '001' && evidence.error) details.push(evidence.error);
+      const title = titles[rule] || tx(lang, `未通过：${blocker.reason || blocker.check_id || '站点检查'}`, `Failed check: ${blocker.reason || blocker.check_id || 'Site check'}`);
+      return `<li><span>${e(title)}</span> · ${safeLink(blocker.url)}${details.filter(Boolean).length ? `<small>${e(details.filter(Boolean).join(' · '))}</small>` : ''}</li>`;
+    }).join('')}</ul></aside>`;
+}
+
 export function renderDiagnosticReport({ task, host, lang = 'zh', setCachedReportHtml }) {
   const result = task?.result || {};
   const data = buildDiagnosticData(result, lang);
@@ -292,7 +323,7 @@ export function renderDiagnosticReport({ task, host, lang = 'zh', setCachedRepor
   ];
   host.innerHTML = `<div class="diagnostic-report${data.sgeo ? ' sgeo-report' : ''}" data-report-version="${data.sgeo ? 'diagnostic-report-v3-sgeo' : 'diagnostic-report-v2'}">
     ${renderOverview(task, data, lang)}<nav class="dr-nav" aria-label="${tx(lang, '报告目录', 'Report sections')}">${nav.map(([id, label]) => `<a href="#diagnosis-${id}" data-report-nav>${label}</a>`).join('')}</nav>
-    ${data.geo?.blockers?.length ? `<aside class="dr-blockers"><strong>${tx(lang, '关键阻断', 'Critical blockers')}</strong><ul>${data.geo.blockers.map(blocker => `<li>${e(blocker.reason)} · ${safeLink(blocker.url)}</li>`).join('')}</ul></aside>` : ''}
+    ${renderBlockers(data.geo, lang)}
     ${renderIssues(data, lang)}${renderCoverage(data, lang)}${renderEvidenceProfile(data, lang)}
     ${renderDimensions(data, lang)}${renderActions(data, result, lang)}${renderPlatforms(data, lang)}
     ${renderPages(data, lang)}${renderSnapshot(result, lang)}${renderMethod(data, result, lang)}

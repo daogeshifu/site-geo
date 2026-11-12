@@ -6,9 +6,9 @@
   <title>网站 GEO 审计 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/demo.css?v=20260508-graph-split" />
   <link rel="stylesheet" href="/static/css/audit-refresh.css?v=20260727-token-layout" />
-  <link rel="stylesheet" href="/static/css/workspace.css?v=20261112-white" />
+  <link rel="stylesheet" href="/static/css/workspace.css?v=20261112-report-share" />
   <link rel="stylesheet" href="/static/css/single-page.css?v=20261110-scope" />
-  <link rel="stylesheet" href="/static/css/diagnostic-report.css?v=20261112-sgeo" />
+  <link rel="stylesheet" href="/static/css/diagnostic-report.css?v=20261112-blocker-details" />
 </head>
 <body>
 
@@ -245,10 +245,23 @@
       <button class="tab-btn" data-tab="compare">版本对比</button>
       <button class="tab-btn" data-tab="json">原始数据</button>
     </div>
+    <button id="share-report-btn" type="button" class="tabs-export-btn tabs-share-btn" disabled aria-label="分享报告" aria-controls="report-share-panel" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4M8 15l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m2 2 1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" /></svg>
+      <span class="export-label">分享报告</span>
+    </button>
     <button id="export-btn" type="button" class="tabs-export-btn" disabled aria-label="导出问题清单和链接清单 Excel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" /></svg>
       <span class="export-label">导出 Excel</span>
     </button>
+  </div>
+  <div id="report-share-panel" class="report-share-panel" hidden role="region" aria-label="报告分享链接">
+    <div class="report-share-heading"><strong>分享报告</strong><button id="report-share-close" type="button" aria-label="关闭分享链接">✕</button></div>
+    <p>持有链接的人可直接查看已完成的报告，无需 Token。</p>
+    <div class="report-share-controls">
+      <input id="report-share-url" type="text" readonly aria-label="分享链接" spellcheck="false" />
+      <button id="report-share-copy" type="button">复制链接</button>
+      <a id="report-share-open" target="_blank" rel="noopener noreferrer">打开报告 ↗</a>
+    </div>
   </div>
   <div class="tabs-body">
 
@@ -349,6 +362,6 @@
 
 <script src="/static/js/vendor/echarts-5.6.0.min.js"></script>
 <script src="/static/js/vendor/echarts-wordcloud-2.1.0.min.js"></script>
-<script type="module" src="/static/js/demo/index.js?v=20261112-report-links"></script>
+<script type="module" src="/static/js/demo/index.js?v=20261112-report-share"></script>
 </body>
 </html>
