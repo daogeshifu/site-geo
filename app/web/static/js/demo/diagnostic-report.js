@@ -68,7 +68,6 @@ function renderOverview(task, data, lang) {
           <div><strong>${data.checks.length}</strong><span>${tx(lang, '检查事项', 'Checks')}</span></div>
           <div><strong>${data.issues.length}</strong><span>${tx(lang, '待整改', 'Issues')}</span></div>
           <div><strong>${data.pending.length}</strong><span>${tx(lang, '待核验事项', 'Unverified checks')}</span></div>
-          <div><strong>${data.pages.length}</strong><span>${tx(lang, '采样页面', 'Sampled pages')}</span></div>
         </div>
         ${geo ? `<p class="dr-score-bounds">${tx(lang, '证据覆盖率', 'Evidence coverage')} <b>${pct(geo.coverage?.evidence_coverage)}</b>
           <span>${tx(lang, '分数区间', 'Score bounds')} ${(geo.score_range || []).map(n).join('–') || '—'}</span>

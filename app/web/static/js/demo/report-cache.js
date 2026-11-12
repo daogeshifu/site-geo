@@ -1,4 +1,4 @@
-const PREFIX = 'geo-audit-report:v17-blocker-details:';
+const PREFIX = 'geo-audit-report:v18-overview-stats:';
 
 const keyFor = (task, lang) => task?.task_id && task.status === 'completed'
   ? `${PREFIX}${task.task_id}:${lang}:${task.updated_at || task.completed_at || task.status}` : null;
