@@ -10,6 +10,7 @@ from app.core.exceptions import AppError
 from app.models.task import TaskAuditRequest
 from app.services.audit.single_page import SinglePageAuditService
 from app.services.infra.cache import CacheService
+from app.services.infra.task_reports import TaskReportStore
 from app.services.orchestration.tasks import TaskService
 
 
@@ -121,6 +122,7 @@ async def test_task_pipeline_and_cache_do_not_use_site_assets(tmp_path, monkeypa
     service.tasks = {}
     service._lock = asyncio.Lock()
     service.cache_service = CacheService(str(tmp_path))
+    service.report_store = TaskReportStore(tmp_path / "reports")
     service.asset_store = SimpleNamespace(available=True,backend="mysql",save_task=AsyncMock(side_effect=AssertionError("Site storage must not be used")))
     async def run(path):
         task = await service.create_task(TaskAuditRequest(url="https://example.com/de/"+path,audit_scope="page"))

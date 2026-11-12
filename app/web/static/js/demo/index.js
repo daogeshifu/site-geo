@@ -1,18 +1,19 @@
 import { renderContentAuditReport } from './content-report.js';
-import { renderGeoAuditReport } from './geo-report.js?v=20261112-sgeo';
-import { mountDiagnosticReport } from './diagnostic-report.js?v=20261112-sgeo';
+import { renderGeoAuditReport } from './geo-report.js?v=20261112-report-links';
+import { mountDiagnosticReport } from './diagnostic-report.js?v=20261112-report-links';
 import { withAuditScope, renderSinglePageReport } from './page-audit.js?v=20261110-scope';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
 import { mountPerceptionClouds } from './perception-cloud.js';
-import { renderSeoAuditReport } from './seo-report.js?v=20261112-sgeo';
-import { renderSiteAuditReport } from './site-report.js?v=20260930-echarts-cloud';
-import { createSiteLinksExplorer } from './site-links.js?v=20261112-sgeo';
+import { renderSeoAuditReport } from './seo-report.js?v=20261112-report-links';
+import { renderSiteAuditReport } from './site-report.js?v=20261112-report-links';
+import { getCachedReportHtml as readReportCache, setCachedReportHtml as writeReportCache } from './report-cache.js?v=20261112-report-links';
+import { createSiteLinksExplorer } from './site-links.js?v=20261112-report-links';
 import {
   getTaskStepOrder,
   getTaskTypeConfig,
   STEP_ICON
-} from './task-config.js?v=20261112-sgeo';
+} from './task-config.js?v=20261112-report-links';
 import {
   $,
   escapeHtml,
@@ -72,7 +73,6 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v15-sgeo:';
 let savedSiteOptions = null;
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
@@ -114,9 +114,9 @@ function syncExportButtonState(task = currentTask) {
   const isSeoAudit = task?.task_type === 'site_seo_audit' && task?.audit_scope !== 'page';
   const isGeoAudit = ['site_geo_only_audit', 'site_geo_audit'].includes(task?.task_type || $('task-type')?.value) && task?.audit_scope !== 'page';
   const readinessName = (task?.task_type || $('task-type')?.value) === 'site_geo_audit' ? 'SGEO' : 'GEO';
-  button.disabled = button.classList.contains('exporting') || !demoTokenVerified || task?.status !== 'completed' || !(isSeoAudit || isGeoAudit);
+  button.disabled = button.classList.contains('exporting') || (!demoTokenVerified && !task?.public_report) || task?.status !== 'completed' || !(isSeoAudit || isGeoAudit);
   button.title = isSeoAudit ? '导出问题清单和链接清单' : isGeoAudit ? `导出 ${readinessName} 诊断报告与逐页证据` : '网站审计完成后可导出';
-  if (!button.classList.contains('exporting')) button.querySelector('.export-label').textContent = isGeoAudit ? '导出报告' : '导出 Excel';
+  if (!button.classList.contains('exporting')) button.querySelector('.export-label').textContent = isGeoAudit || task?.public_report ? '导出报告' : '导出 Excel';
 }
 
 function readBooleanParam(params, name, fallback = false) {
@@ -510,26 +510,17 @@ function getReportLang(task = null) {
   return task?.feedback_lang || currentTask?.feedback_lang || $('feedback-lang')?.value || 'en';
 }
 
-function getReportCacheKey(task, lang) {
-  if (!task?.task_id) return null;
-  return `${REPORT_CACHE_PREFIX}${task.task_id}:${lang}:${task.updated_at || task.completed_at || task.status || 'draft'}`;
-}
-
 function getCachedReportHtml(task, lang) {
-  const key = getReportCacheKey(task, lang);
-  if (!key || task?.status !== 'completed') return null;
   try {
-    return sessionStorage.getItem(key);
-  } catch (err) {
+    return readReportCache(sessionStorage, task, lang);
+  } catch {
     return null;
   }
 }
 
 function setCachedReportHtml(task, lang, html) {
-  const key = getReportCacheKey(task, lang);
-  if (!key || task?.status !== 'completed') return;
   try {
-    sessionStorage.setItem(key, html);
+    writeReportCache(sessionStorage, task, lang, html);
   } catch (err) {
     // Ignore storage failures and keep rendering live output.
   }
@@ -725,7 +716,7 @@ async function loadGraph(graphKind, task = currentTask) {
     clearGraphPolling(graphKind);
     return;
   }
-  if (task.build_knowledge_graph === false) {
+  if (task.build_knowledge_graph === false || task.public_report) {
     setGraphPlaceholder(graphKind, task);
     clearGraphPolling(graphKind);
     return;
@@ -857,6 +848,9 @@ function renderTimeline(steps) {
     siteLinks.setTask(task);
     currentTaskId     = task.task_id || null;
     currentTaskStatus = task.status  || 'idle';
+    if (task.mode) $('mode').value = task.mode;
+    if (task.full_audit != null) $('full-audit').checked = task.full_audit;
+    if (task.max_pages != null) $('max-pages').value = task.max_pages;
     const assetSummary = getAssetSummary(task);
     if (task.task_type && $('task-type').value !== task.task_type) {
       $('task-type').value = task.task_type;
@@ -944,10 +938,12 @@ function renderTimeline(steps) {
   }
 
   /* ── Poll ── */
-  async function pollTask(taskId) {
-    const res     = await demoApiFetch(`${API_PREFIX}/tasks/${taskId}`);
+  async function pollTask(taskId, { shared = false } = {}) {
+    const res = shared
+      ? await fetch(`${API_PREFIX}/public/reports/${encodeURIComponent(taskId)}`)
+      : await demoApiFetch(`${API_PREFIX}/tasks/${encodeURIComponent(taskId)}`);
     const payload = await res.json();
-    if (!payload.success) throw new Error(payload.message || '轮询失败');
+    if (!res.ok || !payload.success) throw new Error(payload.message || '读取报告失败');
     const task = payload.data;
     setMeta(task);
     renderTimeline(task.steps);
@@ -967,7 +963,7 @@ function renderTimeline(steps) {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       if (task.status === 'failed') clearAllGraphPolling();
       if (task.status === 'failed') showToast(task.error || '任务执行失败');
-      else showToast('审计已完成', 'success');
+      else if (!shared) showToast('审计已完成', 'success');
     }
     return task;
   }
@@ -985,12 +981,25 @@ function renderTimeline(steps) {
   }
 
   async function restoreTaskFromLocation(taskId) {
-    if (!taskId || !demoTokenVerified) return;
+    if (!taskId) return;
     setSubmitBusy('恢复任务中…');
     try {
-      const task = await pollTask(taskId);
+      let task;
+      try {
+        task = await pollTask(taskId, { shared: true });
+      } catch (error) {
+        if (!demoTokenVerified) throw new Error('暂未找到已完成的报告。任务进行中时，可验证 Token 查看进度；已有报告请确认链接是否完整。');
+        task = await pollTask(taskId);
+      }
       if (task.url) $('url').value = task.url;
       syncAuditUrl(task.task_id, { replace: true });
+      if (task.public_report && !demoTokenVerified) {
+        setDemoAccessState({
+          badgeText: '报告可查看', badgeClass: 'b-success', ready: true,
+          description: '当前展示已保存的诊断报告，持有此地址即可查看。',
+          hint: '查看和导出已完成报告无需 Token；发起新诊断仍需验证。'
+        });
+      }
       if (['queued', 'running', 'pending'].includes(task.status)) {
         setSubmitBusy('审计中…');
         ensureAllGraphPolling(task);
@@ -1000,8 +1009,10 @@ function renderTimeline(steps) {
       }
     } catch (err) {
       resetBtn();
-      syncAuditUrl(null, { replace: true });
-      showToast(err?.message || '链接中的审计任务无法恢复，请重新开始审计。');
+      const host = $('summary-text');
+      host.className = 'report-empty placeholder';
+      host.textContent = err?.message || '暂时无法读取已保存报告，请稍后重试。';
+      showToast(err?.message || '暂时无法读取已保存报告');
     }
   }
 
@@ -1043,7 +1054,7 @@ function renderTimeline(steps) {
   }
 
   async function exportCurrentReport() {
-    if (!demoTokenVerified) {
+    if (!demoTokenVerified && !currentTask?.public_report) {
       showToast('请先输入并验证 demo token');
       return;
     }
@@ -1061,9 +1072,11 @@ function renderTimeline(steps) {
       button.classList.add('exporting');
       button.disabled = true;
       label.textContent = '生成中…';
-      const isSeo = currentTask.task_type === 'site_seo_audit';
+      const isSeo = currentTask.task_type === 'site_seo_audit' && !currentTask.public_report;
       const suffix = isSeo ? 'export.xlsx' : 'report';
-      const response = await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${encodeURIComponent(currentTaskId)}/${suffix}`);
+      const response = currentTask.public_report
+        ? await fetch(`${API_PREFIX}/public/reports/${encodeURIComponent(currentTaskId)}/report`)
+        : await demoApiFetch(`${DEMO_API_PREFIX}/tasks/${encodeURIComponent(currentTaskId)}/${suffix}`);
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, '报告导出失败'));
       }

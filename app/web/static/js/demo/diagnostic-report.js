@@ -2,7 +2,7 @@ import { escapeHtml as e, tx } from './shared.js';
 import {
   buildDiagnosticData, displayNumber as n, displayPercent as pct,
   geoDimensionName, sgeoDimensionName, platformPolicies, reportState
-} from './diagnostic-data.js?v=20261112-sgeo';
+} from './diagnostic-data.js?v=20261112-report-links';
 
 const cleanList = items => [...new Set((items || []).filter(Boolean))];
 const safeLink = (url, label = url) => /^https?:\/\//i.test(url || '')

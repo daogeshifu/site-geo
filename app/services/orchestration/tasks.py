@@ -354,12 +354,12 @@ class TaskService:
                     task_type=task.task_type,
                     target_locale=task.target_locale,
                 )
-            task.status = "completed"
-            task.current_step = "completed"
-            task.progress_percent = 100
-            task.completed_at = self._utcnow()
-            task.updated_at = task.completed_at
-            await asyncio.to_thread(self.report_store.save, task)
+            completed_at = self._utcnow()
+            completion = {"status": "completed", "current_step": "completed", "progress_percent": 100,
+                          "completed_at": completed_at, "updated_at": completed_at}
+            await asyncio.to_thread(self.report_store.save, task.model_copy(update=completion))
+            for name, value in completion.items():
+                setattr(task, name, value)
             if self.asset_store.available and task.audit_scope != "page":
                 try:
                     await self.asset_store.save_task(task)

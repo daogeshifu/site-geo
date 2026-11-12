@@ -257,6 +257,12 @@ curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
 SGEO任务包含 `sgeo`、`discovery`、`observation`、`summary` 与逐页证据；`result.sgeo.score`、`summary.sgeo_score` 为统一分数。`summary.overall_score`、`summary.combined_score` 为该分数的兼容别名，新SGEO任务不再返回独立 `seo`、`geo` 或 `seo_summary`。
 `summary.composite_geo_score`仅为新版GEO分的兼容别名。
 
+完成后的任务另存到 `TASK_REPORT_DIR`（默认 `.data/reports`），以原 `task_id` 恢复结果，不受7天请求缓存过期影响。Docker 已挂载 `.data`，因此服务重启和容器重建后仍可通过 `/?task_id=...` 查看。旧版本写入 MySQL 的已完成任务在首次访问时恢复并补存文件；没有保存过的内存任务无法追溯恢复。
+
+持有任务链接的人可直接阅读已完成报告、查看站点链接和导出 Markdown，无需 Token，也不会因地址中的 `force_refresh=1` 重新诊断。只读接口为 `GET /api/v1/public/reports/{task_id}`，其下的 `/pages`、`/pages/{page_id}/source` 和 `/report` 同样只读取已完成任务。新建任务、读取未完成任务和原业务接口仍需 Token。公开视图与保存的报告均排除 LLM API key 和自定义服务地址。
+
+浏览器按报告结构校验本地HTML缓存；SGEO数据始终使用统一六维报告，即便从旧版报告入口调用也不读取已删除的旧评分字段。页面与报告脚本需重新验证缓存，避免旧模板把缺失字段显示为0分。
+
 新版GEO分数是已测项的暂定估计；同时返回 `provisional`、`readiness_status`、`score_range` 与证据覆盖率。
 出现阻断时标记 `blocked`；未知项不视为通过，分数不代表实际引用概率。
 

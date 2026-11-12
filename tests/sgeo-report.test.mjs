@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildDiagnosticData, platformPolicies } from '../app/web/static/js/demo/diagnostic-data.js';
 import { renderDiagnosticReport, mountDiagnosticReport } from '../app/web/static/js/demo/diagnostic-report.js';
+import { renderSiteAuditReport } from '../app/web/static/js/demo/site-report.js';
+import { getCachedReportHtml, setCachedReportHtml } from '../app/web/static/js/demo/report-cache.js';
 
 const definitions = [
   ['access', .20, [1, 2, 3, 4, 25, 27, 28, 29]],
@@ -64,6 +66,34 @@ test('saved source SEO and GEO scores and actions never leak into a unified repo
   const html = render(result, 'en');
   assert.doesNotMatch(html, /Legacy finding|Legacy action|Legacy scoring note|SEO 99\/100|GEO 1\/100/);
   assert.match(html, /Unified SGEO summary/);
+});
+
+test('the legacy renderer accepts new SGEO evidence without inventing zero scores or old dimensions', () => {
+  const result = fixture();
+  result.sgeo.score = 77.44;
+  result.sgeo.status = 'provisional';
+  result.sgeo.readiness_status = 'unverified';
+  const host = {};
+  renderSiteAuditReport({ task: { result }, host, lang: 'zh' });
+  assert.match(host.innerHTML, /dr-score-value"><strong>77.4<\/strong>/);
+  assert.match(host.innerHTML, /data-report-version="diagnostic-report-v3-sgeo"/);
+  assert.equal((host.innerHTML.match(/<article class="report-dim-card">/g) || []).length, 6);
+  assert.doesNotMatch(host.innerHTML, /report-score-value">0|SEO \+ GEO 综合得分/);
+});
+
+test('stale HTML is discarded even under the current cache key, while unknown scores stay unknown', () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+  const task = { task_id: 'saved-report-123', status: 'completed', updated_at: '2026-11-12', result: fixture() };
+  setCachedReportHtml(storage, task, 'zh', '<div class="report-score-value">0</div>');
+  assert.equal(getCachedReportHtml(storage, task, 'zh'), null);
+  const html = render(task.result);
+  setCachedReportHtml(storage, task, 'zh', html);
+  assert.equal(getCachedReportHtml(storage, task, 'zh'), html);
+  task.result.sgeo.score = null;
+  const host = {};
+  renderSiteAuditReport({ task, host, lang: 'zh' });
+  assert.match(host.innerHTML, /dr-score-value"><strong>—<\/strong>/);
 });
 
 test('one issue survives multiple affected pages with shared impact and acceptance', () => {
