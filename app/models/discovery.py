@@ -123,6 +123,10 @@ class LlmsResult(BaseModel):
     content_length: int = 0
     effectiveness_score: int = 0       # 0-100 的有效性评分
     signals: dict[str, bool] = Field(default_factory=dict)  # 各质量信号检查结果
+    final_url: str | None = None
+    content_type: str | None = None
+    structure_checks: dict[str, bool] = Field(default_factory=dict)
+    error: str | None = None
 
 
 class BacklinkOverviewResult(BaseModel):

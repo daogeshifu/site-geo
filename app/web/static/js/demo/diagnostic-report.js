@@ -1,8 +1,8 @@
 import { escapeHtml as e, tx } from './shared.js';
 import {
   buildDiagnosticData, displayNumber as n, displayPercent as pct,
-  platformPolicies, reportState
-} from './diagnostic-data.js?v=20261111-report-v2';
+  geoDimensionName, platformPolicies, reportState
+} from './diagnostic-data.js?v=20261112-geo-labels';
 
 const cleanList = items => [...new Set((items || []).filter(Boolean))];
 const safeLink = (url, label = url) => /^https?:\/\//i.test(url || '')
@@ -29,8 +29,13 @@ function radar(dimensions, lang) {
       ${[.25, .5, .75, 1].map(ratio => `<polygon points="${points(ratio)}" class="dr-radar-grid"/>`).join('')}
       ${dimensions.map((dimension, index) => {
         const [x, y] = point(index), [lx, ly] = point(index, 1.38);
+        const label = dimension.label || '';
+        const parts = /^(.*?[：:])\s*(.*)$/.exec(label);
+        const shorten = text => text.length > 13 ? text.slice(0, 12) + '…' : text;
         return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="dr-radar-grid"/>
-          <text x="${lx}" y="${ly}" text-anchor="middle" class="dr-radar-label">${e(dimension.label?.length > 12 ? dimension.label.slice(0, 11) + '…' : dimension.label)}</text>`;
+          <text x="${lx}" y="${ly}" text-anchor="middle" class="dr-radar-label">${parts
+            ? `<tspan x="${lx}" dy="-4">${e(parts[1])}</tspan><tspan x="${lx}" dy="13">${e(shorten(parts[2]))}</tspan>`
+            : e(shorten(label))}</text>`;
       }).join('')}
       ${known ? `<polygon points="${dimensions.map((d, i) => point(i, Math.max(0, Math.min(100, d.score)) / 100).join(',')).join(' ')}" class="dr-radar-area"/>` : ''}
       ${dimensions.filter(d => d.score != null).map(d => { const [x, y] = point(dimensions.indexOf(d), Math.max(0, Math.min(100, d.score)) / 100); return `<circle cx="${x}" cy="${y}" r="3" class="dr-radar-dot"><title>${e(d.label)}: ${n(d.score)}</title></circle>`; }).join('')}
@@ -106,21 +111,19 @@ function renderIssues(data, lang) {
 }
 
 function renderCoverage(data, lang) {
+  const checks = [...data.checks].sort((left, right) => String(left.id).localeCompare(String(right.id), 'en', { numeric: true }));
   return `<details class="report-section collapsible-section coverage-section" id="diagnosis-coverage">
     <summary class="dr-section-head"><div><h3>${tx(lang, '完整覆盖清单', 'Complete coverage checklist')}<span class="section-count">${data.checks.length}</span></h3>
       <p>${tx(lang, '通过', 'Pass')} ${data.counts.pass} · ${tx(lang, '待整改', 'Needs work')} ${data.counts.fail} · ${tx(lang, '部分满足', 'Partial')} ${data.counts.partial} · ${tx(lang, '待核验', 'Unverified')} ${data.counts.unknown} · ${tx(lang, '不适用', 'N/A')} ${data.counts.na}</p></div>
       <a class="checklist-doc-link" href="/api-doc#${data.geo ? 'geo-scoring' : 'seo-checklist'}" target="_blank" rel="noreferrer">${tx(lang, '检测清单说明', 'Checklist guide')}</a></summary>
-    <div class="audit-table-wrap dr-checklist-scroll" tabindex="0" role="region" aria-label="${tx(lang, '完整检查表', 'Complete checklist')}"><table class="audit-table dr-checklist"><thead><tr>
-      ${[tx(lang, '编号 / 类型', 'ID / type'), tx(lang, '检查项与维度', 'Check and dimension'), tx(lang, '状态', 'Status'), tx(lang, '诊断结论与证据', 'Finding and evidence')].map(text => `<th scope="col">${text}</th>`).join('')}
-      </tr></thead><tbody>${data.checks.map(check => `<tr><td><code>${e(check.id)}</code><small>${check.engine}</small></td><td><strong>${e(check.check || check.label)}</strong><small>${e(check.category || '')}</small></td>
-        <td>${chip(check.status, lang)}${check.counts?.unknown ? `<small>${check.counts.unknown} ${tx(lang, '页待核验', 'pages unverified')}</small>` : ''}</td>
-        <td>${e(check.engine === 'SEO' ? check.summary : Object.entries(check.counts || {}).map(([state, count]) => reportState(state, lang) + ' ' + count).join(' · '))}
-          ${check.engine === 'SEO' && check.evidence ? `<p>${e(check.evidence)}</p>` : ''}${check.engine === 'GEO' ? `<a href="#diagnosis-pages" data-open-pages>${tx(lang, '查看逐页证据', 'View page evidence')}</a>` : ''}</td></tr>`).join('') || `<tr><td colspan="4">${tx(lang, '此历史结果未保存检查清单，可重新诊断以补充。', 'This historical result has no checklist. Run a new audit to collect one.')}</td></tr>`}</tbody></table></div></details>`;
+    ${checks.length ? `<ul class="dr-coverage-grid" aria-label="${tx(lang, '完整检查清单', 'Complete checklist')}">${checks.map(check => `<li class="dr-coverage-item" data-check-id="${e(check.id)}">
+      <code>${e(check.id)}</code>${chip(check.status, lang)}<strong>${e(check.check || check.label)}</strong>
+    </li>`).join('')}</ul>` : empty(tx(lang, '此历史结果未保存检查清单，可重新诊断以补充。', 'This historical result has no checklist. Run a new audit to collect one.'))}</details>`;
 }
 
 function renderDimensions(data, lang) {
   return `<section class="report-section dimensions-section" id="diagnosis-dimensions">${heading(tx(lang, '维度评估', 'Scored dimensions'), tx(lang, 'SEO 与 GEO 各自计分；展开查看权重、计分依据与建议。', 'SEO and GEO are scored separately. Expand for weights, scoring evidence, and recommendations.'), data.dimensions.length)}
-    <div class="dr-dimension-groups">${['SEO', 'GEO'].filter(engine => data.dimensions.some(d => d.engine === engine)).map(engine => `<div><div class="dr-group-heading"><h4>${engine === 'SEO' ? tx(lang, 'SEO 搜索健康', 'SEO search health') : tx(lang, 'GEO 站内就绪度', 'GEO on-site readiness')}</h4><span>${engine === 'GEO' ? e(data.geo.scoring_version || 'onsite-geo-v1') : 'seo-audit-v1'}</span></div>
+    <div class="dr-dimension-groups">${['SEO', 'GEO'].filter(engine => data.dimensions.some(d => d.engine === engine)).map(engine => `<div><div class="dr-group-heading"><h4>${engine === 'SEO' ? tx(lang, 'SEO 搜索健康', 'SEO search health') : tx(lang, 'GEO 站内就绪度', 'GEO on-site readiness')}</h4><span>${engine === 'GEO' ? e(data.geo.scoring_version || tx(lang, '版本未记录', 'Version not recorded')) : 'seo-audit-v1'}</span></div>
     <div class="report-dim-grid">${data.dimensions.filter(d => d.engine === engine).map(d => {
       const owned = data.checks.filter(check => check.engine === engine && (engine === 'GEO' ? check.dimension === d.key : check.category === d.label));
       const score = d.score == null ? null : Math.max(0, Math.min(100, Number(d.score)));
@@ -128,13 +131,14 @@ function renderDimensions(data, lang) {
         <div class="report-dim-scoreline"><span class="score">${n(score)}<small>/100</small></span>${engine === 'GEO' ? `<span>${tx(lang, '证据', 'Evidence')} ${pct(d.evidence_coverage)}</span>` : chip(d.status, lang)}</div>
         <div class="dimension-meter"><span style="width:${score ?? 0}%"></span></div>
         <p class="report-dim-note">${e(d.summary || (engine === 'GEO' ? tx(lang, '已核验项暂算；未知项保留在分数区间中。', 'Estimated from measured checks; unknowns remain in the score bounds.') : ''))}</p>
+        ${engine === 'GEO' && d.key === 'trust' ? `<p class="report-dim-note">${tx(lang, '可信与时效为推荐提供基础；实际推荐需独立验证。', 'Trust and freshness support recommendation readiness; actual recommendations need separate verification.')}</p>` : ''}
         <details class="dimension-details"><summary>${tx(lang, '查看计分与建议', 'Scoring and recommendations')}</summary><div class="dr-dimension-detail">
           ${kv(engine === 'GEO' ? [
             [tx(lang, '已获积分 / 已测积分', 'Earned / measured points'), n(d.earned_points) + ' / ' + n(d.measured_points)],
             [tx(lang, '适用积分', 'Applicable points'), n(d.applicable_points)],
             [tx(lang, '维度分', 'Dimension score'), tx(lang, '已获积分 ÷ 已测积分 × 100', 'Earned ÷ measured × 100')]
           ] : [[tx(lang, '归一权重', 'Normalized weight'), pct(d.normalized_weight)], [tx(lang, '加权得分', 'Weighted contribution'), n(d.weighted_value)]])}
-          ${owned.length ? `<ul class="dr-dim-checks">${owned.map(check => `<li><span><code>${e(check.id)}</code> ${e(check.label)}${engine === 'GEO' ? `<small>${tx(lang, '规则积分', 'Rule points')} ${n(check.max_points)}</small>` : ''}</span>${chip(check.status, lang)}</li>`).join('')}</ul>` : ''}
+          ${owned.length ? `<ul class="dr-dim-checks">${owned.map(check => `<li data-check-id="${e(check.id)}"><span>${engine === 'GEO' ? `<strong class="dr-diagnostic-name">${e(check.diagnostic_name)}</strong>` : `<code>${e(check.id)}</code>`} ${e(check.label)}${engine === 'GEO' ? `<small>${tx(lang, '规则积分', 'Rule points')} ${n(check.max_points)}</small>` : ''}</span>${chip(check.status, lang)}</li>`).join('')}</ul>` : ''}
           ${cleanList(d.issues).map(issue => `<p>${e(issue)}</p>`).join('')}
           ${cleanList(d.recommendations).map(rec => `<p class="dr-rec">${e(rec)}</p>`).join('')}
           ${engine === 'GEO' ? cleanList(owned.filter(check => ['fail', 'partial'].includes(check.status)).map(check => check.recommendation)).map(rec => `<p class="dr-rec">${e(rec)}</p>`).join('') : ''}
@@ -184,8 +188,11 @@ function renderPlatforms(data, lang) {
 }
 
 function renderPages(data, lang) {
-  return `<section class="report-section" id="diagnosis-pages">${heading(tx(lang, '逐页诊断与证据', 'Page diagnostics and evidence'), tx(lang, '每个采样页面保留原始检查状态、抓取信息和整改依据。', 'Each sampled page retains its check states, fetch metadata, and remediation evidence.'), data.pages.length)}
-    <div class="dr-page-list">${data.pages.map((item, index) => {
+  const preview = data.pages.slice(0, 8);
+  return `<details class="report-section collapsible-section" id="diagnosis-pages" open>
+    <summary class="dr-section-head"><div><h3>${tx(lang, '逐页诊断与证据', 'Page diagnostics and evidence')}<span class="section-count">${data.pages.length}</span></h3>
+      <p>${tx(lang, '展示最多 8 个采样页面，展开查看检查状态、抓取信息和整改依据。', 'Preview up to 8 sampled pages. Expand a page for check states, fetch metadata, and remediation evidence.')}</p></div></summary>
+    <div class="dr-page-list">${preview.map((item, index) => {
       const page = item.geo || item.seo, seo = item.seo;
       return `<details class="dr-page" id="diagnosis-page-${index}" data-page-url="${e(item.url)}"><summary><div><span class="dr-page-type">${e(page.page_type || 'page')}</span><strong>${e(item.url)}</strong></div>
         <div class="dr-page-scores">${item.seo ? `<span>SEO HTTP ${n(seo.status_code)}</span>` : ''}${item.geo ? `<span>GEO ${n(page.score)}/100</span>${chip(page.status, lang)}` : ''}</div></summary>
@@ -200,11 +207,13 @@ function renderPages(data, lang) {
           ['H1', seo.h1_count], [tx(lang, '正文词数', 'Word count'), seo.word_count],
           [tx(lang, '图片替代文本覆盖', 'Image alt coverage'), pct(seo.alt_coverage_ratio)], ['Noindex', seo.noindex_detected == null ? null : String(seo.noindex_detected)]
         ])}` : ''}
-        ${item.geo ? `<div class="dr-page-checks">${Object.values(item.geo.dimensions || {}).map(d => `<h4>${e(d.label)}</h4>${(d.checks || []).map(check => `<article><div><code>${e(check.id)}</code><b>${e(check.label)}</b>${chip(check.status, lang)}${check.blocker ? priority('P0') : ''}</div>
+        ${item.geo ? `<div class="dr-page-checks">${Object.entries(item.geo.dimensions || {}).map(([key, d]) => `<h4>${e(geoDimensionName(d.key || key, d.label, lang))}</h4>${(d.checks || []).map(check => `<article><div><code>${e(check.id)}</code><b>${e(check.label)}</b>${chip(check.status, lang)}${check.blocker ? priority('P0') : ''}</div>
           ${['fail', 'partial', 'unknown'].includes(check.status) && check.recommendation ? `<p>${e(check.recommendation)}</p>` : ''}
           ${check.evidence_type === 'structural_proxy' ? `<small>${tx(lang, '结构代理检查，未作事实核查。', 'Structural proxy; not fact-checked.')}</small>` : ''}${jsonDetails(check.evidence, lang)}</article>`).join('')}`).join('')}</div>` : ''}
         </div></details>`;
-    }).join('') || empty(tx(lang, '历史结果没有采样页面证据，可重新诊断以补充。', 'No page evidence in this historical result. Run a new audit to collect it.'))}</div></section>`;
+    }).join('') || empty(tx(lang, '历史结果没有采样页面证据，可重新诊断以补充。', 'No page evidence in this historical result. Run a new audit to collect it.'))}</div>
+    ${preview.length ? `<div class="dr-pages-footer"><p>${tx(lang, `已展示 ${preview.length} / ${data.pages.length} 个采样页面`, `Showing ${preview.length} of ${data.pages.length} sampled pages`)}</p>
+      <a href="#tab-site-links" data-open-site-links aria-label="${tx(lang, '在站点链接中查看更多页面', 'View more pages in Site links')}">${tx(lang, '查看更多', 'View more')}</a></div>` : ''}</details>`;
 }
 
 function renderSnapshot(result, lang) {
@@ -240,7 +249,7 @@ function renderSnapshot(result, lang) {
       [tx(lang, '站外权威', 'External authority'), d.backlinks?.available == null ? null : yes(d.backlinks.available)]
     ]]
   ];
-  return `<details class="report-section collapsible-section" id="diagnosis-snapshot"><summary class="dr-section-head"><div><h3>${tx(lang, '站点快照', 'Site snapshot')}</h3><p>${tx(lang, '基础数据、抓取信息、实体信号及响应头。', 'Site facts, fetch metadata, entity signals, and response headers.')}</p></div><span>${e(d.site_snapshot_version || 'snapshot')}</span></summary>
+  return `<details class="report-section collapsible-section" id="diagnosis-snapshot" open><summary class="dr-section-head"><div><h3>${tx(lang, '站点快照', 'Site snapshot')}</h3><p>${tx(lang, '基础数据、抓取信息、实体信号及响应头。', 'Site facts, fetch metadata, entity signals, and response headers.')}</p></div><span>${e(d.site_snapshot_version || 'snapshot')}</span></summary>
     <div class="dr-snapshot">${groups.map(([title, rows]) => `<section><h4>${title}</h4>${kv(rows)}</section>`).join('')}
     <section><h4>${tx(lang, '关键响应头', 'Response headers')}</h4>${kv(Object.entries(fetch.headers || {}))}</section></div></details>`;
 }
@@ -249,7 +258,8 @@ function renderMethod(data, result, lang) {
   const notes = cleanList([...(data.geo?.processing_notes || []), ...(result.seo_summary?.processing_notes || []), ...(result.summary?.processing_notes || [])]);
   return `<details class="report-section collapsible-section" id="diagnosis-method"><summary class="dr-section-head"><h3>${tx(lang, '计分方法与诊断说明', 'Scoring methodology and notes')}</h3></summary><div class="dr-method">
     ${data.geo ? `<p>${tx(lang, 'GEO 先逐页计分，再对页面类型等权、同类型页面等权汇总。待核验项不视为通过，暂定分仅基于已测证据，同时展示分数上下界。', 'GEO is scored per page, then equally by page type and by page within each type. Unknowns are not passes; estimates use measured evidence and include score bounds.')}</p>
-    <p>${tx(lang, 'llms.txt、训练授权、社交卡片、一般安全响应头及站外权威不计入 GEO 总分。实际收录与 AI 引用单独验证。', 'llms.txt, training permissions, social cards, general security headers, and external authority are excluded from GEO. Actual indexing and AI citations need separate verification.')}</p>
+    <p>${tx(lang, '训练授权、社交卡片、一般安全响应头及站外权威不计入 GEO 总分。实际收录与 AI 引用单独验证。', 'Training permissions, social cards, general security headers, and external authority are excluded from GEO. Actual indexing and AI citations need separate verification.')}</p>
+    ${data.geo.scoring_version === 'onsite-geo-v1' ? `<p>${tx(lang, '此历史版本的 llms.txt 不计分，未包含新增的速度和 URL 静态化规则。', 'This historical version does not score llms.txt and predates the loading-speed and static-URL rules.')}</p>` : ''}
     ${kv([[tx(lang, '已发现候选页面', 'Known candidate pages'), data.geo.coverage?.known_candidate_pages],
       [tx(lang, '采样占候选比例', 'Sample-to-candidate ratio'), pct(data.geo.coverage?.sample_coverage)],
       [tx(lang, '范围说明', 'Scope note'), tx(lang, '该比例不代表全站覆盖率。', 'This is not whole-site coverage.')]])}` : ''}
@@ -283,6 +293,11 @@ export function renderDiagnosticReport({ task, host, lang = 'zh', setCachedRepor
 export function mountDiagnosticReport(host) {
   if (!host?.addEventListener || !host.querySelector('.diagnostic-report') || host._diagnosticReportBound) return;
   host._diagnosticReportBound = true;
+  const openSiteLinks = () => {
+    const tab = host.ownerDocument?.querySelector('[data-tab="site-links"]');
+    tab?.click();
+    tab?.focus();
+  };
   const filter = () => {
     const search = host.querySelector('[data-issue-search]')?.value.toLowerCase().trim() || '';
     const engine = host.querySelector('[data-issue-engine]')?.value || '';
@@ -301,15 +316,23 @@ export function mountDiagnosticReport(host) {
   host.addEventListener('input', event => { if (event.target.matches('[data-issue-search]')) filter(); });
   host.addEventListener('change', event => { if (event.target.matches('[data-issue-engine], [data-issue-priority]')) filter(); });
   host.addEventListener('click', event => {
-    const link = event.target.closest('a[data-report-nav], a[data-open-pages]');
+    const link = event.target.closest('a[data-report-nav], a[data-open-pages], a[data-open-site-links]');
     if (!link) return;
     // The workspace reloads on popstate; keep report navigation inside this view.
     event.preventDefault();
+    if (link.hasAttribute('data-open-site-links')) {
+      openSiteLinks();
+      return;
+    }
     const target = host.querySelector(link.getAttribute('href'));
     if (target?.tagName === 'DETAILS') target.open = true;
     if (link.hasAttribute('data-open-pages')) {
       const pages = [...(target?.querySelectorAll('.dr-page') || [])];
-      const page = pages.find(item => item.dataset.pageUrl === link.dataset.targetPage) || pages[0];
+      const page = link.dataset.targetPage ? pages.find(item => item.dataset.pageUrl === link.dataset.targetPage) : pages[0];
+      if (!page && link.dataset.targetPage) {
+        openSiteLinks();
+        return;
+      }
       if (page) {
         page.open = true;
         page.scrollIntoView({ block: 'start' });

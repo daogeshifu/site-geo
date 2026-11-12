@@ -1,11 +1,51 @@
 from __future__ import annotations
 
+import re
+from urllib.parse import urljoin, urlparse
+
 import httpx
 
 from app.models.discovery import LlmsResult
 from app.utils.fetcher import fetch_url
 from app.utils.heuristics import assess_llms_effectiveness
 from app.utils.url_utils import get_site_root
+
+
+def inspect_llms_structure(text: str, url: str, content_type: str = "") -> dict[str, bool]:
+    """Inspect the complete file; HTML fallback pages are not AI navigation files."""
+    text = text.lstrip("\ufeff")
+    is_html = "html" in content_type.lower() or bool(re.search(
+        r"<!doctype\s+html|<(?:html|head|body|script|title)(?:\s|>)", text[:2000], re.I,
+    ))
+    title = re.search(r"^#[ \t]+\S.*$", text, re.M)
+    summary = False
+    if title:
+        for line in text[title.end():].splitlines():
+            line = line.strip()
+            if line.startswith("#"):
+                break
+            if line and not re.match(r"^(?:[-*+]\s|\d+\.\s|```|\[)", line):
+                summary = bool(line.lstrip("> ").strip())
+                if summary:
+                    break
+    root_host = urlparse(get_site_root(url)).netloc.lower()
+    file_path = urlparse(url).path
+    internal_links = []
+    for target in re.findall(r"(?<!!)\[[^\]\n]+\]\(\s*<?([^\s)>]+)", text):
+        if target.startswith("#"):
+            continue
+        try:
+            parsed = urlparse(urljoin(url, target))
+        except ValueError:
+            continue
+        if (parsed.scheme in {"http", "https"} and parsed.netloc.lower() == root_host
+                and parsed.path != file_path):
+            internal_links.append(parsed.geturl())
+    return {
+        "readable_text": bool(text.strip()) and not is_html,
+        "title_and_summary": bool(title and summary),
+        "internal_navigation": bool(internal_links),
+    }
 
 
 async def inspect_llms(base_url: str, client: httpx.AsyncClient | None = None) -> LlmsResult:
@@ -26,11 +66,12 @@ async def inspect_llms(base_url: str, client: httpx.AsyncClient | None = None) -
     llms_url = f"{get_site_root(base_url)}/llms.txt"
     try:
         response = await fetch_url(llms_url, client=client)
-    except Exception:
-        return LlmsResult(url=llms_url, exists=False)
+    except Exception as exc:
+        return LlmsResult(url=llms_url, exists=False, error=str(exc))
 
     if response.status_code >= 400:
-        return LlmsResult(url=llms_url, exists=False, status_code=response.status_code)
+        return LlmsResult(url=llms_url, exists=False, status_code=response.status_code,
+                          final_url=response.final_url)
 
     # 取前 500 字符作为预览（供后续质量评估和 LLM 分析使用）
     preview = response.text[:500].strip()
@@ -40,6 +81,11 @@ async def inspect_llms(base_url: str, client: httpx.AsyncClient | None = None) -
         status_code=response.status_code,
         content_preview=preview,
         content_length=len(response.text),
+        final_url=response.final_url,
+        content_type=response.headers.get("content-type", ""),
+        structure_checks=inspect_llms_structure(
+            response.text, response.final_url, response.headers.get("content-type", ""),
+        ),
     )
     # 评估 llms.txt 的有效性（品牌提及、服务描述、引导关键词等）
     quality = assess_llms_effectiveness(result)

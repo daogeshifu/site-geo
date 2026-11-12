@@ -39,7 +39,7 @@ observation_service = ObservationService()
 
 @router.post("/audit/geo")
 async def audit_geo(request: AuditModuleRequest) -> dict:
-    """站内GEO六维就绪度（onsite-geo-v1），不含SEO、外链或平台推测分。
+    """站内GEO六维就绪度（onsite-geo-v2），不含SEO、外链或平台推测分。
 
     discovery 可复用；返回逐页证据、阻断、待核验项、覆盖率和暂定分区间。
     /audit/full 及旧模块端点继续提供历史评分，不能与此版本直接比较。

@@ -21,6 +21,7 @@ from app.services.infra.audit_evidence import PageEvidence, collect_page_evidenc
 from app.services.infra.cache import CacheService
 from app.services.orchestration.tasks import TaskService
 from app.utils.robots_parser import inspect_robot_path
+from app.utils.llms_parser import inspect_llms, inspect_llms_structure
 
 
 HTML = '''<!doctype html><html lang="en"><head><title>Example widget guide</title></head>
@@ -39,11 +40,12 @@ def discovery():
         key_pages=KeyPages(), robots=RobotsResult(url="https://example.com/robots.txt", exists=True, status_code=200,
             raw_text="User-agent: *\nAllow: /\nUser-agent: GPTBot\nDisallow: /\n"),
         sitemap=SitemapResult(exists=True, discovered_urls=["https://example.com/", "https://example.com/docs/widget"]),
-        llms=LlmsResult(url="https://example.com/llms.txt", exists=False),
+        llms=LlmsResult(url="https://example.com/llms.txt", exists=False, status_code=404),
     )
 
 
 def evidence(url="https://example.com/", html=HTML, kind="homepage", **kwargs):
+    kwargs.setdefault("response_time_ms", 100)
     return PageEvidence(url=url, final_url=url, page_type=kind, html=html, status_code=200,
         response_headers={"content-type": "text/html"}, **kwargs)
 
@@ -57,7 +59,7 @@ def check(page, rule):
 
 
 def test_scoring_definition_is_unique_and_normalized():
-    assert len({row[0] for row in RULES}) == len(RULES) == 23
+    assert len({row[0] for row in RULES}) == len(RULES) == 26
     assert sum(row[2] for row in RULES) == 100
     for key, (points, *_rest) in DIMENSIONS.items():
         assert sum(row[2] for row in RULES if row[1] == key) == points
@@ -68,7 +70,6 @@ def test_new_geo_is_invariant_to_external_and_social_signals(monkeypatch):
     source = discovery()
     baseline = audit([evidence()], source)
     source.backlinks = BacklinkOverviewResult(available=True, authority_score=100, referring_domains=99999)
-    source.llms.exists = True
     changed = HTML.replace('</head>', '<meta property="og:title" content="Great"><meta name="twitter:card" content="summary"></head>')
     item = evidence(html=changed)
     item.response_headers.update({"strict-transport-security": "max-age=31536000", "last-modified": "Wed, 11 Nov 2026 00:00:00 GMT"})
@@ -77,6 +78,121 @@ def test_new_geo_is_invariant_to_external_and_social_signals(monkeypatch):
     assert result.score_range == baseline.score_range
     assert result.coverage["evidence_coverage"] == baseline.coverage["evidence_coverage"]
     assert "citation_probability" not in result.model_dump()
+
+
+def test_llms_structure_and_speed_contribute_to_the_geo_score(monkeypatch):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    source = discovery()
+    missing = audit([evidence()], source)
+    text = "# Example\n\n> Official widget documentation.\n\n## Guides\n- [Setup](/docs/widget): Connect a widget.\n"
+    source.llms = LlmsResult(url="https://example.com/llms.txt", exists=True, status_code=200,
+        structure_checks=inspect_llms_structure(text, "https://example.com/llms.txt"))
+    complete = audit([evidence()], source)
+    assert check(complete.pages[0], "GEO-024").value == 1
+    assert complete.score > missing.score
+    slow = audit([evidence(response_time_ms=5001)], source)
+    assert check(slow.pages[0], "GEO-025").value == 0
+    assert slow.score < complete.score
+    assert complete.scoring_version == "onsite-geo-v2"
+    assert "llms_txt" not in complete.auxiliary
+
+
+@pytest.mark.parametrize("status,exists,text,expected", [
+    (404, False, "", 0), (500, False, "", None), (429, False, "", None),
+    (None, False, "", None), (200, True, "", 0),
+    (200, True, "<html><head><title>Not found</title></head><body>Fallback</body></html>", 0),
+    (200, True, "Plain text without navigation", 1 / 3),
+    (200, True, "# Example\n\nOfficial documentation.\n", 2 / 3),
+])
+def test_llms_missing_unverified_and_partial_files_stay_distinct(monkeypatch, status, exists, text, expected):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    source = discovery()
+    source.llms = LlmsResult(url="https://example.com/llms.txt", exists=exists, status_code=status,
+        structure_checks=inspect_llms_structure(text, "https://example.com/llms.txt"))
+    item = check(audit([evidence()], source).pages[0], "GEO-024")
+    assert item.value == expected
+    assert item.status == ("unknown" if expected is None else "fail" if expected == 0 else "partial")
+
+
+def test_llms_parser_uses_the_complete_file_and_rejects_html_fallback(monkeypatch):
+    from app.utils import llms_parser as module
+    text = "# Example\n\nOfficial documentation.\n\n" + "Description. " * 80 + "\n## Guides\n- [Setup](/docs/widget)\n"
+    response = SimpleNamespace(status_code=200, final_url="https://example.com/llms.txt",
+                               text=text, headers={"content-type": "text/plain"})
+    async def fetch(*args, **kwargs):
+        return response
+    monkeypatch.setattr(module, "fetch_url", fetch)
+    result = asyncio.run(inspect_llms("https://example.com/"))
+    assert "[Setup]" not in result.content_preview
+    assert all(result.structure_checks.values())
+    response.headers["content-type"] = "text/html"
+    assert asyncio.run(inspect_llms("https://example.com/")).structure_checks["readable_text"] is False
+    for target in ("#intro", "javascript:alert(1)", "https://other.example/docs", "/llms.txt", "http://[invalid"):
+        assert inspect_llms_structure(f"# Example\n\nSummary.\n- [Link]({target})", result.url)["internal_navigation"] is False
+
+
+@pytest.mark.parametrize("already_inspected", [False, True])
+def test_discovery_upgrades_only_old_preview_only_llms_snapshots(monkeypatch, already_inspected):
+    from app.services.discovery import discovery as module
+    source = discovery()
+    text = "# Example\n\nOfficial guide.\n- [Guide](/docs/widget)\n"
+    full = LlmsResult(url=source.llms.url, exists=True, status_code=200,
+                      structure_checks=inspect_llms_structure(text, source.llms.url))
+    source.llms = full if already_inspected else LlmsResult(url=source.llms.url, exists=True, status_code=200)
+    calls = []
+    async def resolve(*args):
+        return {"response": SimpleNamespace(final_url=source.final_url)}
+    async def site(*args):
+        return SimpleNamespace(site_id=1)
+    async def cached(*args, **kwargs):
+        return source
+    async def inspect(url, **kwargs):
+        calls.append(url)
+        return full
+    service = module.DiscoveryService()
+    service.asset_store = SimpleNamespace(available=True, ensure_site=site, load_cached_discovery=cached)
+    monkeypatch.setattr(service, "_resolve_target_scope", resolve)
+    monkeypatch.setattr(module, "inspect_llms", inspect)
+    result = asyncio.run(service.discover(source.url, include_backlinks=False))
+    assert result.llms.structure_checks == full.structure_checks
+    assert calls == ([] if already_inspected else [source.final_url])
+
+
+@pytest.mark.parametrize("elapsed,value", [
+    (0, 1), (800, 1), (801, .75), (1500, .75), (1501, .5),
+    (3000, .5), (3001, .25), (5000, .25), (5001, 0), (None, None), (-1, None),
+])
+def test_html_loading_speed_uses_observed_timing_and_documented_boundaries(monkeypatch, elapsed, value):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    item = check(audit([evidence(response_time_ms=elapsed)]).pages[0], "GEO-025")
+    assert item.value == value
+    assert item.evidence_type == "http_timing"
+    assert item.evidence["browser_load_and_core_web_vitals_measured"] is False
+    if value is None:
+        assert item.status == "unknown"
+
+
+@pytest.mark.parametrize("path,value", [
+    ("/docs/widget", 1), ("/docs/widget.html", 1), ("/docs/widget?utm_source=mail&gclid=1", 1),
+    ("/docs/widget#setup", 1), ("/index.php", .5), ("/docs/widget?id=7", .5),
+    ("/docs/widget?lang=zh", .5), ("/docs/widget?sessionid=secret", 0),
+    ("/docs/widget;jsessionid=secret", 0), ("/#/docs/widget", 0), ("/#!/docs/widget", 0),
+])
+def test_url_static_style_distinguishes_clean_paths_tracking_and_dynamic_routes(monkeypatch, path, value):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    item = check(audit([evidence("https://example.com" + path)]).pages[0], "GEO-026")
+    assert item.value == value
+    assert item.max_points == 2
+    assert item.blocker is False
+
+
+def test_hash_routing_is_detected_after_http_has_removed_the_fragment(monkeypatch):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    html = HTML.replace('<main>', '<main><a href="#/docs/widget">Widget route</a>')
+    result = audit([evidence(html=html)])
+    item = check(result.pages[0], "GEO-026")
+    assert item.value == 0
+    assert item.evidence["hash_route_links"] == ["https://example.com/#/docs/widget"]
 
 
 def test_robots_uses_deep_paths_and_separates_training():
@@ -311,6 +427,11 @@ def test_docs_and_frontend_describe_the_actual_new_rules():
     docs = BeautifulSoup(client.get("/api-doc").text, "html.parser")
     actual = {node["data-geo-check"]: int(node["data-points"]) for node in docs.select("[data-geo-check]")}
     assert actual == {row[0]: row[2] for row in RULES}
+    for key, (_, zh, _) in DIMENSIONS.items():
+        assert docs.select_one(f"#geo-{key}-title").get_text() == zh
+    assert docs.select_one('[data-geo-check="GEO-001"] .scoring-rule-label').get_text() == "HTTP / HTTPS"
+    assert docs.select_one('[data-geo-check="GEO-023"] .scoring-rule-label').get_text() == "JSON-LD / Schema.org"
+    assert not any("GEO-" in node.get_text() for node in docs.select("[data-geo-check]"))
     assert "不平均" in docs.text
     assert "combined_score" in docs.text
     assert "/api/v1/audit/geo" in docs.text
@@ -363,7 +484,7 @@ def test_geo_api_task_lifecycle_report_and_source_inventory(monkeypatch, tmp_pat
         assert payload["status"] == "completed", payload.get("error")
         assert payload["progress_percent"] == 100
         assert payload["step_order"] == ["discovery", "geo", "observation", "summary"]
-        assert payload["result"]["geo"]["scoring_version"] == "onsite-geo-v1"
+        assert payload["result"]["geo"]["scoring_version"] == "onsite-geo-v2"
         assert "seo" not in payload["result"]
         report = client.get(f"/api/v1/tasks/{task_id}/report")
         assert report.status_code == 200
@@ -376,7 +497,7 @@ def test_geo_api_task_lifecycle_report_and_source_inventory(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize("task_type,dimension_count,check_count", [
-    ("site_geo_only_audit", 6, 23), ("site_seo_audit", 6, 26), ("site_geo_audit", 12, 49),
+    ("site_geo_only_audit", 6, 26), ("site_seo_audit", 6, 26), ("site_geo_audit", 12, 52),
 ])
 def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
     monkeypatch, tmp_path, task_type, dimension_count, check_count
@@ -432,8 +553,8 @@ def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
 
         report = client.get(f"/api/v1/tasks/{task_id}/report")
         assert report.status_code == 200
-        for check_id in ("GEO-023", "CHK-026") if task_type == "site_geo_audit" else (
-            ("CHK-026",) if task_type == "site_seo_audit" else ("GEO-023",)
+        for check_id in ("GEO-026", "CHK-026") if task_type == "site_geo_audit" else (
+            ("CHK-026",) if task_type == "site_seo_audit" else ("GEO-026",)
         ):
             assert check_id in report.text
         if "geo" in result:
@@ -468,7 +589,7 @@ def test_v1_sync_and_historical_module_contracts_still_work(monkeypatch):
                 assert result["summary"]["scoring_version"] == "geo-audit-v3"
                 assert {"visibility", "technical", "content", "schema", "platform", "summary"} <= result.keys()
             elif module == "geo":
-                assert result["scoring_version"] == "onsite-geo-v1"
+                assert result["scoring_version"] == "onsite-geo-v2"
                 assert len(result["dimensions"]) == 6
             elif module == "seo":
                 assert len(result["coverage_checks"]) == 26
@@ -498,5 +619,5 @@ def test_combined_export_rebuilds_missing_historical_seo_summary(monkeypatch):
     geo = audit([evidence()], source).model_dump(mode="json")
     seo = asyncio.run(SeoAuditService().audit(source.url, source, page_evidence=[evidence()])).model_dump(mode="json")
     markdown = render_geo_report({"url": source.url, "geo": geo, "seo": seo, "discovery": source.model_dump(mode="json")})
-    assert "GEO-023" in markdown and "CHK-026" in markdown
+    assert all(key in markdown for key in ("GEO-024", "GEO-025", "GEO-026", "CHK-026"))
     assert "Verification queue" in markdown

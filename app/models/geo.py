@@ -6,6 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from app.models.page_fetch import PageFetchMetadata
 
+GEO_SCORING_VERSION = "onsite-geo-v2"
+
 
 class GeoCheckResult(BaseModel):
     id: str
@@ -46,7 +48,7 @@ class GeoPageResult(PageFetchMetadata):
 
 
 class GeoAuditResult(BaseModel):
-    scoring_version: str = "onsite-geo-v1"
+    scoring_version: str = GEO_SCORING_VERSION
     score_name: str = "On-site GEO readiness"
     score: float | None = None
     status: str = "provisional"

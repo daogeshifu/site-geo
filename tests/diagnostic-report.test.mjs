@@ -65,17 +65,72 @@ test('combined reports retain every SEO and GEO dimension and checklist row', ()
     geo: {
       score: 40,
       dimensions: Object.fromEntries(Array.from({ length: 6 }, (_, i) => ['g' + i, { key: 'g' + i, label: 'GEO dimension ' + i, score: 40, checks: [] }])),
-      pages: [{ url: 'https://example.com/', dimensions: { all: { checks: Array.from({ length: 23 }, (_, i) => ({ id: 'GEO-' + String(i + 1).padStart(3, '0'), label: 'GEO check ' + i, status: 'unknown' })) } } }]
+      scoring_version: 'onsite-geo-v2',
+      pages: [{ url: 'https://example.com/', dimensions: { all: { checks: Array.from({ length: 26 }, (_, i) => ({ id: 'GEO-' + String(i + 1).padStart(3, '0'), label: 'GEO check ' + i, status: 'unknown' })) } } }]
     }
   };
   const data = buildDiagnosticData(result);
   assert.equal(data.dimensions.length, 12);
-  assert.equal(data.checks.length, 49);
+  assert.equal(data.checks.length, 52);
   const html = render(result, 'en');
   assert.equal((html.match(/<article class="report-dim-card">/g) || []).length, 12);
   for (const check of data.checks) assert.ok(html.includes(check.id), check.id);
   assert.match(html, /SEO 80\/100 · GEO 40\/100/);
   assert.match(html, /not averaged/);
+  assert.equal((html.match(/class="dr-coverage-item"/g) || []).length, 52);
+});
+
+test('coverage cards retain every ID, label and state in both languages, including old 23-check reports', () => {
+  for (const count of [23, 26]) {
+    const states = ['pass', 'fail', 'partial', 'unknown', 'na'];
+    const checks = Array.from({ length: count }, (_, i) => ({ id: 'GEO-' + String(i + 1).padStart(3, '0'),
+      label: `Check ${i + 1}`, status: states[i % states.length] }));
+    for (const lang of ['zh', 'en']) {
+      const html = render({ geo: { scoring_version: count === 23 ? 'onsite-geo-v1' : 'onsite-geo-v2',
+        dimensions: { all: { checks } } } }, lang);
+      const coverage = html.split('id="diagnosis-coverage"')[1].split('id="diagnosis-dimensions"')[0];
+      assert.equal((coverage.match(/class="dr-coverage-item"/g) || []).length, count);
+      assert.doesNotMatch(coverage, /<table|查看原始证据|View raw evidence/);
+      for (const check of checks) {
+        assert.ok(coverage.includes(`data-check-id="${check.id}"`));
+        assert.ok(coverage.includes(`<strong>${check.label}</strong>`));
+        assert.ok(coverage.includes(`dr-state-${check.status}`));
+      }
+    }
+  }
+});
+
+test('six GEO dimensions use stage prefixes and concrete diagnostics without changing historical scores or IDs', () => {
+  const definitions = [
+    ['access', '访问与抓取可达性', '可获取：', 'Retrievable:', 'GEO-001', 20],
+    ['discovery', '页面发现与可索引性', '可获取：', 'Retrievable:', 'GEO-007', 15],
+    ['extraction', '正文读取与信息提取', '可理解：', 'Understandable:', 'GEO-009', 20],
+    ['answers', '内容价值与答案适配', '可引用：', 'Citable:', 'GEO-012', 25],
+    ['trust', '站内可信度与时效性', '可推荐：', 'Recommendable:', 'GEO-017', 15],
+    ['semantics', '元数据与实体语义', '可理解：', 'Understandable:', 'GEO-023', 5]
+  ];
+  const result = { geo: { score: 76.4, dimensions: Object.fromEntries(definitions.map(([key, label, , , id, weight]) =>
+    [key, { label, score: 72, weight: weight / 100, checks: [{ id, label: 'Existing diagnostic description', status: 'partial', max_points: 2 }] }])) } };
+  const original = JSON.stringify(result);
+  for (const lang of ['zh', 'en']) {
+    const data = buildDiagnosticData(result, lang);
+    for (const [key, , zhPrefix, enPrefix, id, weight] of definitions) {
+      const dimension = data.dimensions.find(item => item.key === key);
+      assert.ok(dimension.label.startsWith(lang === 'zh' ? zhPrefix : enPrefix));
+      assert.equal(dimension.score, 72);
+      assert.equal(dimension.weight, weight / 100);
+      assert.equal(data.checks.find(item => item.id === id).dimension, key);
+    }
+    const html = render(result, lang);
+    const dimensions = html.split('id="diagnosis-dimensions"')[1].split('id="diagnosis-actions"')[0];
+    assert.match(dimensions, /HTTP \/ HTTPS/);
+    assert.match(dimensions, /JSON-LD \/ Schema.org/);
+    assert.equal((dimensions.match(/class="dr-diagnostic-name"/g) || []).length, 6);
+    assert.doesNotMatch(dimensions.replace(/<[^>]*>/g, ''), /GEO-\d{3}/);
+    assert.match(html.split('id="diagnosis-coverage"')[1], /<code>GEO-001<\/code>/);
+    assert.match(dimensions, lang === 'zh' ? /实际推荐需独立验证/ : /actual recommendations need separate verification/);
+  }
+  assert.equal(JSON.stringify(result), original);
 });
 
 test('SEO issues use their own score and evidence, regardless of the combined summary', () => {
@@ -114,6 +169,52 @@ test('legacy partial SEO data renders usable empty states in both languages', ()
     assert.doesNotMatch(html, /NaN|undefined/);
   }
 });
+
+test('page preview caps merged SEO and GEO pages at eight without changing the full report data', () => {
+  const urls = Array.from({ length: 12 }, (_, index) => `https://example.com/page-${index + 1}`);
+  const result = {
+    geo: { pages: urls.slice(0, 6).map(url => page(url, check)) },
+    seo: { sampled_pages: urls.slice(3).map(url => ({ url, status_code: 200 })) }
+  };
+  const original = JSON.stringify(result);
+  const html = render(result);
+  assert.equal((html.match(/class="dr-page"/g) || []).length, 8);
+  for (const url of urls.slice(0, 8)) assert.ok(html.includes(`data-page-url="${url}"`));
+  for (const url of urls.slice(8)) assert.ok(!html.includes(`data-page-url="${url}"`));
+  assert.match(html, /已展示 8 \/ 12 个采样页面/);
+  assert.match(html, /href="#tab-site-links" data-open-site-links/);
+  for (const id of ['diagnosis-pages', 'diagnosis-snapshot']) assert.ok(html.includes(`id="${id}" open`));
+  assert.equal(buildDiagnosticData(result).pages.length, 12);
+  assert.equal(JSON.stringify(result), original);
+});
+
+for (const action of ['view-more', 'page-outside-preview']) {
+  test(`${action} opens the Site links tab without changing the URL or opening the wrong page`, () => {
+    const handlers = {};
+    let clicks = 0, focus = 0;
+    const firstPage = { dataset: { pageUrl: 'https://example.com/first' }, open: false };
+    const section = { tagName: 'DETAILS', open: true, querySelectorAll: () => [firstPage] };
+    const tab = { click: () => { clicks++; }, focus: () => { focus++; } };
+    const host = {
+      ownerDocument: { querySelector: selector => selector === '[data-tab="site-links"]' ? tab : null },
+      querySelector: selector => selector === '.diagnostic-report' ? {} : selector === '#diagnosis-pages' ? section : null,
+      addEventListener: (name, handler) => { handlers[name] = handler; }
+    };
+    const link = {
+      getAttribute: () => action === 'view-more' ? '#tab-site-links' : '#diagnosis-pages',
+      hasAttribute: name => name === (action === 'view-more' ? 'data-open-site-links' : 'data-open-pages'),
+      dataset: { targetPage: 'https://example.com/ninth' }
+    };
+    const event = new Event('click', { cancelable: true });
+    Object.defineProperty(event, 'target', { value: { closest: () => link } });
+    mountDiagnosticReport(host);
+    handlers.click(event);
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(clicks, 1);
+    assert.equal(focus, 1);
+    assert.equal(firstPage.open, false);
+  });
+}
 
 test('report navigation opens its section without triggering workspace history reload', () => {
   const handlers = {};

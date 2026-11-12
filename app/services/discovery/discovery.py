@@ -490,6 +490,10 @@ class DiscoveryService:
                     max_pages=max_pages,
                 )
                 if cached_discovery:
+                    # Older snapshots only kept a preview, which cannot verify
+                    # the complete llms.txt structure required by GEO v2.
+                    if cached_discovery.llms.exists and not cached_discovery.llms.structure_checks:
+                        cached_discovery.llms = await inspect_llms(cached_discovery.final_url, client=client)
                     logger.info(
                         "Discovery loaded from MySQL cache",
                         extra={
@@ -519,6 +523,8 @@ class DiscoveryService:
                         max_pages=max_pages,
                     )
                     if redirected_cached:
+                        if redirected_cached.llms.exists and not redirected_cached.llms.structure_checks:
+                            redirected_cached.llms = await inspect_llms(redirected_cached.final_url, client=client)
                         logger.info(
                             "Discovery loaded from redirected MySQL cache",
                             extra={

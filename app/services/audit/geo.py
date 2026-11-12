@@ -1,4 +1,4 @@
-"""On-site GEO readiness: 23 uniquely owned checks, six fixed dimensions.
+"""On-site GEO readiness: 26 uniquely owned checks, six fixed dimensions.
 
 No external authority, social-card, training-policy or platform probability enters
 this score. Semantic checks are explicitly structural proxies, not fact checking.
@@ -7,45 +7,47 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import time
 from collections import Counter
 from datetime import date
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, unquote, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
 from app.core.config import settings
 from app.models.discovery import DiscoveryResult
-from app.models.geo import GeoAuditResult, GeoCheckResult, GeoDimensionResult, GeoPageResult
+from app.models.geo import GEO_SCORING_VERSION, GeoAuditResult, GeoCheckResult, GeoDimensionResult, GeoPageResult
 from app.services.audit.scoring import ScoringService
 from app.services.discovery.discovery import DiscoveryService
 from app.services.google_crawler.google_render import GoogleRenderService
 from app.services.infra.audit_evidence import PageEvidence, collect_page_evidence, sample_candidates
 from app.utils.robots_parser import inspect_robot_path
+from app.utils.llms_parser import inspect_llms_structure
 from app.utils.url_utils import is_internal_url, normalize_url
 
 
 DIMENSIONS = {
-    "access": (20, "访问与抓取可达性", "Access and crawlability"),
-    "discovery": (15, "页面发现与可索引性", "Discovery and indexability"),
-    "extraction": (20, "正文读取与信息提取", "Content extraction"),
-    "answers": (25, "内容价值与答案适配", "Content and answer readiness"),
-    "trust": (15, "站内可信度与时效性", "On-site trust and freshness"),
-    "semantics": (5, "元数据与实体语义", "Metadata and entity semantics"),
+    "access": (20, "可获取：访问与抓取可达性", "Retrievable: Access and crawlability"),
+    "discovery": (15, "可获取：页面发现与可索引性", "Retrievable: Discovery and indexability"),
+    "extraction": (20, "可理解：正文读取与信息提取", "Understandable: Content extraction"),
+    "answers": (25, "可引用：内容价值与答案适配", "Citable: Content and answer readiness"),
+    "trust": (15, "可推荐：站内可信度与时效性", "Recommendable: On-site trust and freshness"),
+    "semantics": (5, "可理解：元数据与实体语义", "Understandable: Metadata and entity semantics"),
 }
 
 # id, dimension, maximum points, Chinese label, English label
 RULES = [
-    ("GEO-001", "access", 5, "HTTP与HTTPS可用", "HTTP and HTTPS availability"),
-    ("GEO-002", "access", 7, "目标路径检索爬虫规则", "Search crawler policy for this path"),
-    ("GEO-003", "access", 5, "当前抓取无访问挑战", "No access challenge in this fetch"),
-    ("GEO-004", "access", 3, "抓取稳定性", "Repeated-fetch stability"),
-    ("GEO-005", "discovery", 5, "可抓取导航与内链", "Crawlable navigation and internal links"),
-    ("GEO-006", "discovery", 4, "发现机制有效覆盖", "Discovery mechanism coverage"),
-    ("GEO-007", "discovery", 3, "规范网址与跳转一致", "Canonical and redirect consistency"),
-    ("GEO-008", "discovery", 3, "索引与摘要指令", "Indexing and snippet directives"),
+    ("GEO-001", "access", 4, "HTTP与HTTPS可用", "HTTP and HTTPS availability"),
+    ("GEO-002", "access", 6, "目标路径检索爬虫规则", "Search crawler policy for this path"),
+    ("GEO-003", "access", 4, "当前抓取无访问挑战", "No access challenge in this fetch"),
+    ("GEO-004", "access", 2, "抓取稳定性", "Repeated-fetch stability"),
+    ("GEO-005", "discovery", 3, "可抓取导航与内链", "Crawlable navigation and internal links"),
+    ("GEO-006", "discovery", 3, "发现机制有效覆盖", "Discovery mechanism coverage"),
+    ("GEO-007", "discovery", 2, "规范网址与跳转一致", "Canonical and redirect consistency"),
+    ("GEO-008", "discovery", 2, "索引与摘要指令", "Indexing and snippet directives"),
     ("GEO-009", "extraction", 10, "核心正文可提取", "Extractable main content"),
     ("GEO-010", "extraction", 6, "关键信息载体完整", "Complete information containers"),
     ("GEO-011", "extraction", 4, "原始与渲染正文一致", "Raw and rendered content consistency"),
@@ -61,6 +63,9 @@ RULES = [
     ("GEO-021", "semantics", 2, "标题及语言元数据", "Title and language metadata"),
     ("GEO-022", "semantics", 1, "实体命名及标识一致", "Entity naming and identifiers"),
     ("GEO-023", "semantics", 2, "适用Schema及正文一致性", "Relevant schema and visible alignment"),
+    ("GEO-024", "discovery", 3, "llms.txt可用与导航完整", "Usable llms.txt and navigation structure"),
+    ("GEO-025", "access", 4, "页面加载速度（HTML获取）", "Page loading speed (HTML fetch)"),
+    ("GEO-026", "discovery", 2, "URL静态化与参数规范", "Static-style URLs and parameter hygiene"),
 ]
 RULE_MAP = {row[0]: row for row in RULES}
 
@@ -123,7 +128,7 @@ def _canonical(url):
 
 
 class GeoAuditService:
-    SCORING_VERSION = "onsite-geo-v1"
+    SCORING_VERSION = GEO_SCORING_VERSION
 
     def __init__(self, discovery_service=None):
         self.discovery_service = discovery_service or DiscoveryService()
@@ -201,6 +206,7 @@ class GeoAuditService:
         if mode == "premium":
             notes.append(self._label("本版GEO评分保持规则驱动，AI配置不改变分值。", "GEO scoring remains deterministic; LLM configuration does not alter scores.", feedback_lang))
         return GeoAuditResult(
+            scoring_version=self.SCORING_VERSION,
             score_name=self._label("站内 GEO 就绪度", "On-site GEO readiness", feedback_lang),
             score=score, score_range=bounds, status=status, readiness_status=readiness, provisional=provisional,
             dimensions=dimensions, pages=pages, blockers=blockers, issues=list(dict.fromkeys(issues)),
@@ -217,7 +223,7 @@ class GeoAuditService:
                 "total_site_pages": None, "population_note": "Candidate coverage is not whole-site coverage.",
             },
             auxiliary={
-                "scored": False, "llms_txt": {"exists": resolved.llms.exists, "url": resolved.llms.url},
+                "scored": False,
                 "external_authority": "Excluded from GEO scoring.",
                 "social_cards_security_headers": "Auxiliary SEO/technical signals; excluded from GEO scoring.",
                 "training_permission": "Separate from search/retrieval permissions; not scored.",
@@ -253,14 +259,14 @@ class GeoAuditService:
     def _page(self, item: PageEvidence, discovery, lang, discoverable):
         checks: dict[str, GeoCheckResult] = {}
 
-        def put(key, value=None, *, evidence=None, na=False, blocker=False, proxy=False, recommendation=""):
+        def put(key, value=None, *, evidence=None, na=False, blocker=False, proxy=False, recommendation="", evidence_type=None):
             _, dim, points, zh, en = RULE_MAP[key]
             numeric = None if value is None else max(0., min(1., float(value)))
             state = "na" if na else "unknown" if numeric is None else "pass" if numeric == 1 else "fail" if numeric == 0 else "partial"
             checks[key] = GeoCheckResult(
                 id=key, dimension=dim, label=self._label(zh, en, lang), max_points=points,
                 value=None if na else numeric, status=state, evidence=evidence or {}, blocker=blocker,
-                evidence_type="structural_proxy" if proxy else "observed_html",
+                evidence_type=evidence_type or ("structural_proxy" if proxy else "observed_html"),
                 recommendation=recommendation or self._label(f"核对并修复：{zh}。", f"Review and improve: {en}.", lang),
             )
 
@@ -273,6 +279,61 @@ class GeoAuditService:
         put("GEO-001", (1 if item.final_url.startswith("https://") else .5) if reachable else 0 if item.error or item.status_code is not None else None,
             evidence={"status_code": item.status_code, "final_url": item.final_url, "error": item.error}, blocker=bool(item.error) or item.status_code is not None and not reachable)
         put("GEO-004", evidence={"reason": "A single fetch cannot establish sustained availability.", "fetched_at": item.fetched_at})
+        llms = discovery.llms
+        structure = llms.structure_checks
+        # Only a complete older preview can stand in for the complete file.
+        if not structure and llms.content_preview and llms.content_length == len(llms.content_preview):
+            structure = inspect_llms_structure(llms.content_preview, llms.final_url or llms.url, llms.content_type or "")
+        llms_value = None
+        if llms.status_code is not None and 400 <= llms.status_code < 500 and llms.status_code != 429:
+            llms_value = 0
+        elif llms.exists and llms.status_code is not None and 200 <= llms.status_code < 300:
+            if structure.get("readable_text") is False:
+                llms_value = 0
+            elif all(key in structure for key in ("readable_text", "title_and_summary", "internal_navigation")):
+                llms_value = sum(structure[key] for key in ("readable_text", "title_and_summary", "internal_navigation")) / 3
+        put("GEO-024", llms_value, evidence_type="observed_file",
+            evidence={"url": llms.url, "final_url": llms.final_url, "status_code": llms.status_code,
+                      "structure_checks": structure, "error": llms.error,
+                      "scope": "Complete-file structure, not verified use by an AI platform."},
+            recommendation=self._label("提供可访问的纯文本 llms.txt，包含站点标题、简介和站内内容链接。", "Provide a readable text llms.txt with a site title, summary, and internal content links.", lang))
+        elapsed = item.response_time_ms
+        valid_time = (reachable and isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool)
+                      and math.isfinite(elapsed) and elapsed >= 0)
+        speed = next((value for limit, value in ((800, 1), (1500, .75), (3000, .5), (5000, .25)) if elapsed <= limit), 0) if valid_time else None
+        put("GEO-025", speed, evidence_type="http_timing",
+            evidence={"response_time_ms": elapsed, "measurement": "HTML fetch duration, including redirects and response body",
+                      "thresholds_ms": {"full": 800, "three_quarters": 1500, "half": 3000, "quarter": 5000},
+                      "browser_load_and_core_web_vitals_measured": False},
+            recommendation=self._label("缩短 HTML 获取耗时：优化服务端响应、缓存和重定向；此项不含图片与脚本的完整加载时间。", "Reduce HTML fetch time with server response, cache, and redirect improvements; this measure excludes full image and script loading.", lang))
+        parsed_url = urlparse(item.final_url)
+        query_keys = [key.lower() for key, _ in parse_qsl(parsed_url.query, keep_blank_values=True)]
+        tracking = {"gclid", "dclid", "fbclid", "msclkid", "yclid", "_ga", "_gl"}
+        content_keys = sorted({key for key in query_keys if not key.startswith("utm_") and key not in tracking})
+        session_keys = {"sid", "session", "sessionid", "session_id", "phpsessid", "jsessionid"}
+        session = bool(session_keys & set(content_keys)) or bool(re.search(
+            r";jsessionid=", unquote(parsed_url.path + ";" + parsed_url.params), re.I,
+        ))
+        raw_soup = BeautifulSoup(item.html, "lxml") if item.html is not None else None
+        # HTTP and candidate normalization discard fragments. Also inspect
+        # observed same-page links so real hash routers remain detectable.
+        route_links = []
+        if raw_soup is not None:
+            for link in raw_soup.find_all("a", href=True):
+                target = urljoin(item.final_url, link["href"])
+                if (urlparse(target).fragment.startswith(("/", "!/"))
+                        and _canonical(target) == _canonical(item.final_url)):
+                    route_links.append(target)
+        hash_route = bool(route_links) or any(urlparse(url).fragment.startswith(("/", "!/")) for url in (item.url, item.final_url))
+        dynamic_entry = bool(re.search(r"\.(?:php\d?|asp|aspx|jsp|cgi)(?:/|$)", parsed_url.path, re.I))
+        static_value = 0 if session or hash_route else .5 if content_keys or dynamic_entry else 1
+        put("GEO-026", static_value, evidence_type="observed_url",
+            evidence={"final_url": item.final_url, "content_parameter_keys": content_keys,
+                      "ignored_tracking_keys": sorted(set(query_keys) - set(content_keys)),
+                      "dynamic_entry": dynamic_entry, "session_identifier": session, "hash_route": hash_route,
+                      "hash_route_links": route_links[:5],
+                      "method": "URL-shape check only; clean paths need no .html suffix and do not establish SSR."},
+            recommendation=self._label("为公开内容提供稳定的路径网址，减少内容参数，移除会话标识与哈希路由；无需强制添加 .html 后缀。", "Use stable path URLs for public content, reduce content parameters, and remove session identifiers and hash routes; no .html suffix is required.", lang))
         content_type = item.response_headers.get("content-type", "").lower()
         if item.html is None or content_type and "html" not in content_type:
             for key, *_ in RULES:
@@ -280,7 +341,6 @@ class GeoAuditService:
                     put(key, evidence={"reason": "Raw HTML unavailable or unsupported MIME type; no inferred pass.", "error": item.error, "content_type": content_type})
         else:
             soup, root, text = main_document(item.html)
-            raw_soup = BeautifulSoup(item.html, "lxml")
             nodes, schema_errors = _schema(raw_soup)
             # Type inference uses the current page rather than site-wide schema.
             schema_types = set().union(*(_types(node) for node in nodes)) if nodes else set()

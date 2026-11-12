@@ -48,3 +48,14 @@ def test_geo_does_not_reuse_reports_from_navigation_extraction_bug(tmp_path, mon
     service = CacheService(cache_dir=str(tmp_path))
     current_key, _, _ = service.build_cache_key("https://example.com", "standard", task_type=task_type)
     assert current_key != previous_key
+
+
+@pytest.mark.parametrize("task_type", ["site_geo_only_audit", "site_geo_audit", "site_seo_audit"])
+def test_scoring_upgrade_invalidates_geo_results_without_invalidating_seo(tmp_path, monkeypatch, task_type):
+    from app.services.infra import cache as module
+    service = CacheService(cache_dir=str(tmp_path))
+    monkeypatch.setattr(module, "GEO_SCORING_VERSION", "onsite-geo-v1")
+    previous_key, _, _ = service.build_cache_key("https://example.com", "standard", task_type=task_type)
+    monkeypatch.setattr(module, "GEO_SCORING_VERSION", "onsite-geo-v2")
+    current_key, _, _ = service.build_cache_key("https://example.com", "standard", task_type=task_type)
+    assert (current_key == previous_key) is (task_type == "site_seo_audit")
