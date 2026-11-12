@@ -129,6 +129,8 @@ def _canonical(url):
 
 class GeoAuditService:
     SCORING_VERSION = GEO_SCORING_VERSION
+    DIMENSIONS = DIMENSIONS
+    RULES = RULES
 
     def __init__(self, discovery_service=None):
         self.discovery_service = discovery_service or DiscoveryService()
@@ -498,9 +500,9 @@ class GeoAuditService:
 
     def _aggregate(self, pages, page_weights, lang):
         output = {}
-        for key, (points, zh, en) in DIMENSIONS.items():
+        for key, (points, zh, en) in self.DIMENSIONS.items():
             combined = []
-            for rule_id, _, maximum, label_zh, label_en in (row for row in RULES if row[1] == key):
+            for rule_id, _, maximum, label_zh, label_en in (row for row in self.RULES if row[1] == key):
                 pairs = [(next(c for c in page.dimensions[key].checks if c.id == rule_id), weight) for page, weight in zip(pages, page_weights)]
                 applicable = [(c, w) for c, w in pairs if c.status != "na"]
                 denominator = sum(w for _, w in applicable)
@@ -512,7 +514,10 @@ class GeoAuditService:
                 state = "na" if not applicable else "unknown" if value is None else "partial" if known_fraction < 1 or 0 < value < 1 else "pass" if value == 1 else "fail"
                 combined.append(GeoCheckResult(id=rule_id, dimension=key, label=self._label(label_zh, label_en, lang), max_points=maximum,
                     status=state, value=value, evidence={"page_status_counts": dict(counts), "measured_fraction": round(known_fraction, 6)},
-                    recommendation=next((c.recommendation for c, _ in pairs if c.status in {"partial", "fail"}), ""),
+                    recommendation=next((c.recommendation for c, _ in pairs if c.status in {"partial", "fail"}),
+                        next((c.recommendation for c, _ in pairs if c.recommendation), "")),
+                    impact=next((c.impact for c, _ in pairs if c.impact), ""),
+                    acceptance_criteria=next((c.acceptance_criteria for c, _ in pairs if c.acceptance_criteria), ""),
                     evidence_type=next((c.evidence_type for c, _ in pairs), "observed_html"), blocker=any(c.blocker for c, _ in pairs)))
             applicable_points = sum(c.max_points for c in combined if c.status != "na")
             measured_points = sum(c.max_points * c.evidence["measured_fraction"] for c in combined if c.status != "na")

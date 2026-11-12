@@ -108,9 +108,9 @@ async def build_task_report_response(task_id: str) -> PlainTextResponse:
     # 任务未完成时拒绝导出，返回 409 Conflict
     if task.status != "completed" or not task.result:
         raise AppError(409, "task is not completed yet")
-    if task.result.get("geo"):
+    if task.result.get("sgeo") or task.result.get("geo"):
         markdown = render_geo_report(task.result)
-        filename = f"onsite-geo-report-{task.domain}.md"
+        filename = f"{'sgeo' if task.result.get('sgeo') else 'onsite-geo'}-report-{task.domain}.md"
         return PlainTextResponse(content=markdown, media_type="text/markdown; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
     if task.task_type == "site_seo_audit":

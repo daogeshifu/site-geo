@@ -6,10 +6,10 @@
 |---|---|---|
 | `site_geo_only_audit` | 网站 GEO 审计，页面首位并默认选中 | 新版站内六维 |
 | `site_seo_audit` | 网站 SEO 审计，API省略类型时的兼容默认 | 原SEO六维，`seo-audit-v1` |
-| `site_geo_audit` | 网站 SEO+GEO 审计，沿用旧标识 | 分别输出SEO与新版GEO，共享页面证据，不平均 |
+| `site_geo_audit` | 网站 SGEO 诊断，沿用旧标识 | 六维、30项唯一检查、统一总分，见[SGEO规则](onsite-sgeo-audit.md) |
 | `site_content_audit` | 网站内容审计 | 保留单篇内容评分 |
 
-纯GEO不调用外链服务；SEO/组合审计可取得外链支持数据。OG/Twitter卡片保留在SEO技术支持分中；外链保留在SEO品牌权威支持信号中，并非独立一级SEO维度。两者均不参与新版GEO。
+GEO与SGEO不调用外链服务；独立SEO可取得外链支持数据。OG/Twitter卡片保留在SEO技术支持分中；外链保留在SEO品牌权威支持信号中，并非独立一级SEO维度。两者均不参与新版GEO或SGEO。
 
 同步新版端点为 `POST /api/v1/audit/geo`，支持已有 `discovery`。历史 `/audit/full`、`/audit/visibility`、`/audit/technical`、`/audit/content`、`/audit/schema`、`/audit/platform` 仍保留 `geo-audit-v3` 模块算法，不可和新版分数横向比较。
 
@@ -97,14 +97,13 @@ HTTP失败、当前访问挑战、无核心正文、noindex及目标检索主体
 | `result.geo.coverage` | 采样数量、已发现候选量、页面类型、样本权重、证据覆盖率、未知及阻断比例；全站总量未知时为null |
 | `result.geo.auxiliary` | 不计分的授权/外部权威/真实索引及引用说明；llms.txt已移入GEO-024计分 |
 | `summary.geo_score` | 新版GEO分，`composite_geo_score`仅为兼容别名 |
-| `summary.seo_score` | 组合任务中的独立SEO分，纯GEO为null |
-| `summary.combined_score` | 始终null，不合成总分 |
-| `result.seo_summary` | 组合任务中的独立SEO摘要 |
+| `summary.seo_score` | 纯GEO为null；新SGEO任务不返回此字段 |
+| `summary.combined_score` | 纯GEO为null；新SGEO任务为统一SGEO分的别名 |
 | `result.observation` | 独立观测，不改变分数 |
 
 ## 复用与运行限制
 
-发现快照、源码、HTTP抓取证据在SEO+GEO中共享。先读取已有源码；证据丢失或没有捕获时才抓取一次并交给两种引擎。SEO额外的域名变体检查和可选浏览器测量为不同目的的请求。
+发现快照、源码、HTTP抓取证据可复用于SGEO。先读取已有源码；证据丢失或没有捕获时才重新抓取。SGEO复用共用规则的观察结果并补充搜索所需信号，以自己的六维权重计分；独立SEO的域名变体检查不属于SGEO流程。
 
 缓存隔离任务类型、评分版本、页面数量、目标语言、报告语言、模式及GEO渲染开关。新版任务不会复用历史GEO评分缓存；`force_refresh=true`跳过结果缓存及站点快照缓存。
 

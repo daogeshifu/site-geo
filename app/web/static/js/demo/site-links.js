@@ -6,7 +6,7 @@ const display = value => value == null || value === '' ? '未记录' : String(va
 const safeUrl = value => { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : '#'; } catch { return '#'; } };
 const status = page => page.status_code ? String(page.status_code) : page.has_snapshot ? '未记录' : '未采样';
 const tone = page => page.status_code >= 400 ? 'danger' : page.status_code >= 300 ? 'warn' : page.status_code >= 200 ? 'success' : 'neutral';
-const sourceNames = { discovery: '关键页发现', seo_sample: 'SEO 采样', full_audit: '扩展采样', sitemap: 'Sitemap', internal_link: '站内链接' };
+const sourceNames = { discovery: '关键页发现', seo_sample: 'SEO 采样', geo_sample: 'GEO 采样', sgeo_sample: 'SGEO 采样', full_audit: '扩展采样', sitemap: 'Sitemap', internal_link: '站内链接' };
 const row = (label, value) => `<div><dt>${esc(label)}</dt><dd>${esc(display(value))}</dd></div>`;
 
 export function createSiteLinksExplorer({ host, fetchApi }) {

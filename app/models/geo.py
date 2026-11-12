@@ -18,6 +18,8 @@ class GeoCheckResult(BaseModel):
     value: float | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
     recommendation: str = ""
+    impact: str = ""
+    acceptance_criteria: str = ""
     evidence_type: str = "observed_html"
     blocker: bool = False
 

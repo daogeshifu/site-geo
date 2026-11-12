@@ -1,8 +1,8 @@
 import { escapeHtml as e, tx } from './shared.js';
 import {
   buildDiagnosticData, displayNumber as n, displayPercent as pct,
-  geoDimensionName, platformPolicies, reportState
-} from './diagnostic-data.js?v=20261112-geo-labels';
+  geoDimensionName, sgeoDimensionName, platformPolicies, reportState
+} from './diagnostic-data.js?v=20261112-sgeo';
 
 const cleanList = items => [...new Set((items || []).filter(Boolean))];
 const safeLink = (url, label = url) => /^https?:\/\//i.test(url || '')
@@ -46,18 +46,21 @@ function renderOverview(task, data, lang) {
   const result = task.result || {}, discovery = result.discovery || {}, geo = data.geo, seo = data.seo;
   const summary = seo && !geo ? result.summary || {} : result.seo_summary || {};
   const scores = [
+    ...(data.sgeo ? [{ label: tx(lang, 'SGEO 搜索就绪度', 'SGEO search readiness'), score: data.sgeo.score, status: data.sgeo.readiness_status || data.sgeo.status, note: data.sgeo.provisional ? tx(lang, '暂定评分', 'Provisional score') : data.sgeo.scoring_version }] : []),
     ...(seo ? [{ label: tx(lang, 'SEO 健康分', 'SEO health score'), score: seo.overall_score ?? seo.score ?? summary.overall_score, status: seo.status || summary.status, note: 'seo-audit-v1' }] : []),
-    ...(geo ? [{ label: tx(lang, '站内 GEO 就绪度', 'On-site GEO readiness'), score: geo.score, status: geo.readiness_status || geo.status, note: geo.provisional ? tx(lang, '暂定评分', 'Provisional score') : geo.scoring_version }] : [])
+    ...(geo && !data.sgeo ? [{ label: tx(lang, '站内 GEO 就绪度', 'On-site GEO readiness'), score: geo.score, status: geo.readiness_status || geo.status, note: geo.provisional ? tx(lang, '暂定评分', 'Provisional score') : geo.scoring_version }] : [])
   ];
-  const title = tx(lang, seo && geo ? '网站 SEO+GEO 诊断报告' : seo ? '网站 SEO 诊断报告' : '网站 GEO 诊断报告',
-    seo && geo ? 'Website SEO + GEO report' : seo ? 'Website SEO report' : 'Website GEO report');
+  const title = tx(lang, data.sgeo ? '网站 SGEO 诊断报告' : seo && geo ? '历史 SEO+GEO 诊断报告' : seo ? '网站 SEO 诊断报告' : '网站 GEO 诊断报告',
+    data.sgeo ? 'Website SGEO diagnostic report' : seo && geo ? 'Historical SEO + GEO report' : seo ? 'Website SEO report' : 'Website GEO report');
   const description = result.summary?.summary || tx(lang, '从已采集的页面证据中定位优化事项。', 'Find improvements grounded in the collected page evidence.');
   return `<header class="dr-heading"><div><h2>${title}</h2><p>${safeLink(task.url || discovery.final_url)}${task.completed_at ? `<span>${e(task.completed_at.replace('T', ' ').slice(0, 16))} UTC</span>` : ''}</p></div>
     <span class="dr-edition">${tx(lang, '诊断结果', 'Diagnostic results')}<b>${data.dimensions.length} ${tx(lang, '个维度', 'dimensions')}</b></span></header>
     <section class="dr-overview" id="diagnosis-overview">
       <div class="dr-score-ledger">${scores.map(score => `<div class="dr-score-entry"><span>${score.label}</span><div class="dr-score-value"><strong>${n(score.score)}</strong><small>/100</small></div>${chip(score.status, lang)}<small>${e(score.note || '')}</small></div>`).join('')}</div>
       <div class="dr-overview-copy"><h3>${e(discovery.homepage?.title || discovery.domain || task.domain || tx(lang, '站点诊断概览', 'Site diagnosis'))}</h3><p>${e(description)}</p>
-        <div class="dr-scope-notice">${geo && seo
+        <div class="dr-scope-notice">${data.sgeo
+          ? tx(lang, '从发现、抓取到理解、引用，以一套检查衡量搜索与生成式引擎的共同就绪度。', 'One rubric covers discovery, crawling, understanding and citation readiness across search and generative engines.')
+          : geo && seo
           ? `SEO ${n(seo.overall_score)}/100 · GEO ${n(geo.score)}/100 — ${tx(lang, '两套独立评分，共享页面证据；分数不平均。', 'Independent SEO results and GEO readiness, sharing page evidence. Scores are not averaged.') }`
           : geo ? tx(lang, '站内就绪度不代表实际收录、AI 引用概率或事实核查结果。', 'On-site readiness does not establish indexing, AI citation probability, or factual accuracy.')
             : tx(lang, '基于采样页面的搜索健康检查，先处理阻断和高优先级问题。', 'Search health checks from sampled pages. Resolve blockers and high-priority issues first.')}</div>
@@ -67,10 +70,10 @@ function renderOverview(task, data, lang) {
           <div><strong>${data.pending.length}</strong><span>${tx(lang, '待核验事项', 'Unverified checks')}</span></div>
           <div><strong>${data.pages.length}</strong><span>${tx(lang, '采样页面', 'Sampled pages')}</span></div>
         </div>
-        ${geo ? `<p class="dr-score-bounds">${tx(lang, 'GEO 证据覆盖率', 'GEO evidence coverage')} <b>${pct(geo.coverage?.evidence_coverage)}</b>
+        ${geo ? `<p class="dr-score-bounds">${tx(lang, '证据覆盖率', 'Evidence coverage')} <b>${pct(geo.coverage?.evidence_coverage)}</b>
           <span>${tx(lang, '分数区间', 'Score bounds')} ${(geo.score_range || []).map(n).join('–') || '—'}</span>
           <span>${geo.coverage?.blocked_pages ?? 0} ${tx(lang, '个阻断页面', 'blocked pages')}</span></p>` : ''}
-      </div>${radar(data.dimensions.filter(d => d.engine === (geo ? 'GEO' : 'SEO')), lang)}
+      </div>${radar(data.dimensions.filter(d => d.engine === (data.sgeo ? 'SGEO' : geo ? 'GEO' : 'SEO')), lang)}
     </section>`;
 }
 
@@ -81,7 +84,7 @@ function evidenceText(value) {
 }
 
 function issueRows(issues, lang) {
-  return issues.map(item => `<tr data-issue-row data-engine="${item.engine}" data-priority="${e(item.priority || '')}" data-search="${e([item.label, item.id, item.category, item.summary, evidenceText(item.evidence), item.recommendation].join(' ').toLowerCase())}">
+  return issues.map(item => `<tr data-issue-row data-engine="${item.engine}" data-dimension="${e(item.dimension || '')}" data-priority="${e(item.priority || '')}" data-search="${e([item.label, item.id, item.category, item.summary, evidenceText(item.evidence), item.recommendation].join(' ').toLowerCase())}">
     <td><strong class="issue-check-title">${e(item.label)}</strong><span class="issue-meta"><span>${e(item.category || item.engine)}</span><code>${e(item.id)}</code></span><span class="dr-engine">${item.engine}</span></td>
     <td>${priority(item.priority)}${item.blocker ? `<span class="dr-blocker-label">${tx(lang, '关键阻断', 'Blocker')}</span>` : ''}</td>
     <td class="audit-cell-copy"><strong>${e(item.summary || item.label)}</strong>${item.affected_urls?.length ? `<p>${tx(lang, '影响', 'Affects')} ${item.affected_urls.length} ${tx(lang, '个采样页面', 'sampled pages')} · <a href="#diagnosis-pages" data-open-pages data-target-page="${e(item.affected_urls[0])}">${tx(lang, '查看页面证据', 'View page evidence')}</a></p>` : ''}
@@ -102,6 +105,7 @@ function renderIssues(data, lang) {
     <div class="dr-filters">
       <label><span class="dr-sr-only">${tx(lang, '搜索问题', 'Search issues')}</span><input type="search" data-issue-search placeholder="${tx(lang, '搜索检查项、证据或建议', 'Search checks, evidence, or recommendations')}"></label>
       ${data.geo && data.seo ? `<label><span class="dr-sr-only">${tx(lang, '诊断类型', 'Audit type')}</span><select data-issue-engine><option value="">${tx(lang, '全部类型', 'All types')}</option><option>SEO</option><option>GEO</option></select></label>` : ''}
+      ${data.sgeo ? `<label><span class="dr-sr-only">${tx(lang, '诊断维度', 'Dimension')}</span><select data-issue-dimension><option value="">${tx(lang, '全部维度', 'All dimensions')}</option>${data.dimensions.map(d => `<option value="${e(d.key)}">${e(d.label)}</option>`).join('')}</select></label>` : ''}
       <label><span class="dr-sr-only">${tx(lang, '优先级', 'Priority')}</span><select data-issue-priority><option value="">${tx(lang, '全部优先级', 'All priorities')}</option>${['P0', 'P1', 'P2', 'P3'].map(p => `<option>${p}</option>`).join('')}</select></label>
       <span data-issue-count role="status" aria-live="polite">${data.issues.length} / ${data.issues.length}</span>
     </div><div class="audit-table-wrap issue-table-wrap" tabindex="0" role="region" aria-label="${tx(lang, '诊断问题表，可横向滚动', 'Diagnostic issues, scroll horizontally')}">
@@ -115,40 +119,41 @@ function renderCoverage(data, lang) {
   return `<details class="report-section collapsible-section coverage-section" id="diagnosis-coverage">
     <summary class="dr-section-head"><div><h3>${tx(lang, '完整覆盖清单', 'Complete coverage checklist')}<span class="section-count">${data.checks.length}</span></h3>
       <p>${tx(lang, '通过', 'Pass')} ${data.counts.pass} · ${tx(lang, '待整改', 'Needs work')} ${data.counts.fail} · ${tx(lang, '部分满足', 'Partial')} ${data.counts.partial} · ${tx(lang, '待核验', 'Unverified')} ${data.counts.unknown} · ${tx(lang, '不适用', 'N/A')} ${data.counts.na}</p></div>
-      <a class="checklist-doc-link" href="/api-doc#${data.geo ? 'geo-scoring' : 'seo-checklist'}" target="_blank" rel="noreferrer">${tx(lang, '检测清单说明', 'Checklist guide')}</a></summary>
+      <a class="checklist-doc-link" href="/api-doc#${data.sgeo ? 'sgeo-scoring' : data.geo ? 'geo-scoring' : 'seo-checklist'}" target="_blank" rel="noreferrer">${tx(lang, '检测清单说明', 'Checklist guide')}</a></summary>
     ${checks.length ? `<ul class="dr-coverage-grid" aria-label="${tx(lang, '完整检查清单', 'Complete checklist')}">${checks.map(check => `<li class="dr-coverage-item" data-check-id="${e(check.id)}">
       <code>${e(check.id)}</code>${chip(check.status, lang)}<strong>${e(check.check || check.label)}</strong>
     </li>`).join('')}</ul>` : empty(tx(lang, '此历史结果未保存检查清单，可重新诊断以补充。', 'This historical result has no checklist. Run a new audit to collect one.'))}</details>`;
 }
 
 function renderDimensions(data, lang) {
-  return `<section class="report-section dimensions-section" id="diagnosis-dimensions">${heading(tx(lang, '维度评估', 'Scored dimensions'), tx(lang, 'SEO 与 GEO 各自计分；展开查看权重、计分依据与建议。', 'SEO and GEO are scored separately. Expand for weights, scoring evidence, and recommendations.'), data.dimensions.length)}
-    <div class="dr-dimension-groups">${['SEO', 'GEO'].filter(engine => data.dimensions.some(d => d.engine === engine)).map(engine => `<div><div class="dr-group-heading"><h4>${engine === 'SEO' ? tx(lang, 'SEO 搜索健康', 'SEO search health') : tx(lang, 'GEO 站内就绪度', 'GEO on-site readiness')}</h4><span>${engine === 'GEO' ? e(data.geo.scoring_version || tx(lang, '版本未记录', 'Version not recorded')) : 'seo-audit-v1'}</span></div>
+  const evidenceEngine = engine => engine !== 'SEO';
+  return `<section class="report-section dimensions-section" id="diagnosis-dimensions">${heading(tx(lang, '维度评估', 'Scored dimensions'), data.sgeo ? tx(lang, '六个维度合计 100%；每项检查只归属一个维度，展开查看计分与改进建议。', 'Six dimensions weighted to 100%. Each check belongs to one dimension. Expand for scoring and recommendations.') : tx(lang, '展开查看权重、计分依据与建议。', 'Expand for weights, scoring evidence, and recommendations.'), data.dimensions.length)}
+    <div class="dr-dimension-groups">${['SGEO', 'SEO', 'GEO'].filter(engine => data.dimensions.some(d => d.engine === engine)).map(engine => `<div>${data.sgeo ? '' : `<div class="dr-group-heading"><h4>${engine === 'SEO' ? tx(lang, 'SEO 搜索健康', 'SEO search health') : tx(lang, 'GEO 站内就绪度', 'GEO on-site readiness')}</h4><span>${engine === 'GEO' ? e(data.geo.scoring_version || tx(lang, '版本未记录', 'Version not recorded')) : 'seo-audit-v1'}</span></div>`}
     <div class="report-dim-grid">${data.dimensions.filter(d => d.engine === engine).map(d => {
-      const owned = data.checks.filter(check => check.engine === engine && (engine === 'GEO' ? check.dimension === d.key : check.category === d.label));
+      const owned = data.checks.filter(check => check.engine === engine && (evidenceEngine(engine) ? check.dimension === d.key : check.category === d.label));
       const score = d.score == null ? null : Math.max(0, Math.min(100, Number(d.score)));
       return `<article class="report-dim-card"><div class="report-dim-head"><h5 class="report-dim-name">${e(d.label)}</h5><span class="report-dim-pill">${pct(d.normalized_weight)}</span></div>
-        <div class="report-dim-scoreline"><span class="score">${n(score)}<small>/100</small></span>${engine === 'GEO' ? `<span>${tx(lang, '证据', 'Evidence')} ${pct(d.evidence_coverage)}</span>` : chip(d.status, lang)}</div>
+        <div class="report-dim-scoreline"><span class="score">${n(score)}<small>/100</small></span>${evidenceEngine(engine) ? `<span>${tx(lang, '证据', 'Evidence')} ${pct(d.evidence_coverage)}</span>` : chip(d.status, lang)}</div>
         <div class="dimension-meter"><span style="width:${score ?? 0}%"></span></div>
-        <p class="report-dim-note">${e(d.summary || (engine === 'GEO' ? tx(lang, '已核验项暂算；未知项保留在分数区间中。', 'Estimated from measured checks; unknowns remain in the score bounds.') : ''))}</p>
-        ${engine === 'GEO' && d.key === 'trust' ? `<p class="report-dim-note">${tx(lang, '可信与时效为推荐提供基础；实际推荐需独立验证。', 'Trust and freshness support recommendation readiness; actual recommendations need separate verification.')}</p>` : ''}
+        <p class="report-dim-note">${e(d.summary || (evidenceEngine(engine) ? tx(lang, '已核验项暂算；未知项保留在分数区间中。', 'Estimated from measured checks; unknowns remain in the score bounds.') : ''))}</p>
+        ${evidenceEngine(engine) && d.key === 'trust' ? `<p class="report-dim-note">${tx(lang, '可信与时效为推荐提供基础；实际推荐需独立验证。', 'Trust and freshness support recommendation readiness; actual recommendations need separate verification.')}</p>` : ''}
         <details class="dimension-details"><summary>${tx(lang, '查看计分与建议', 'Scoring and recommendations')}</summary><div class="dr-dimension-detail">
-          ${kv(engine === 'GEO' ? [
+          ${kv(evidenceEngine(engine) ? [
             [tx(lang, '已获积分 / 已测积分', 'Earned / measured points'), n(d.earned_points) + ' / ' + n(d.measured_points)],
             [tx(lang, '适用积分', 'Applicable points'), n(d.applicable_points)],
             [tx(lang, '维度分', 'Dimension score'), tx(lang, '已获积分 ÷ 已测积分 × 100', 'Earned ÷ measured × 100')]
           ] : [[tx(lang, '归一权重', 'Normalized weight'), pct(d.normalized_weight)], [tx(lang, '加权得分', 'Weighted contribution'), n(d.weighted_value)]])}
-          ${owned.length ? `<ul class="dr-dim-checks">${owned.map(check => `<li data-check-id="${e(check.id)}"><span>${engine === 'GEO' ? `<strong class="dr-diagnostic-name">${e(check.diagnostic_name)}</strong>` : `<code>${e(check.id)}</code>`} ${e(check.label)}${engine === 'GEO' ? `<small>${tx(lang, '规则积分', 'Rule points')} ${n(check.max_points)}</small>` : ''}</span>${chip(check.status, lang)}</li>`).join('')}</ul>` : ''}
+          ${owned.length ? `<ul class="dr-dim-checks">${owned.map(check => `<li data-check-id="${e(check.id)}"><span>${evidenceEngine(engine) ? `<strong class="dr-diagnostic-name">${e(check.diagnostic_name)}</strong>` : `<code>${e(check.id)}</code>`} ${e(check.label)}${evidenceEngine(engine) ? `<small>${tx(lang, '规则积分', 'Rule points')} ${n(check.max_points)}</small>` : ''}</span>${chip(check.status, lang)}</li>`).join('')}</ul>` : ''}
           ${cleanList(d.issues).map(issue => `<p>${e(issue)}</p>`).join('')}
           ${cleanList(d.recommendations).map(rec => `<p class="dr-rec">${e(rec)}</p>`).join('')}
-          ${engine === 'GEO' ? cleanList(owned.filter(check => ['fail', 'partial'].includes(check.status)).map(check => check.recommendation)).map(rec => `<p class="dr-rec">${e(rec)}</p>`).join('') : ''}
+          ${evidenceEngine(engine) ? cleanList(owned.filter(check => ['fail', 'partial'].includes(check.status)).map(check => check.recommendation)).map(rec => `<p class="dr-rec">${e(rec)}</p>`).join('') : ''}
         </div></details></article>`;
     }).join('')}</div></div>`).join('')}</div></section>`;
 }
 
 function renderActions(data, result, lang) {
   const actions = data.issues.filter(item => item.recommendation);
-  const fallback = cleanList((result.seo_summary || result.summary || {}).quick_wins);
+  const fallback = cleanList((data.sgeo ? result.summary || {} : result.seo_summary || result.summary || {}).quick_wins);
   return `<section class="dr-actions" id="diagnosis-actions">
     <div class="report-section dr-action-panel">${heading(tx(lang, '优先行动', 'Priority actions'), tx(lang, '先解除阻断，再修复高影响问题。', 'Resolve blockers, then high-impact issues.'))}
       <ul>${actions.slice(0, 6).map(item => `<li>${priority(item.priority)}<div><b>${e(item.label)}</b><p>${e(item.recommendation)}</p></div><span class="dr-engine">${item.engine}</span></li>`).join('') || fallback.slice(0, 6).map(text => `<li><p>${e(text)}</p></li>`).join('') || `<li>${tx(lang, '暂无优先动作。', 'No quick wins.')}</li>`}</ul>
@@ -159,10 +164,10 @@ function renderActions(data, result, lang) {
 
 function renderEvidenceProfile(data, lang) {
   if (!data.geo) return '';
-  const positive = data.checks.filter(check => check.engine === 'GEO' && check.status === 'pass');
-  const gaps = data.checks.filter(check => check.engine === 'GEO' && ['fail', 'partial'].includes(check.status));
-  return `<section class="report-section" id="diagnosis-profile">${heading(tx(lang, 'AI 读取准备度', 'AI reading readiness'), tx(lang, '仅展示本次页面证据，不推测 AI 对品牌的认知或引用表现。', 'Observed page evidence only; no inferred brand perception or citation performance.'))}
-    <div class="dr-profile"><div class="dr-capabilities">${data.dimensions.filter(d => d.engine === 'GEO').map(d => `<div><span>${e(d.label)}</span><div class="dr-capability-track"><i style="width:${Math.max(0, Math.min(100, d.score ?? 0))}%"></i></div><b>${n(d.score)}</b></div>`).join('')}</div>
+  const positive = data.checks.filter(check => check.engine !== 'SEO' && check.status === 'pass');
+  const gaps = data.checks.filter(check => check.engine !== 'SEO' && ['fail', 'partial'].includes(check.status));
+  return `<section class="report-section" id="diagnosis-profile">${heading(data.sgeo ? tx(lang, '搜索与生成式检索准备度', 'Search and generative retrieval readiness') : tx(lang, 'AI 读取准备度', 'AI reading readiness'), tx(lang, '仅展示本次页面证据，不推测 AI 对品牌的认知或引用表现。', 'Observed page evidence only; no inferred brand perception or citation performance.'))}
+    <div class="dr-profile"><div class="dr-capabilities">${data.dimensions.filter(d => d.engine !== 'SEO').map(d => `<div><span>${e(d.label)}</span><div class="dr-capability-track"><i style="width:${Math.max(0, Math.min(100, d.score ?? 0))}%"></i></div><b>${n(d.score)}</b></div>`).join('')}</div>
       <div class="dr-profile-evidence"><div><h4>${tx(lang, '已确认信号', 'Confirmed signals')}</h4><div class="dr-signal-tags">${positive.map(check => `<span>${e(check.label)}</span>`).join('') || empty(tx(lang, '暂无已确认的通过项。', 'No confirmed passing checks.'))}</div></div>
       <div><h4>${tx(lang, '当前缺口', 'Observed gaps')}</h4><div class="dr-signal-tags dr-signal-gaps">${gaps.map(check => `<span>${e(check.label)}</span>`).join('') || empty(tx(lang, '已测项目未发现明确缺口。', 'No gaps in the measured checks.'))}</div></div></div>
     </div></section>`;
@@ -195,19 +200,24 @@ function renderPages(data, lang) {
     <div class="dr-page-list">${preview.map((item, index) => {
       const page = item.geo || item.seo, seo = item.seo;
       return `<details class="dr-page" id="diagnosis-page-${index}" data-page-url="${e(item.url)}"><summary><div><span class="dr-page-type">${e(page.page_type || 'page')}</span><strong>${e(item.url)}</strong></div>
-        <div class="dr-page-scores">${item.seo ? `<span>SEO HTTP ${n(seo.status_code)}</span>` : ''}${item.geo ? `<span>GEO ${n(page.score)}/100</span>${chip(page.status, lang)}` : ''}</div></summary>
+        <div class="dr-page-scores">${item.seo ? `<span>SEO HTTP ${n(seo.status_code)}</span>` : ''}${item.geo ? `<span>${data.sgeo ? 'SGEO' : 'GEO'} ${n(page.score)}/100</span>${chip(page.status, lang)}` : ''}</div></summary>
         <div class="dr-page-body"><p>${safeLink(item.url)}</p>${kv([
           [tx(lang, '最终 URL', 'Final URL'), page.final_url], ['HTTP', page.status_code],
           [tx(lang, '抓取时间', 'Fetched at'), page.fetched_at], [tx(lang, '响应耗时', 'Response time'), page.response_time_ms == null ? null : page.response_time_ms + ' ms'],
           ...(item.geo ? [[tx(lang, '证据覆盖率', 'Evidence coverage'), pct(page.evidence_coverage)]] : []),
           [tx(lang, '源码截断', 'Source truncated'), page.source_truncated == null ? null : page.source_truncated ? tx(lang, '是', 'Yes') : tx(lang, '否', 'No')]
         ])}
+        ${data.sgeo ? `<h4>${tx(lang, '页面内容与索引信号', 'Page content and indexing signals')}</h4>${kv([
+          ['Title', page.title], [tx(lang, '描述', 'Description'), page.meta_description], ['Canonical', page.canonical],
+          [tx(lang, '语言', 'Language'), page.lang], ['H1', page.h1_count], [tx(lang, '正文词数', 'Word count'), page.word_count],
+          [tx(lang, '图片数量', 'Image count'), page.image_count], ['Noindex', page.noindex_detected == null ? null : String(page.noindex_detected)]
+        ])}` : ''}
         ${seo ? `<h4>${tx(lang, 'SEO 页面信号', 'SEO page signals')}</h4>${kv([
           ['Title', seo.title], [tx(lang, '描述', 'Description'), seo.meta_description], ['Canonical', seo.canonical],
           ['H1', seo.h1_count], [tx(lang, '正文词数', 'Word count'), seo.word_count],
           [tx(lang, '图片替代文本覆盖', 'Image alt coverage'), pct(seo.alt_coverage_ratio)], ['Noindex', seo.noindex_detected == null ? null : String(seo.noindex_detected)]
         ])}` : ''}
-        ${item.geo ? `<div class="dr-page-checks">${Object.entries(item.geo.dimensions || {}).map(([key, d]) => `<h4>${e(geoDimensionName(d.key || key, d.label, lang))}</h4>${(d.checks || []).map(check => `<article><div><code>${e(check.id)}</code><b>${e(check.label)}</b>${chip(check.status, lang)}${check.blocker ? priority('P0') : ''}</div>
+        ${item.geo ? `<div class="dr-page-checks">${Object.entries(item.geo.dimensions || {}).map(([key, d]) => `<h4>${e((data.sgeo ? sgeoDimensionName : geoDimensionName)(d.key || key, d.label, lang))}</h4>${(d.checks || []).map(check => `<article><div><code>${e(check.id)}</code><b>${e(check.label)}</b>${chip(check.status, lang)}${check.blocker ? priority('P0') : ''}</div>
           ${['fail', 'partial', 'unknown'].includes(check.status) && check.recommendation ? `<p>${e(check.recommendation)}</p>` : ''}
           ${check.evidence_type === 'structural_proxy' ? `<small>${tx(lang, '结构代理检查，未作事实核查。', 'Structural proxy; not fact-checked.')}</small>` : ''}${jsonDetails(check.evidence, lang)}</article>`).join('')}`).join('')}</div>` : ''}
         </div></details>`;
@@ -244,7 +254,7 @@ function renderSnapshot(result, lang) {
       ['JSON-LD', count(home.json_ld_blocks)], [tx(lang, '结构化数据摘要', 'Schema summary'), d.schema_summary],
       [tx(lang, '业务实体信号', 'Business entity signals'), d.site_signals]
     ]],
-    [tx(lang, '辅助信号（不计入 GEO）', 'Auxiliary signals (excluded from GEO)'), [
+    [tx(lang, '辅助信号（不计分）', 'Unscored auxiliary signals'), [
       ['llms.txt', yes(d.llms?.exists)], ['Open Graph', home.open_graph], ['Twitter Card', home.twitter_cards],
       [tx(lang, '站外权威', 'External authority'), d.backlinks?.available == null ? null : yes(d.backlinks.available)]
     ]]
@@ -255,12 +265,13 @@ function renderSnapshot(result, lang) {
 }
 
 function renderMethod(data, result, lang) {
-  const notes = cleanList([...(data.geo?.processing_notes || []), ...(result.seo_summary?.processing_notes || []), ...(result.summary?.processing_notes || [])]);
+  const notes = cleanList([...(data.geo?.processing_notes || []), ...(!data.sgeo ? result.seo_summary?.processing_notes || [] : []), ...(result.summary?.processing_notes || []), ...(result.summary?.notices || [])]);
   return `<details class="report-section collapsible-section" id="diagnosis-method"><summary class="dr-section-head"><h3>${tx(lang, '计分方法与诊断说明', 'Scoring methodology and notes')}</h3></summary><div class="dr-method">
-    ${data.geo ? `<p>${tx(lang, 'GEO 先逐页计分，再对页面类型等权、同类型页面等权汇总。待核验项不视为通过，暂定分仅基于已测证据，同时展示分数上下界。', 'GEO is scored per page, then equally by page type and by page within each type. Unknowns are not passes; estimates use measured evidence and include score bounds.')}</p>
-    <p>${tx(lang, '训练授权、社交卡片、一般安全响应头及站外权威不计入 GEO 总分。实际收录与 AI 引用单独验证。', 'Training permissions, social cards, general security headers, and external authority are excluded from GEO. Actual indexing and AI citations need separate verification.')}</p>
+    ${data.geo ? `<p>${data.sgeo ? tx(lang, 'SGEO 总分 = Σ（已测维度分 × 权重）÷ 已测维度权重之和。共用检查仅保留一次，不使用 SEO、GEO 总分或维度分相加、平均。', 'SGEO is the weighted sum of measured dimension scores divided by their weight sum. Shared checks are scored once; SEO and GEO totals or dimension scores are never added or averaged.') : tx(lang, 'GEO 先逐页计分，再对页面类型等权、同类型页面等权汇总。待核验项不视为通过，暂定分仅基于已测证据，同时展示分数上下界。', 'GEO is scored per page, then equally by page type and by page within each type. Unknowns are not passes; estimates use measured evidence and include score bounds.')}</p>
+    <p>${data.sgeo ? tx(lang, '站内证据用于衡量搜索与生成式检索的共同就绪度；实际收录、排名与引用需要独立观测。', 'On-site evidence measures shared readiness for search and generative retrieval. Actual indexing, rankings and citations require separate observations.') : tx(lang, '训练授权、社交卡片、一般安全响应头及站外权威不计入 GEO 总分。实际收录与 AI 引用单独验证。', 'Training permissions, social cards, general security headers, and external authority are excluded from GEO. Actual indexing and AI citations need separate verification.')}</p>
     ${data.geo.scoring_version === 'onsite-geo-v1' ? `<p>${tx(lang, '此历史版本的 llms.txt 不计分，未包含新增的速度和 URL 静态化规则。', 'This historical version does not score llms.txt and predates the loading-speed and static-URL rules.')}</p>` : ''}
-    ${kv([[tx(lang, '已发现候选页面', 'Known candidate pages'), data.geo.coverage?.known_candidate_pages],
+    ${kv([[tx(lang, '评分版本', 'Scoring version'), data.geo.scoring_version],
+      [tx(lang, '已发现候选页面', 'Known candidate pages'), data.geo.coverage?.known_candidate_pages],
       [tx(lang, '采样占候选比例', 'Sample-to-candidate ratio'), pct(data.geo.coverage?.sample_coverage)],
       [tx(lang, '范围说明', 'Scope note'), tx(lang, '该比例不代表全站覆盖率。', 'This is not whole-site coverage.')]])}` : ''}
     <ul>${notes.map(note => `<li>${e(note)}</li>`).join('')}</ul>
@@ -279,7 +290,7 @@ export function renderDiagnosticReport({ task, host, lang = 'zh', setCachedRepor
     ...(data.geo ? [['platforms', tx(lang, '平台检索', 'Platforms')]] : []),
     ['pages', tx(lang, '逐页证据', 'Page evidence')], ['snapshot', tx(lang, '站点快照', 'Snapshot')]
   ];
-  host.innerHTML = `<div class="diagnostic-report" data-report-version="diagnostic-report-v2">
+  host.innerHTML = `<div class="diagnostic-report${data.sgeo ? ' sgeo-report' : ''}" data-report-version="${data.sgeo ? 'diagnostic-report-v3-sgeo' : 'diagnostic-report-v2'}">
     ${renderOverview(task, data, lang)}<nav class="dr-nav" aria-label="${tx(lang, '报告目录', 'Report sections')}">${nav.map(([id, label]) => `<a href="#diagnosis-${id}" data-report-nav>${label}</a>`).join('')}</nav>
     ${data.geo?.blockers?.length ? `<aside class="dr-blockers"><strong>${tx(lang, '关键阻断', 'Critical blockers')}</strong><ul>${data.geo.blockers.map(blocker => `<li>${e(blocker.reason)} · ${safeLink(blocker.url)}</li>`).join('')}</ul></aside>` : ''}
     ${renderIssues(data, lang)}${renderCoverage(data, lang)}${renderEvidenceProfile(data, lang)}
@@ -301,11 +312,12 @@ export function mountDiagnosticReport(host) {
   const filter = () => {
     const search = host.querySelector('[data-issue-search]')?.value.toLowerCase().trim() || '';
     const engine = host.querySelector('[data-issue-engine]')?.value || '';
+    const dimension = host.querySelector('[data-issue-dimension]')?.value || '';
     const rank = host.querySelector('[data-issue-priority]')?.value || '';
     const rows = [...host.querySelectorAll('[data-issue-row]')];
     let visible = 0;
     for (const row of rows) {
-      row.hidden = Boolean((search && !row.dataset.search.includes(search)) || (engine && row.dataset.engine !== engine) || (rank && row.dataset.priority !== rank));
+      row.hidden = Boolean((search && !row.dataset.search.includes(search)) || (engine && row.dataset.engine !== engine) || (dimension && row.dataset.dimension !== dimension) || (rank && row.dataset.priority !== rank));
       if (!row.hidden) visible++;
     }
     const count = host.querySelector('[data-issue-count]');
@@ -314,7 +326,7 @@ export function mountDiagnosticReport(host) {
     if (noRows) noRows.hidden = visible > 0;
   };
   host.addEventListener('input', event => { if (event.target.matches('[data-issue-search]')) filter(); });
-  host.addEventListener('change', event => { if (event.target.matches('[data-issue-engine], [data-issue-priority]')) filter(); });
+  host.addEventListener('change', event => { if (event.target.matches('[data-issue-engine], [data-issue-dimension], [data-issue-priority]')) filter(); });
   host.addEventListener('click', event => {
     const link = event.target.closest('a[data-report-nav], a[data-open-pages], a[data-open-site-links]');
     if (!link) return;

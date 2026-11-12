@@ -1,11 +1,9 @@
-"""Export the new GEO score and, optionally, a separate complete SEO report."""
+"""Export evidence-based GEO and unified SGEO reports, including old captures."""
 from __future__ import annotations
 
 import json
 
-from app.models.audit import SeoAuditResult, SeoSummaryResult
 from app.models.geo import GeoAuditResult
-from app.services.reporting.seo_report import SeoReportService
 
 
 def _cell(value):
@@ -13,16 +11,20 @@ def _cell(value):
 
 
 def render_geo_report(payload: dict) -> str:
-    geo = GeoAuditResult.model_validate(payload["geo"])
-    lines = ["# On-site GEO Readiness Audit", "", f"Website: {payload.get('url', '')}",
-             f"Scoring version: {geo.scoring_version}", f"GEO score: {geo.score if geo.score is not None else 'unverified'}/100",
+    if not payload.get("sgeo") and payload.get("geo") and payload.get("seo"):
+        from app.services.audit.sgeo import SgeoAuditService
+        payload = SgeoAuditService().upgrade_legacy_payload(payload)
+    name = "SGEO" if payload.get("sgeo") else "GEO"
+    geo = GeoAuditResult.model_validate(payload.get("sgeo") or payload["geo"])
+    lines = [f"# {'SGEO Search and Generative-engine' if name == 'SGEO' else 'On-site GEO'} Readiness Audit", "", f"Website: {payload.get('url', '')}",
+             f"Scoring version: {geo.scoring_version}", f"{name} score: {geo.score if geo.score is not None else 'unverified'}/100",
              f"Status: {geo.status}; readiness: {geo.readiness_status}; provisional: {geo.provisional}",
              f"Evidence coverage: {geo.coverage.get('evidence_coverage', 0):.1%}",
-             f"Score bounds: {geo.score_range}", "", "SEO and GEO are independent scores; there is no averaged combined score.", "",
+             f"Score bounds: {geo.score_range}", "", "One SGEO score from unique checks across six dimensions." if name == "SGEO" else "SEO and GEO are independent scores; there is no averaged combined score.", "",
              "## Dimensions", "", "| Dimension | Weight | Score | Evidence coverage |", "|---|---:|---:|---:|"]
     for dimension in geo.dimensions.values():
         lines.append(f"| {_cell(dimension.label)} | {dimension.weight:.0%} | {_cell(dimension.score)} | {dimension.evidence_coverage:.1%} |")
-    lines.extend(["", "## Complete GEO checklist", "", "| Check | Dimension | State | Evidence |", "|---|---|---|---|"])
+    lines.extend(["", f"## Complete {name} checklist", "", "| Check | Dimension | State | Evidence |", "|---|---|---|---|"])
     for dimension in geo.dimensions.values():
         for check in dimension.checks:
             lines.append(f"| {check.id} {_cell(check.label)} | {_cell(dimension.label)} | {check.status} | {_cell(json.dumps(check.evidence, ensure_ascii=False))} |")
@@ -38,13 +40,25 @@ def render_geo_report(payload: dict) -> str:
     if not unknowns:
         lines.append("No unverified checks in the recorded evidence.")
     lines.extend(["", "## Recommendations", "", *[f"- {item}" for item in geo.recommendations]])
+    if name == "SGEO":
+        lines.extend(["", "## Prioritized issues", "", "| Check | Priority | Impact | Recommendation | Acceptance |", "|---|---|---|---|---|"])
+        findings = []
+        for dimension in geo.dimensions.values():
+            for check in dimension.checks:
+                counts = check.evidence.get("page_status_counts", {})
+                if not (check.blocker or counts.get("fail") or counts.get("partial")):
+                    continue
+                priority = "P0" if check.blocker else "P1" if check.dimension in {"access", "discovery", "extraction"} else "P2"
+                findings.append((priority, check))
+        for priority, check in sorted(findings, key=lambda item: item[0]):
+            lines.append(f"| {check.id} {_cell(check.label)} | {priority} | {_cell(check.impact)} | {_cell(check.recommendation)} | {_cell(check.acceptance_criteria)} |")
     lines.extend(["", "## Platform retrieval policies (unscored)", "",
                   "Observed robots policies on sampled paths, not actual platform visibility or citation measurements.", "",
                   "| Page | Crawler | Policy |", "|---|---|---|"])
     for page in geo.pages:
         for dimension in page.dimensions.values():
             for check in dimension.checks:
-                if check.id != "GEO-002":
+                if check.id != f"{name}-002":
                     continue
                 for crawler, allowed in check.evidence.get("policies", {}).items():
                     state = "unverified" if allowed is None else "allowed" if allowed else "blocked"
@@ -60,14 +74,4 @@ def render_geo_report(payload: dict) -> str:
                 lines.append(f"| {check.id} {_cell(check.label)} | {check.max_points} | {check.status} | {_cell(check.value)} | {_cell(json.dumps(check.evidence, ensure_ascii=False))} | {_cell(recommendation)} |")
     lines.extend(["", "## Limits and methodology", "", *[f"- {item}" for item in geo.processing_notes]])
     lines.extend(["", "## Unscored auxiliary information", "", "```json", json.dumps(geo.auxiliary, ensure_ascii=False, indent=2), "```"])
-    if payload.get("seo"):
-        seo = SeoAuditResult.model_validate(payload["seo"])
-        if payload.get("seo_summary"):
-            summary = SeoSummaryResult.model_validate(payload["seo_summary"])
-        else:
-            from app.services.audit.seo import SeoAuditService
-            summary = SeoAuditService().summarize(seo)
-        from app.models.discovery import DiscoveryResult
-        lines.extend(["", "---", "", SeoReportService().render_markdown(
-            url=payload["url"], discovery=DiscoveryResult.model_validate(payload["discovery"]), seo=seo, summary=summary)])
     return "\n".join(lines)

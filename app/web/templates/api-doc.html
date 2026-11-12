@@ -48,7 +48,7 @@
           <a href="#audit-modules"><span class="nav-method method-post">POST</span>单模块调用</a>
           <a href="#google-crawler"><span class="nav-method method-post">POST</span>Google 爬虫测试</a>
         </div>
-        <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#seo-scoring">SEO 评分规则</a><a href="#geo-scoring">GEO 评分规则</a><a href="#seo-geo-scoring">SEO+GEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
+        <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#seo-scoring">SEO 评分规则</a><a href="#geo-scoring">GEO 评分规则</a><a href="#sgeo-scoring">SGEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
       </nav>
       <div class="sidebar-tools"><a href="/openapi.json" target="_blank" rel="noreferrer">OpenAPI 规范<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a><a href="/health" target="_blank" rel="noreferrer">服务状态<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a></div>
     </aside>
@@ -92,19 +92,19 @@
       <section class="doc-section endpoint-section" id="create-task" data-doc-section aria-labelledby="create-task-title">
         <h3 class="endpoint-title" id="create-task-title">创建审计任务</h3>
         <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/tasks/audit</code></div>
-        <p>新增 <code>site_geo_only_audit</code>：网站 GEO 审计，执行 discovery → geo → observation → summary。保留 <code>site_geo_audit</code> 表示网站 SEO+GEO 审计，执行 discovery → seo + geo → observation → summary，共享同一批页面证据。</p>
+        <p>新增 <code>site_geo_only_audit</code>：网站 GEO 审计，执行 discovery → geo → observation → summary。保留 <code>site_geo_audit</code> 标识，升级为网站 SGEO 诊断，执行 discovery → sgeo → observation → summary，以一套六维规则计算统一分数。</p>
         <div class="table-wrap"><table><thead><tr><th>任务类型</th><th>评分口径</th><th>结果位置</th></tr></thead><tbody>
 <tr><td><code>site_geo_only_audit</code> 网站 GEO 审计</td><td>站内六维就绪度，onsite-geo-v2；不含外链、OG/Twitter卡片、一般安全响应头或平台推测分</td><td><code>result.geo.score</code> / <code>summary.geo_score</code></td></tr>
 <tr><td><code>site_seo_audit</code> 网站 SEO 审计</td><td>SEO既有六维、权重按95归一；外链为品牌权威支持信号，OG/Twitter属于技术支持检查</td><td><code>result.seo.overall_score</code> / <code>summary.overall_score</code></td></tr>
-<tr><td><code>site_geo_audit</code> 网站 SEO+GEO 审计</td><td>分别运行上述两套评分，共享证据但不平均、不合成第三个总分</td><td><code>result.seo</code> + <code>result.geo</code>；<code>summary.seo_score</code> 与 <code>summary.geo_score</code></td></tr>
+<tr><td><code>site_geo_audit</code> 网站 SGEO 诊断</td><td>六维、30项唯一检查，onsite-sgeo-v1；融合搜索与生成式检索的共用能力</td><td><code>result.sgeo.score</code> / <code>summary.sgeo_score</code></td></tr>
 <tr><td><code>site_content_audit</code> 网站内容审计</td><td>单篇内容评分，独立于上述站点评分</td><td><code>result.content</code> / <code>result.summary</code></td></tr>
 </tbody></table></div>
         <p class="doc-note">页面默认首选网站 GEO 审计。为兼容已有调用，API省略 task_type 时仍默认 site_seo_audit；请显式传入所需类型。三种站点任务均按精确 host 与语言路径限制抓取；图谱可选、独立构建。</p>
         <h4 class="subheading">请求参数</h4>
         <div class="table-wrap" role="region" aria-label="创建审计任务的请求参数" tabindex="0"><table class="parameter-table"><thead><tr><th scope="col">参数</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead><tbody>
 <tr><th scope="row"><code>url</code><span class="param-required">必填</span></th><td><span class="param-type">string</span></td><td>目标网站 URL（自动规范化）</td></tr>
-<tr><th scope="row"><code>task_type</code></th><td><span class="param-type">string</span></td><td><code>"site_geo_only_audit"</code>（网站 GEO 审计）、<code>"site_seo_audit"</code>（API默认）、<code>"site_geo_audit"</code>（网站 SEO+GEO 审计）、<code>"site_content_audit"</code></td></tr>
-<tr><th scope="row"><code>mode</code></th><td><span class="param-type">string</span></td><td><code>"standard"</code>（默认）或 <code>"premium"</code>（SEO/内容可启用 LLM 增强；新版GEO始终规则计分）</td></tr>
+<tr><th scope="row"><code>task_type</code></th><td><span class="param-type">string</span></td><td><code>"site_geo_only_audit"</code>（网站 GEO 审计）、<code>"site_seo_audit"</code>（API默认）、<code>"site_geo_audit"</code>（网站 SGEO 诊断）、<code>"site_content_audit"</code></td></tr>
+<tr><th scope="row"><code>mode</code></th><td><span class="param-type">string</span></td><td><code>"standard"</code>（默认）或 <code>"premium"</code>（SEO/内容可启用 LLM 增强；GEO与SGEO始终规则计分）</td></tr>
 <tr><th scope="row"><code>force_refresh</code></th><td><span class="param-type">boolean</span></td><td>true 则跳过 7 天缓存强制重新审计</td></tr>
 <tr><th scope="row"><code>target_locale</code></th><td><span class="param-type">string</span></td><td>可选；用于指定目标站点语言版本，如 <code>"nl"</code>、<code>"de"</code>、<code>"fr"</code>。输入根域名时，系统会尝试把任务解析到对应语言 scope</td></tr>
 <tr><th scope="row"><code>feedback_lang</code></th><td><span class="param-type">string</span></td><td><code>"en"</code>（默认）或 <code>"zh"</code>；仅控制报告返回语言，不控制目标站点语言版本</td></tr>
@@ -140,7 +140,7 @@
 <tr><th scope="row"><code>progress_percent</code></th><td><span class="param-type">int</span></td><td>0–100，按完成步骤数计算</td></tr>
 <tr><th scope="row"><code>cached</code></th><td><span class="param-type">boolean</span></td><td>命中缓存时为 true，直接返回历史结果</td></tr>
 <tr><th scope="row"><code>llm_model_used</code></th><td><span class="param-type">boolean</span></td><td>只有真正拿到并使用了 llm.model 的增强结果时才为 true；失败降级时为 false</td></tr>
-<tr><th scope="row"><code>result</code></th><td><span class="param-type">object</span></td><td>completed 后按任务类型返回 geo 和/或 seo，以及 discovery、summary；新版GEO还返回 observation 和 page_diagnostics，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</td></tr>
+<tr><th scope="row"><code>result</code></th><td><span class="param-type">object</span></td><td>completed 后按任务类型返回 sgeo、geo 或 seo，以及 discovery、summary；GEO与SGEO还返回 observation 和 page_diagnostics，并在 <code>discovery.scope_root_url</code>、<code>requested_target_locale</code>、<code>resolved_target_locale</code> 中标明语言作用域</td></tr>
 </tbody></table></div>
         <details class="reference-details example-details"><summary>响应结构示意<svg class="icon" aria-hidden="true"><use href="#icon-chevron" /></svg></summary><div class="code-block"><div class="code-toolbar"><span>响应结构示意</span></div><pre><code>// 响应结构示意
 {
@@ -153,8 +153,8 @@
     "llm_model_used": true,
     "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
     "result": {
-      "geo": {
-        "scoring_version": "onsite-geo-v2",
+      "sgeo": {
+        "scoring_version": "onsite-sgeo-v1",
         "score": 72.5,
         "status": "provisional",
         "readiness_status": "unverified",
@@ -164,20 +164,18 @@
         "dimensions": { "access": {...}, "discovery": {...}, "extraction": {...}, "answers": {...}, "trust": {...}, "semantics": {...} },
         "pages": [...], "blockers": [...], "auxiliary": { "scored": false, ... }
       },
-      "seo": { "overall_score": 78, ... },  // 仅SEO+GEO任务包含
-      "seo_summary": {...},                 // SEO独立摘要
       "discovery": { "scope_root_url": "https://example.com/", ... },
       "observation": { "provided": false, "scored": false },
       "summary": {
-        "scoring_version": "onsite-geo-v2",
-        "geo_score": 72.5, "seo_score": 78,
-        "combined_score": null,
-        "composite_geo_score": 72.5
+        "scoring_version": "onsite-sgeo-v1",
+        "sgeo_score": 72.5,
+        "overall_score": 72.5,
+        "combined_score": 72.5
       }
     }
   }
 }</code></pre></div></details>
-        <p class="doc-note">上述为SEO+GEO响应结构示意，数值仅作字段示例。纯GEO不返回seo；纯SEO使用原SEO摘要。<code>composite_geo_score</code>仅是新版GEO分的兼容别名，不是SEO+GEO合成分；新版不输出推算的引用概率或AI认知百分比。</p>
+        <p class="doc-note">上述为 SGEO 响应结构示意，数值仅作字段示例。新 SGEO 任务返回统一的 <code>sgeo</code>，不返回两套SEO/GEO总分；纯GEO与纯SEO继续使用原结果字段。新版不输出推算的引用概率或AI认知百分比。</p>
       </section>
 
       <section class="doc-section endpoint-section" id="task-graphs" data-doc-section aria-labelledby="task-graphs-title">
@@ -190,7 +188,7 @@
       <section class="doc-section endpoint-section" id="task-report" data-doc-section aria-labelledby="task-report-title">
         <h3 class="endpoint-title" id="task-report-title">导出审计报告</h3>
         <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/tasks/{task_id}/report</code></div>
-        <p>网站GEO、SEO及SEO+GEO任务完成后，可获取完整 Markdown 报告；组合报告包含两套独立评分。仅在 <code>status=completed</code> 时可用。</p>
+        <p>网站GEO、SEO及SGEO任务完成后，可获取完整 Markdown 报告；SGEO报告包含统一总分、六维评估、完整检查清单和逐页证据。仅在 <code>status=completed</code> 时可用。</p>
       </section>
 
       <section class="doc-section endpoint-section" id="page-evidence" data-doc-section aria-labelledby="page-evidence-title">
@@ -204,7 +202,7 @@
 
       <section class="doc-section endpoint-section" id="audit-modules" data-doc-section aria-labelledby="audit-modules-title">
         <div class="section-heading"><h3 class="endpoint-title" id="audit-modules-title">单模块调用</h3><span class="optional-label">高级用法</span></div>
-        <p><code>POST /api/v1/audit/geo</code> 同步运行新版站内GEO，支持传入discovery复用快照；返回GeoAuditResult本体。<code>POST /api/v1/audit/seo</code>运行SEO。以下visibility / technical / content / schema / platform / full端点保留旧版模块行为；<code>/audit/full</code>仍为历史geo-audit-v3，不能代替新版GEO或SEO+GEO任务。</p>
+        <p><code>POST /api/v1/audit/geo</code> 同步运行新版站内GEO，支持传入discovery复用快照；返回GeoAuditResult本体。<code>POST /api/v1/audit/seo</code>运行SEO。以下visibility / technical / content / schema / platform / full端点保留旧版模块行为；<code>/audit/full</code>仍为历史geo-audit-v3，不能代替新版GEO或SGEO任务。</p>
         <div class="endpoint-list">
           <div><span class="method method-post">POST</span><code>/api/v1/audit/geo</code><span>新版站内GEO六维审计</span></div>
           <div><span class="method method-post">POST</span><code>/api/v1/audit/seo</code><span>独立SEO审计</span></div>
@@ -317,7 +315,7 @@
   <p class="scoring-card-formula">AI搜索支持分 = 五项支持分按上述比例加权。</p>
   <p class="scoring-card-note">该维度复用现有SEO支持模型，不是新版站内GEO分，也不代表真实AI引用表现。</p>
 </article></div>
-        <p class="doc-note">适用于 <code>task_type=site_seo_audit</code>，以及SEO+GEO任务中的SEO部分。结果读取 <code>result.seo.overall_score</code>。26项检查清单用于定位问题，不按通过项数量直接计算总分。</p>
+        <p class="doc-note">仅适用于独立 <code>task_type=site_seo_audit</code>；SGEO使用下方统一规则。结果读取 <code>result.seo.overall_score</code>。26项检查清单用于定位问题，不按通过项数量直接计算总分。</p>
       </section>
 
       <section class="doc-section scoring-section" id="geo-scoring" data-doc-section aria-labelledby="geo-scoring-title">
@@ -396,48 +394,97 @@
 <li>GEO-011复用可选Chromium渲染；未启用、失败、截断或未验证抓取权限时为unknown。正文直接从main/article/role=main或body提取，剔除导航、页脚、脚本、隐藏节点，不根据字数猜SSR。</li>
 <li>默认检查Googlebot、bingbot、OAI-SearchBot、PerplexityBot的目标路径规则，训练许可不计分；模拟请求成功不代表真实AI爬虫或指定地区访问成功。</li></ul>
       </section>
-      <section class="doc-section scoring-section" id="seo-geo-scoring" data-doc-section aria-labelledby="seo-geo-scoring-title">
-        <div class="section-heading"><h2 id="seo-geo-scoring-title">SEO+GEO 评分规则</h2><span class="section-note">两套独立评分</span></div>
-        <p>一次采集页面证据，分别运行SEO和GEO引擎。组合任务复用各自的评分规则，不平均、不相加，不生成第三个合成分。</p>
-        <div class="scoring-grid" aria-label="SEO与GEO组合计分说明">
-          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-seo-title">
-            <header class="scoring-card-header"><h3 id="combined-seo-title">SEO部分</h3><span class="scoring-weight">0–100</span></header>
-            <p class="scoring-basis">沿用SEO六维和原始权重</p>
-            <p class="scoring-card-formula">SEO分 = Σ（SEO维度分 × 原始权重）÷ 95</p>
-            <ul class="scoring-copy-list"><li>包含SEO自身的技术、页面、内容、性能和支持信号。</li><li>外链、OG/Twitter等按原SEO规则处理。</li><li>评分含义与独立SEO任务一致。</li></ul>
-            <dl class="scoring-fields"><dt>结果字段</dt><dd><code>result.seo.overall_score</code></dd><dt>摘要字段</dt><dd><code>summary.seo_score</code></dd></dl>
-            <a class="scoring-reference" href="#seo-scoring">查看上方SEO细项</a>
-          </article>
-          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-geo-title">
-            <header class="scoring-card-header"><h3 id="combined-geo-title">GEO部分</h3><span class="scoring-weight">0–100</span></header>
-            <p class="scoring-basis">复用onsite-geo-v2六维规则</p>
-            <p class="scoring-card-formula">GEO分 = Σ（有效维度分 × 权重）÷ 有效权重之和</p>
-            <ul class="scoring-copy-list"><li>使用20%、15%、20%、25%、15%、5%的六维权重。</li><li>保留逐页证据、关键阻断、未知项和覆盖率。</li><li>评分含义与独立GEO任务一致。</li></ul>
-            <dl class="scoring-fields"><dt>结果字段</dt><dd><code>result.geo.score</code></dd><dt>摘要字段</dt><dd><code>summary.geo_score</code></dd></dl>
-            <a class="scoring-reference" href="#geo-scoring">查看上方GEO细项</a>
-          </article>
-          <article class="scoring-card scoring-card--combined" aria-labelledby="combined-result-title">
-            <header class="scoring-card-header"><h3 id="combined-result-title">组合结果的读取</h3><span class="scoring-result-tag">分别呈现</span></header>
-            <p class="scoring-basis">同一批证据，各自计算分数</p>
-            <div class="scoring-example"><span>SEO <strong>78</strong></span><span>GEO <strong>72.5</strong></span></div>
-            <p class="scoring-card-note">仅作字段读取示例，不是新的合成分。</p>
-            <ul class="scoring-copy-list"><li>SEO摘要保存在<code>result.seo_summary</code>。</li><li>GEO就绪状态和暂定区间随GEO分一起读取。</li><li><code>composite_geo_score</code>是GEO分的兼容别名。</li></ul>
-            <dl class="scoring-fields"><dt>合成分字段</dt><dd><code>summary.combined_score = null</code></dd><dt>任务类型</dt><dd><code>site_geo_audit</code></dd></dl>
-          </article>
-        </div>
-        <p class="doc-note">同一站点的SEO分与GEO分用于回答不同问题，不能相互替代。比较优化前后变化时，应使用相同评分版本、页面集合与采样设置。</p>
+      <section class="doc-section scoring-section" id="sgeo-scoring" data-doc-section aria-labelledby="sgeo-scoring-title">
+        <span id="seo-geo-scoring" aria-hidden="true"></span>
+        <div class="section-heading"><h2 id="sgeo-scoring-title">SGEO 评分规则</h2><span class="section-note">onsite-sgeo-v1</span></div>
+        <p>将搜索优化与生成式检索融合为六个维度、30项唯一检查，总权重100%。同一问题只在所属维度计分一次，直接从页面证据计算统一的 SGEO 分数。</p>
+        <div class="scoring-formula"><strong>SGEO总分</strong><p>Σ（已测维度分 × 权重）÷ 已测维度权重之和</p><span>维度分 = 已获积分 ÷ 已测积分 × 100；不适用项在维度内归一，未知项保留在分数区间中。</span></div>
+        <p class="doc-note">复用抓取、索引、正文、内容、可信和语义方面的基础证据，重新划分维度与权重，不使用 SEO、GEO 总分或维度分做平均。独立 SEO 和 GEO 任务继续使用各自的原有规则。</p>
+        <div class="scoring-grid" aria-label="SGEO六维评分细项">
+<article class="scoring-card" data-sgeo-dimension="access" data-weight="20" aria-labelledby="sgeo-access-title">
+  <header class="scoring-card-header"><h3 id="sgeo-access-title">可获取：访问、抓取与性能</h3><span class="scoring-weight">20%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-001" data-points="4"><span class="scoring-rule-label">HTTP与HTTPS可用</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">修复失败响应，并将公开页面统一到可访问的 HTTPS 地址。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-002" data-points="5"><span class="scoring-rule-label">目标路径检索爬虫规则</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按目标路径核对 robots.txt，允许期望服务的搜索与 AI 检索爬虫。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-003" data-points="3"><span class="scoring-rule-label">当前抓取无访问挑战</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">为公开正文移除登录、验证码和访问挑战，并复测抓取响应。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-004" data-points="1"><span class="scoring-rule-label">抓取稳定性</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">补充不同时段的重复抓取记录，确认响应与正文持续可用。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-025" data-points="3"><span class="scoring-rule-label">页面加载速度（HTML获取）</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">优化服务端响应、缓存与跳转链，缩短 HTML 获取耗时。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-027" data-points="2"><span class="scoring-rule-label">移动端视口声明</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">声明 width=device-width 的 viewport，并另行验证实际移动端布局。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-028" data-points="1"><span class="scoring-rule-label">HTML 页面体量</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">减少内联脚本、重复标记与无效 HTML，并复测正文响应体积。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-029" data-points="1"><span class="scoring-rule-label">图片资源与加载策略</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">为图片提供可发现的资源地址，避免高优先级图片同时延迟加载。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="discovery" data-weight="15" aria-labelledby="sgeo-discovery-title">
+  <header class="scoring-card-header"><h3 id="sgeo-discovery-title">可发现：页面发现与索引</h3><span class="scoring-weight">15%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-005" data-points="3"><span class="scoring-rule-label">可抓取导航与内链</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">用可抓取的 HTML 链接连接核心页面，并提供清晰的链接文字。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-006" data-points="3"><span class="scoring-rule-label">发现机制有效覆盖</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">将目标页面接入导航链或有效 Sitemap，修复孤立页面。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-007" data-points="3"><span class="scoring-rule-label">规范网址与跳转一致</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">统一 canonical、最终跳转地址与 Sitemap 中的首选网址。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-008" data-points="3"><span class="scoring-rule-label">索引与摘要指令</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">移除公开页面误设的 noindex，并核对摘要限制是否符合检索目标。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-024" data-points="1"><span class="scoring-rule-label">llms.txt可用与导航完整</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">提供含站点简介与内容导航的可读 llms.txt，作为辅助发现入口。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-026" data-points="2"><span class="scoring-rule-label">URL静态化与参数规范</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">提供稳定的内容路径，清理会话参数与哈希路由，统一规范网址。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="extraction" data-weight="15" aria-labelledby="sgeo-extraction-title">
+  <header class="scoring-card-header"><h3 id="sgeo-extraction-title">可理解：正文读取与信息提取</h3><span class="scoring-weight">15%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-009" data-points="7"><span class="scoring-rule-label">核心正文可提取</span><strong class="scoring-rule-value">7分</strong><p class="scoring-rule-note">让核心正文在可获取的 HTML 中完整呈现，减少对交互和脚本的依赖。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-010" data-points="4"><span class="scoring-rule-label">关键信息载体完整</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">补齐表格、列表和代码内容，为信息图片提供可读替代文本。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-011" data-points="4"><span class="scoring-rule-label">原始与渲染正文一致</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">补充浏览器渲染对照，确保关键正文在原始与渲染 HTML 中一致。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="answers" data-weight="25" aria-labelledby="sgeo-answers-title">
+  <header class="scoring-card-header"><h3 id="sgeo-answers-title">可引用：内容价值与答案适配</h3><span class="scoring-weight">25%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-012" data-points="6"><span class="scoring-rule-label">页面主题与正文对应</span><strong class="scoring-rule-value">6分</strong><p class="scoring-rule-note">使页面标题、主标题与正文主题对应，并补齐相关说明。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-013" data-points="5"><span class="scoring-rule-label">结论或关键信息易定位</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">在开头或清晰的信息区直接给出结论、产品要点或操作入口。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-014" data-points="5"><span class="scoring-rule-label">段落自包含与组织</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">整理标题层级和段落指代，使关键段落脱离上下文仍可理解。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-015" data-points="5"><span class="scoring-rule-label">页面任务所需信息</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按页面任务补齐操作步骤、产品参数、服务范围或适用条件。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-016" data-points="4"><span class="scoring-rule-label">具体表达与低冗余</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">删去重复和空泛段落，用具体事实、范围与示例表达信息。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="trust" data-weight="15" aria-labelledby="sgeo-trust-title">
+  <header class="scoring-card-header"><h3 id="sgeo-trust-title">可信赖：主体、依据与时效</h3><span class="scoring-weight">15%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-017" data-points="4"><span class="scoring-rule-label">发布主体或责任团队</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">标明作者、发布主体或责任团队，并提供可访问的主体信息。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-018" data-points="6"><span class="scoring-rule-label">关键主张依据可追溯</span><strong class="scoring-rule-value">6分</strong><p class="scoring-rule-note">为关键主张补充来源、原始资料或可核验的方法说明。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-019" data-points="3"><span class="scoring-rule-label">日期与适用版本</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">展示适用的发布日期、更新日期或版本，并与正文保持一致。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-020" data-points="2"><span class="scoring-rule-label">跨页面关键事实一致</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">补充跨页面核验，统一价格、产品规格、主体与其他关键事实。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="semantics" data-weight="10" aria-labelledby="sgeo-semantics-title">
+  <header class="scoring-card-header"><h3 id="sgeo-semantics-title">可识别：元数据与实体语义</h3><span class="scoring-weight">10%</span></header>
+  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-021" data-points="3"><span class="scoring-rule-label">标题、描述与语言元数据</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">补齐准确且可区分的标题、描述与语言声明，不套用固定字符数。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-022" data-points="2"><span class="scoring-rule-label">实体命名及标识一致</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">统一页面、可见正文与结构化数据中的实体名称和标识。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-023" data-points="4"><span class="scoring-rule-label">适用Schema及正文一致性</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">使用适合页面任务的 Schema，修复语法并与可见正文保持一致。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-030" data-points="1"><span class="scoring-rule-label">多语言版本声明</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">补齐有效的 hreflang 与版本链接，另行验证语言版本互返关系。</p></li>
+</ul></article>
+</div>
+        <h3 class="subheading">统一计分与结果读取</h3>
+        <ul><li>按页面类型等权、同类型页面等权汇总；失败页面保留在样本中。每项检查按实际适用页面计算，不适用项在维度内归一。</li>
+<li>待核验不视为通过。暂定分只基于已测证据，并同时返回证据覆盖率与分数上下界；关键阻断优先于分数显示。</li>
+<li>标题、描述与语言统一检查；不设固定标题字符数、统一字数或 FAQ 门槛。Schema 只核对适用性、有效性与正文一致，不累加类型数量。</li>
+<li>移动视口是声明检查，HTML 体量使用250KB/1MB启发式预算；HTML 获取耗时沿用800/1500/3000/5000ms分档。它们不是实际移动布局或 Core Web Vitals 测量。</li>
+<li>图片检查资源可发现性与显式高优先级/延迟加载冲突；不要求所有图片懒加载。多语言仅检查已声明版本的链接，未声明且无截断时记为不适用，互返关系需另行核验。</li>
+<li>llms.txt为辅助发现入口，仅占1分，不宣称任何平台必须采用。分析代码、社交卡片、安全头、训练授权、站外权威和平台曝光均不进入 SGEO 总分。</li>
+<li>抓取稳定性、未完成的渲染对照和缺少审核依据的跨页事实保持待核验。结构代理检查不能证明事实正确或搜索意图完全满足。</li></ul>
+        <dl class="scoring-fields"><dt>任务类型</dt><dd><code>site_geo_audit</code>（沿用原标识）</dd><dt>统一分数</dt><dd><code>result.sgeo.score</code> / <code>summary.sgeo_score</code></dd><dt>兼容别名</dt><dd><code>summary.overall_score</code> / <code>summary.combined_score</code> 均指 SGEO 分</dd><dt>诊断详情</dt><dd><code>result.sgeo.dimensions</code> / <code>pages</code> / <code>blockers</code> / <code>coverage</code></dd></dl>
+        <p class="doc-note">SGEO 是站内搜索就绪度，实际收录、排名与 AI 引用需独立观测。比较前后变化时，应保持评分版本、页面集合与采样设置一致。历史双分报告可按保存证据重新归并；未保存的新检查保持待核验，不改写历史存储分数。</p>
+        <p class="doc-note">设计依据：<a href="https://developers.google.com/search/docs/appearance/ai-features" target="_blank" rel="noreferrer">Google 对 AI 搜索功能的基础优化说明</a>；分值和权重为本产品的诊断规则。</p>
       </section>
 
       <section class="doc-section" id="data-sources" data-doc-section aria-labelledby="data-sources-title">
         <h2 id="data-sources-title">数据来源与运行机制</h2>
-        <h3 class="subheading">汇总层维度业务落成：三种站点任务独立评分</h3>
-        <ul><li>纯GEO不请求Semrush；组合审计通过一次发现、一次页面证据收集，将同一批HTTP响应与源码分别交给SEO和GEO，不重复抓取同一份审计页面。SEO的域名变体探测及可选浏览器渲染属于独立测量。</li>
+        <h3 class="subheading">汇总层维度业务落成：SEO、GEO与SGEO任务的运行机制</h3>
+        <ul><li>GEO与SGEO不请求Semrush。SGEO只采集一批页面证据，复用共用检查的观察结果，并补充移动视口、页面体量、图片策略、多语言和描述检查；不再并行运行两套完整评分。</li>
 <li>外链质量属于SEO/外部权威支持数据：现有SEO通过品牌权威支持分间接使用外链；OG/Twitter卡片在SEO技术支持分中使用，不是新版GEO一级维度，也不进入GEO总分。安全响应头保留技术检查，实际阻断访问的问题计入GEO可达性。</li>
-<li>llms.txt、Content-Signal、LLM-Policy、训练授权、外链、社交卡片、一般安全头、平台推测分均不进入GEO总分。Schema只检查适用性、有效性及可见内容一致，不累计所有类型。</li>
+<li>Content-Signal、LLM-Policy、训练授权、外链、社交卡片、一般安全头、平台推测分均不进入GEO总分。Schema只检查适用性、有效性及可见内容一致，不累计所有类型。</li>
 <li>实际收录、真实AI引用、品牌提及、流量与转化作为Observation独立展示；不因缺少这些站外观测扣站内GEO分。</li>
-<li>SEO保留seo-audit-v1权重和评分含义；组合任务的GEO与纯GEO复用同一个onsite-geo-v2引擎。不得混用两类分数或与历史geo-audit-v3直接横比。</li>
+<li>SEO保留seo-audit-v1权重和评分含义；GEO保留onsite-geo-v2；SGEO使用onsite-sgeo-v1。三个版本不应直接横比。</li>
 <li>结果缓存按任务类型、评分版本、页面数量、语言、审计模式及GEO渲染开关隔离；force_refresh=true绕过结果和站点快照缓存。渲染需ALLOW_PLAYWRIGHT=true及Chromium；启用后会增加浏览器测量耗时。</li>
-<li>premium在SEO/内容审计中沿用AI增强；新版GEO分值始终规则驱动，llm_enhanced=false，不以模型推断填补未知事实。</li>
+<li>premium在SEO/内容审计中沿用AI增强；GEO与SGEO分值始终规则驱动，llm_enhanced=false，不以模型推断填补未知事实。</li>
 <li>历史/audit/full及五模块仍输出geo-audit-v3，兼容旧接入；旧版引用概率与AI认知百分比属于规则推算，不是观测数据，新任务不输出。</li></ul>
       </section>
 

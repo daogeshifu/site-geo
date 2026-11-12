@@ -19,6 +19,22 @@ const GEO_DIMENSIONS = {
   trust: ['可推荐：站内可信度与时效性', 'Recommendable: On-site trust and freshness'],
   semantics: ['可理解：元数据与实体语义', 'Understandable: Metadata and entity semantics']
 };
+const SGEO_DIMENSIONS = {
+  access: ['可获取：访问、抓取与性能', 'Retrievable: Access, crawling and performance'],
+  discovery: ['可发现：页面发现与索引', 'Discoverable: Discovery and indexing'],
+  extraction: ['可理解：正文读取与信息提取', 'Understandable: Content extraction'],
+  answers: ['可引用：内容价值与答案适配', 'Citable: Content and answer readiness'],
+  trust: ['可信赖：主体、依据与时效', 'Trustworthy: Identity, evidence and freshness'],
+  semantics: ['可识别：元数据与实体语义', 'Recognizable: Metadata and entity semantics']
+};
+const SGEO_SUMMARIES = {
+  access: ['HTTP、检索权限、响应速度，以及移动端与图片加载基础。', 'HTTP access, retrieval permissions, response speed, viewport and image loading.'],
+  discovery: ['导航、Sitemap、规范网址、索引指令与辅助发现入口。', 'Navigation, sitemaps, canonical URLs, indexing directives and discovery aids.'],
+  extraction: ['核心正文、信息载体完整性，以及原始与渲染内容的一致性。', 'Main content, complete information containers and raw/rendered consistency.'],
+  answers: ['主题对应、答案定位、段落组织与页面任务所需信息。', 'Topic alignment, prominent answers, content organization and page-task details.'],
+  trust: ['责任主体、主张依据、适用日期与跨页面事实一致性。', 'Publisher identity, claim support, applicable dates and cross-page consistency.'],
+  semantics: ['标题、描述、语言声明，以及实体命名和结构化数据的一致性。', 'Titles, descriptions, language declarations, entity names and structured-data alignment.']
+};
 const GEO_DIAGNOSTICS = [
   ['HTTP / HTTPS', 'HTTP / HTTPS'],
   ['robots.txt / 检索爬虫', 'robots.txt / Search crawlers'],
@@ -48,6 +64,15 @@ const GEO_DIAGNOSTICS = [
   ['静态路径 / 查询参数 / 会话标识 / 哈希路由', 'Clean paths / Query parameters / Session IDs / Hash routes']
 ];
 export const geoDimensionName = (key, fallback, lang) => Array.isArray(GEO_DIMENSIONS[key]) ? tx(lang, ...GEO_DIMENSIONS[key]) : fallback || key;
+export const sgeoDimensionName = (key, fallback, lang) => SGEO_DIMENSIONS[key] ? tx(lang, ...SGEO_DIMENSIONS[key]) : fallback || key;
+const sgeoDiagnosticName = (id, fallback, lang) => {
+  const extra = {
+    'SGEO-021': 'Title / Description / HTML lang', 'SGEO-027': 'Meta viewport / device-width',
+    'SGEO-028': tx(lang, 'HTML 响应体积', 'HTML response size'),
+    'SGEO-029': 'Image src / srcset / loading / fetchpriority', 'SGEO-030': 'Hreflang / Alternate URLs'
+  };
+  return extra[id] || geoDiagnosticName(id.replace('SGEO-', 'GEO-'), fallback, lang);
+};
 export const geoDiagnosticName = (id, fallback, lang) => {
   const match = /^GEO-(\d{3})$/.exec(String(id));
   const names = match && GEO_DIAGNOSTICS[Number(match[1]) - 1];
@@ -84,15 +109,16 @@ function geoPriority(check) {
   return check.blocker ? 'P0' : ['access', 'extraction', 'discovery'].includes(check.dimension) ? 'P1' : 'P2';
 }
 
-function geoChecks(geo, lang) {
+function geoChecks(geo, lang, engine = 'GEO') {
+  const dimensionName = engine === 'SGEO' ? sgeoDimensionName : geoDimensionName;
   const byId = new Map();
   for (const [key, dimension] of Object.entries(geo?.dimensions || {})) {
-    for (const check of dimension.checks || []) byId.set(check.id, { ...check, category: geoDimensionName(dimension.key || key, dimension.label, lang), dimension: check.dimension || dimension.key || key });
+    for (const check of dimension.checks || []) byId.set(check.id, { ...check, category: dimensionName(dimension.key || key, dimension.label, lang), dimension: check.dimension || dimension.key || key });
   }
   for (const page of geo?.pages || []) {
     for (const [key, dimension] of Object.entries(page.dimensions || {})) {
       for (const check of dimension.checks || []) {
-        if (!byId.has(check.id)) byId.set(check.id, { ...check, category: geoDimensionName(dimension.key || key, dimension.label, lang), dimension: check.dimension || dimension.key || key, fromPage: true });
+        if (!byId.has(check.id)) byId.set(check.id, { ...check, category: dimensionName(dimension.key || key, dimension.label, lang), dimension: check.dimension || dimension.key || key, fromPage: true });
       }
     }
   }
@@ -116,29 +142,32 @@ function geoChecks(geo, lang) {
     const blocker = Boolean(check.blocker || occurrences.some(item => item.blocker));
     const priority = geoPriority({ ...check, blocker });
     return {
-      ...check, engine: 'GEO', status, blocker, priority, counts,
-      diagnostic_name: geoDiagnosticName(check.id, check.label, lang),
+      ...check, engine, status, blocker, priority, counts,
+      diagnostic_name: engine === 'SGEO' ? sgeoDiagnosticName(check.id, check.label, lang) : geoDiagnosticName(check.id, check.label, lang),
       label: check.label || check.id, summary: check.label || check.id,
       affected_urls: [...new Set(affected.map(item => item.url))],
       unknown_urls: [...new Set(unknown.map(item => item.url))],
       occurrences, evidence: occurrences.length ? occurrences.map(item => ({ url: item.url, status: item.status, evidence: item.evidence })) : check.evidence,
-      recommendation: affected.find(item => item.recommendation)?.recommendation || check.recommendation ||
+      recommendation: affected.find(item => item.recommendation)?.recommendation || unknown.find(item => item.recommendation)?.recommendation || check.recommendation ||
         (status === 'unknown' ? tx(lang, '补充抓取或人工核验记录，再确认此项。', 'Collect fetch or manual verification evidence before confirming this check.') : ''),
-      impact: check.evidence_type === 'structural_proxy'
+      impact: check.impact || (check.evidence_type === 'structural_proxy'
         ? tx(lang, '影响信息提取与答案准备度；结构检查不能代替事实核查。', 'Affects extraction and answer readiness; structural checks do not verify facts.')
-        : tx(lang, '影响页面的发现、读取或检索准备度。', 'Affects page discovery, reading, or retrieval readiness.')
+        : tx(lang, '影响页面的发现、读取或检索准备度。', 'Affects page discovery, reading, or retrieval readiness.'))
     };
   });
 }
 
 export function buildDiagnosticData(result = {}, lang = 'zh') {
-  const seo = result.seo;
-  const geo = result.geo;
+  const sgeo = result.sgeo;
+  const seo = sgeo ? null : result.seo;
+  const geo = sgeo || result.geo;
+  const engine = sgeo ? 'SGEO' : 'GEO';
+  const dimensionName = sgeo ? sgeoDimensionName : geoDimensionName;
   const seoChecks = (seo?.coverage_checks || []).map(check => ({
     ...check, engine: 'SEO', label: checkName(check.id, check.check, lang),
     category: localizeCategory(check.category, lang), status: check.status || 'unknown'
   }));
-  const checks = [...seoChecks, ...geoChecks(geo, lang)];
+  const checks = [...seoChecks, ...geoChecks(geo, lang, engine)];
   const seoIssues = (seo?.issues_table || []).map(issue => {
     const match = seoChecks.find(check => check.summary === issue.description) ||
       seoChecks.find(check => check.evidence === issue.evidence && check.category === localizeCategory(issue.category, lang));
@@ -148,7 +177,7 @@ export function buildDiagnosticData(result = {}, lang = 'zh') {
       affected_urls: [], status: 'fail'
     };
   });
-  const issues = sortIssues([...seoIssues, ...checks.filter(check => check.engine === 'GEO' &&
+  const issues = sortIssues([...seoIssues, ...checks.filter(check => check.engine !== 'SEO' &&
     (check.status === 'fail' || check.status === 'partial' || check.blocker))]);
   const pending = checks.filter(check => check.status === 'unknown' || (check.counts?.unknown || 0) > 0);
   const dimensions = [
@@ -158,20 +187,22 @@ export function buildDiagnosticData(result = {}, lang = 'zh') {
       weighted_value: seo?.weighted_scores?.[dimension.key]?.weighted_value
     })),
     ...Object.entries(geo?.dimensions || {}).map(([key, dimension]) => ({ ...dimension, key: dimension.key || key,
-      label: geoDimensionName(dimension.key || key, dimension.label, lang), engine: 'GEO', normalized_weight: dimension.weight }))
+      label: dimensionName(dimension.key || key, dimension.label, lang),
+      summary: sgeo && SGEO_SUMMARIES[dimension.key || key] ? tx(lang, ...SGEO_SUMMARIES[dimension.key || key]) : dimension.summary,
+      engine, normalized_weight: dimension.weight }))
   ];
   const pages = new Map();
   for (const page of geo?.pages || []) pages.set(page.url, { url: page.url, geo: page });
   for (const page of seo?.sampled_pages || []) pages.set(page.url, { ...pages.get(page.url), url: page.url, seo: page });
   const counts = Object.fromEntries(['pass', 'fail', 'partial', 'unknown', 'na'].map(state =>
     [state, checks.filter(check => check.status === state).length]));
-  return { seo, geo, checks, issues, pending, dimensions, pages: [...pages.values()], counts };
+  return { seo, geo, sgeo, checks, issues, pending, dimensions, pages: [...pages.values()], counts };
 }
 
 export function platformPolicies(geo) {
   return ['OAI-SearchBot', 'PerplexityBot', 'Googlebot', 'bingbot'].map(crawler => {
     const pages = (geo?.pages || []).map(page => {
-      const check = Object.values(page.dimensions || {}).flatMap(dimension => dimension.checks || []).find(item => item.id === 'GEO-002');
+      const check = Object.values(page.dimensions || {}).flatMap(dimension => dimension.checks || []).find(item => ['GEO-002', 'SGEO-002'].includes(item.id));
       return { url: page.url, allowed: check?.evidence?.policies?.[crawler] ?? null };
     });
     const allowed = pages.filter(page => page.allowed === true).length;

@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from app.core.config import settings
 from app.models.requests import LLMConfig
 from app.models.geo import GEO_SCORING_VERSION
+from app.models.sgeo import SGEO_SCORING_VERSION
 from app.models.task import CachedAuditRecord
 from app.utils.url_utils import normalize_url, scope_identifier
 
@@ -62,7 +63,7 @@ class CacheService:
         normalized_pages = max_pages if full_audit else min(max_pages, 8) if task_type != "site_content_audit" else 5
         # Also invalidate reports whose navigation cleanup deleted core content.
         task_schema_version = (
-            f"{GEO_SCORING_VERSION}-extraction-v2-render-{int(settings.allow_playwright)}"
+            f"{SGEO_SCORING_VERSION + '-source-' if task_type == 'site_geo_audit' else ''}{GEO_SCORING_VERSION}-extraction-v2-render-{int(settings.allow_playwright)}"
             if task_type in {"site_geo_only_audit", "site_geo_audit"} else "v1"
         )
         raw_key = (

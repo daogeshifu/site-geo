@@ -20,6 +20,7 @@ from app.services.audit.platform import PlatformService
 from app.services.audit.schema import SchemaService
 from app.services.audit.seo import SeoAuditService
 from app.services.audit.geo import GeoAuditService
+from app.services.audit.sgeo import SgeoAuditService
 from app.services.infra.audit_evidence import collect_page_evidence
 from app.services.audit.summarizer import SummarizerService
 from app.services.audit.technical import TechnicalService
@@ -41,7 +42,7 @@ class TaskService:
     """
 
     # 任务步骤的执行顺序
-    SITE_GEO_STEP_ORDER = ["discovery", "seo", "geo", "observation", "summary"]
+    SITE_GEO_STEP_ORDER = ["discovery", "sgeo", "observation", "summary"]
     SITE_GEO_ONLY_STEP_ORDER = ["discovery", "geo", "observation", "summary"]
     SITE_CONTENT_STEP_ORDER = ["discovery", "content", "summary"]
     SITE_SEO_STEP_ORDER = ["discovery", "seo", "summary"]
@@ -62,6 +63,7 @@ class TaskService:
         self.page_content_audit_service = PageContentAuditService(self.discovery_service)
         self.seo_audit_service = SeoAuditService(self.discovery_service)
         self.geo_audit_service = GeoAuditService(self.discovery_service)
+        self.sgeo_audit_service = SgeoAuditService(self.discovery_service)
         self.page_diagnostics_service = PageDiagnosticsService()
         self.summarizer_service = SummarizerService()
         self.tasks: dict[str, AuditTask] = {}  # 内存任务存储
@@ -215,7 +217,11 @@ class TaskService:
     async def get_task(self, task_id: str) -> AuditTask | None:
         """按 task_id 查询任务状态（线程安全）"""
         async with self._lock:
-            return self.tasks.get(task_id)
+            task = self.tasks.get(task_id)
+            if task and task.task_type == "site_geo_audit" and task.result and task.result.get("geo") and task.result.get("seo") and not task.result.get("sgeo"):
+                payload = self.sgeo_audit_service.upgrade_legacy_payload(task.result, feedback_lang=task.feedback_lang)
+                return task.model_copy(update={"result": payload})
+            return task
 
     async def _update_step(
         self,
@@ -641,14 +647,14 @@ class TaskService:
         asyncio.create_task(self._run_entity_graph_job(task, discovery))
 
     async def _run_site_geo_task(self, task: AuditTask) -> dict:
-        """Pure GEO and SEO+GEO share evidence, never each other's scores."""
+        """Run one readiness engine for GEO or unified SGEO over shared evidence."""
         combined = task.task_type == "site_geo_audit"
         limit = task.max_pages if task.full_audit else min(task.max_pages, 8)
         await self._update_step(task, "discovery", "running")
         discovery = await self.discovery_service.discover(
             task.url, full_audit=task.full_audit, max_pages=task.max_pages,
             force_refresh=task.force_refresh, target_locale=task.target_locale,
-            include_backlinks=combined,
+            include_backlinks=False,
         )
         task.site_asset_summary = discovery.asset_summary
         task.storage_backend = discovery.asset_summary.backend
@@ -656,37 +662,24 @@ class TaskService:
         await self._update_step(task, "discovery", "completed", discovery_payload)
         self._schedule_graph_jobs(task, discovery)
         evidence = await collect_page_evidence(discovery, limit)
-        await self._update_step(task, "geo", "running")
-        seo = None
-        if combined:
-            await self._update_step(task, "seo", "running")
-            geo, seo = await asyncio.gather(
-                self.geo_audit_service.audit(task.url, discovery, max_pages=limit,
-                    feedback_lang=task.feedback_lang, mode=task.mode, page_evidence=evidence),
-                self.seo_audit_service.audit(task.url, discovery, max_pages=limit,
-                    feedback_lang=task.feedback_lang, mode=task.mode, llm_config=task.llm,
-                    target_locale=task.target_locale, page_evidence=evidence),
-            )
-            await self._update_step(task, "seo", "completed", seo.model_dump(mode="json"))
-        else:
-            geo = await self.geo_audit_service.audit(task.url, discovery, max_pages=limit,
-                feedback_lang=task.feedback_lang, mode=task.mode, page_evidence=evidence)
-        await self._update_step(task, "geo", "completed", geo.model_dump(mode="json"))
+        engine = "sgeo" if combined else "geo"
+        service = self.sgeo_audit_service if combined else self.geo_audit_service
+        await self._update_step(task, engine, "running")
+        readiness = await service.audit(task.url, discovery, max_pages=limit,
+            feedback_lang=task.feedback_lang, mode=task.mode, page_evidence=evidence)
+        await self._update_step(task, engine, "completed", readiness.model_dump(mode="json"))
         await self._update_step(task, "observation", "running")
         observation = self.observation_service.build(task.observation).model_dump(mode="json")
         await self._update_step(task, "observation", "completed", observation)
         await self._update_step(task, "summary", "running")
-        summary = self.geo_audit_service.summarize(geo, seo=seo, feedback_lang=task.feedback_lang)
+        summary = service.summarize(readiness, feedback_lang=task.feedback_lang)
         await self._update_step(task, "summary", "completed", summary)
         payload = {
             "url": task.url, "discovery": discovery_payload,
-            "geo": geo.model_dump(mode="json"), "summary": summary,
-            "page_diagnostics": [page.model_dump(mode="json") for page in geo.pages],
+            engine: readiness.model_dump(mode="json"), "summary": summary,
+            "page_diagnostics": [page.model_dump(mode="json") for page in readiness.pages],
             "observation": observation,
         }
-        if seo is not None:
-            payload["seo"] = seo.model_dump(mode="json")
-            payload["seo_summary"] = self.seo_audit_service.summarize(seo, feedback_lang=task.feedback_lang).model_dump(mode="json")
         return payload
 
     async def _run_site_content_task(self, task: AuditTask) -> dict:

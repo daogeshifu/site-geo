@@ -1,4 +1,4 @@
-export const SITE_GEO_STEP_ORDER = ['discovery', 'seo', 'geo', 'observation', 'summary'];
+export const SITE_GEO_STEP_ORDER = ['discovery', 'sgeo', 'observation', 'summary'];
 export const SITE_GEO_ONLY_STEP_ORDER = ['discovery', 'geo', 'observation', 'summary'];
 export const SITE_CONTENT_STEP_ORDER = ['discovery', 'content', 'summary'];
 export const SITE_SEO_STEP_ORDER = ['discovery', 'seo', 'summary'];
@@ -10,6 +10,7 @@ export const STEP_ICON = {
   content: '📝',
   seo: '📈',
   geo: '🔎',
+  sgeo: '🔎',
   schema: '🏷️',
   platform: '🌐',
   observation: '📎',
@@ -29,10 +30,10 @@ export const TASK_TYPE_CONFIG = {
     placeholder: 'https://example.com', fullAuditVisible: true, exportable: true
   },
   site_geo_audit: {
-    heading: { zh: '网站 SEO+GEO 审计', en: 'Website SEO + GEO Audit' },
+    heading: { zh: '网站 SGEO 诊断', en: 'Website SGEO Audit' },
     subtitle: {
-      zh: '共享页面证据，分别输出 SEO 健康分与 GEO 就绪分，两项分数独立计算。',
-      en: 'Audit search health and AI visibility together, with prioritized issues, evidence, and actionable recommendations.'
+      zh: '将搜索优化与生成式检索融合为六维、30项检查，输出统一评分、关键阻断和行动建议。',
+      en: 'One SGEO score across six dimensions and 30 unique checks, with blockers, page evidence and prioritized actions.'
     },
     urlLabel: { zh: '目标 URL', en: 'Target URL' },
     placeholder: 'https://example.com',

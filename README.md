@@ -1,6 +1,6 @@
 # GEO Audit Service
 
-面向通用网站的SEO、站内GEO和内容诊断。页面默认任务为“网站 GEO 审计”，与SEO评分独立。
+面向通用网站的SEO、站内GEO、统一SGEO和内容诊断。页面默认任务为“网站 GEO 审计”；SGEO将搜索优化与生成式检索融合为同一套诊断规则。
 
 ## 任务与评分
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | `site_geo_only_audit` | 网站 GEO 审计（页面默认首选） | `result.geo`，站内六维就绪度 `onsite-geo-v2` |
 | `site_seo_audit` | 网站 SEO 审计 | `result.seo`，保留 `seo-audit-v1`；API省略类型仍默认SEO |
-| `site_geo_audit` | 网站 SEO+GEO 审计（保留旧标识） | 共用发现与页面证据，分别输出SEO分和GEO分，不合成第三个总分 |
+| `site_geo_audit` | 网站 SGEO 诊断（沿用原标识） | `result.sgeo`，六维、30项唯一检查、一个总分 `onsite-sgeo-v1` |
 | `site_content_audit` | 网站内容审计 | 单篇内容审计，独立评分 |
 
 ## 站内GEO：六维100分
@@ -25,28 +25,29 @@
 - 26项检查唯一归属、先逐页后按类型汇总；显示关键阻断、失败页、待核验项、适用范围和证据覆盖率。llms.txt、HTML获取速度、URL静态化与参数规范已纳入计分。
 - 不设统一字数/FAQ要求，不按Schema类型数量累计；事实核验不足和未测渲染保持未知。
 - 外链、OG/Twitter、一般安全头、训练授权和平台推测不计入新版GEO；实际索引、AI引用和流量独立观测。
-- SEO保留现有维度及技术/外链支持信号。两种分数不可直接比较，也不相互加权。
+- 独立SEO保留现有维度及技术/外链支持信号。SEO、GEO、SGEO使用各自评分版本，不直接横比。
 - [完整计分、证据和字段说明](docs/onsite-geo-audit.md)；在线 `/api-doc` 为接入说明。
 - 历史 `/api/v1/audit/full` 和五个模块端点仍为 `geo-audit-v3`，不代表新版评分。旧版字段见历史数据字典。
 
 ## 诊断结果展示
 
-SEO、GEO 和 SEO+GEO 共用新版诊断报告（展示版本 `diagnostic-report-v2`）：
+SEO、GEO 和 SGEO 共用诊断报告样式；SGEO展示版本为 `diagnostic-report-v3-sgeo`：
 
-- SEO 展示 6 个维度、26 项检查；GEO 展示 6 个维度、26 项检查；组合报告完整展示两组共 12 个维度、52 项检查，两个总分独立。
-- 问题清单支持关键词、诊断类型和优先级筛选，保留检测证据、影响、修复建议和验收条件；GEO 问题可定位到受影响页面。
+- SEO、GEO各保留6个维度、26项检查。SGEO融合为6个维度、30项唯一检查；访问与性能20%、发现与索引15%、正文读取15%、内容与答案25%、可信与时效15%、元数据与实体10%，合计100%。
+- SGEO从逐项页面证据直接计分，共用检查只计一次；统一显示一个总分、一张雷达图、一组六维评估和一份行动清单，不使用SEO、GEO分数相加或平均。
+- 问题清单支持关键词、维度和优先级筛选，保留检测证据、影响、修复建议和验收条件；问题可定位到受影响页面。
 - 完整覆盖清单以桌面每行三项展示编号、事项和状态，小屏依次切换两列/一列；区分通过、待整改、部分满足、待核验和不适用。部分页面通过、其他页面未知时，仍列入待核验队列。
 - 平台区域展示采样路径的检索爬虫规则，不生成平台曝光分或引用概率；Google 搜索的共用规则与 Gemini 未采集数据分别说明。
 - 逐页证据、站点快照、归一权重与计分说明可展开查看，支持窄屏和键盘操作。Markdown 导出同步包含 GEO 完整检查表、待核验队列、平台规则与逐项建议。
 
-此次调整保持现有 `/api/v1` 路径、请求参数和主要响应字段，GEO评分版本升级为 `onsite-geo-v2`；新版评分缓存与旧版隔离，不修改历史评分数据。页面继续兼容旧版23项和历史六模块报告；旧组合结果缺少 `seo_summary` 时，导出会根据 SEO 原始结果补全。
+此次调整保持现有 `/api/v1` 路径和请求参数。原组合任务 `site_geo_audit` 改为返回 `sgeo` 与统一摘要，新增SGEO评分缓存隔离；纯SEO/GEO字段不变。历史组合结果按保存的页面证据重新归并展示和导出，未保存的新检查保持待核验，不改写历史存储分数。[SGEO计分、归并与兼容说明](docs/onsite-sgeo-audit.md)。
 
 验证：`.venv/bin/python -m pytest -q`、`node --test tests/*report.test.mjs`。
 
 ## 抓取与渲染
 
 抓取限制在精确host和语言路径；默认站点任务最多采样8页，Full Audit按max_pages扩展。
-源码证据最多2MB并标记截断，SEO+GEO共享同一批抓取证据。
+源码证据最多2MB并标记截断，SGEO的一套规则复用同一批抓取证据。
 GEO直接检查正文、表格、代码等内容，不靠HTML体积或字数推断SSR。
 
 可选渲染复用现有Chromium检测：
@@ -253,7 +254,7 @@ curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
 ```
 
 查询 `GET /api/v1/tasks/{task_id}`。纯GEO结果包含 `geo`、`discovery`、`observation`、`summary` 和逐页证据。
-组合任务额外包含 `seo` 与 `seo_summary`；`summary.geo_score`、`summary.seo_score`分别输出，`combined_score=null`。
+SGEO任务包含 `sgeo`、`discovery`、`observation`、`summary` 与逐页证据；`result.sgeo.score`、`summary.sgeo_score` 为统一分数。`summary.overall_score`、`summary.combined_score` 为该分数的兼容别名，新SGEO任务不再返回独立 `seo`、`geo` 或 `seo_summary`。
 `summary.composite_geo_score`仅为新版GEO分的兼容别名。
 
 新版GEO分数是已测项的暂定估计；同时返回 `provisional`、`readiness_status`、`score_range` 与证据覆盖率。
@@ -261,7 +262,7 @@ curl -X POST http://127.0.0.1:8023/api/v1/tasks/audit \
 
 - `POST /api/v1/audit/geo`：同步新版GEO，支持传入已有discovery。
 - `POST /api/v1/audit/seo`：同步SEO。
-- `GET /api/v1/tasks/{task_id}/report`：导出GEO/SEO/组合Markdown报告。
+- `GET /api/v1/tasks/{task_id}/report`：导出GEO/SEO/SGEO Markdown报告。
 - `GET /api/v1/demo/tasks/{task_id}/export.xlsx`：仅SEO任务的Excel导出。
 - `POST /api/v1/audit/full`：兼容历史 `geo-audit-v3`，不用于新版GEO或组合审计。
 

@@ -34,12 +34,13 @@ def task_site_pages(task) -> list[dict]:
         add(profile.get("final_url"), {**profile, "page_type": name}, "discovery")
     for profile in discovery.get("additional_page_profiles", []):
         add(profile.get("final_url"), profile, "full_audit")
-    geo_step = task.steps.get("geo")
-    geo = result.get("geo") or (geo_step.data if geo_step else None) or {}
+    geo_step = task.steps.get("sgeo") or task.steps.get("geo")
+    geo = result.get("sgeo") or result.get("geo") or (geo_step.data if geo_step else None) or {}
+    sample_source = "sgeo_sample" if result.get("sgeo") or (geo_step and geo_step.name == "sgeo") else "geo_sample"
     for sample in geo.get("pages", []):
-        add(sample.get("url") or sample.get("final_url"), sample, "geo_sample")
+        add(sample.get("url") or sample.get("final_url"), sample, sample_source)
     seo_step = task.steps.get("seo")
-    seo = result.get("seo") or (seo_step.data if seo_step else None) or {}
+    seo = {} if result.get("sgeo") else result.get("seo") or (seo_step.data if seo_step else None) or {}
     for sample in seo.get("sampled_pages", []):
         data = {"fetched_at": None, "source_key": None, "response_headers": {}, "response_time_ms": None, **sample}
         add(sample.get("url") or sample.get("final_url"), data, "seo_sample")

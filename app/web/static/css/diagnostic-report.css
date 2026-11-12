@@ -1,4 +1,4 @@
-/* Shared report layout for SEO, GEO, and combined diagnostics. */
+/* Shared report layout for SEO, GEO, and unified SGEO diagnostics. */
 .diagnostic-report {
   --dr-ink: #17343d; --dr-muted: #607681; --dr-line: #e0e8ed; --dr-base: #ffffff; --dr-teal: #127c80;
   display: grid; gap: 18px; min-width: 0; color: var(--dr-ink); background: var(--dr-base);
@@ -27,6 +27,9 @@
 .dr-score-value { display: flex; align-items: baseline; gap: 5px; margin: 9px 0 13px; }
 .dr-score-value strong { font-size: 48px; font-weight: 700; line-height: 1; letter-spacing: -2px; color: #183943; }
 .dr-score-value small { font-size: 11px; color: #6a8290; }
+.sgeo-report .dr-score-ledger { background: #ecf5f4; }
+.sgeo-report .dr-score-value strong { color: #146e70; }
+.sgeo-report .dr-dimension-groups { padding-top: 20px; }
 .dr-overview-copy { padding: 25px 24px; align-self: center; min-width: 0; }
 .dr-overview-copy h3 { font-size: 17px; font-weight: 650; line-height: 1.6; overflow-wrap: anywhere; margin-bottom: 11px; }
 .dr-overview-copy > p { font-size: 12px; line-height: 1.9; color: #506977; max-width: 72ch; }

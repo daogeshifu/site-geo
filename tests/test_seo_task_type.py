@@ -7,10 +7,10 @@ def test_task_service_exposes_seo_step_order() -> None:
     assert service._step_order_for("site_seo_audit") == ["discovery", "seo", "summary"]
 
 
-def test_combined_geo_task_includes_seo_diagnosis_step() -> None:
+def test_sgeo_task_uses_one_unified_diagnosis_step() -> None:
     service = TaskService()
     assert service._step_order_for("site_geo_audit") == [
-        "discovery", "seo", "geo", "observation", "summary",
+        "discovery", "sgeo", "observation", "summary",
     ]
 
 

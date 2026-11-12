@@ -376,7 +376,7 @@ def test_cache_and_task_routing_separate_three_task_types(tmp_path):
     assert TaskService()._step_order_for("site_geo_only_audit") == ["discovery", "geo", "observation", "summary"]
 
 
-def test_combo_and_pure_geo_share_engine_but_never_scores(monkeypatch):
+def test_sgeo_uses_shared_evidence_and_its_own_rubric_without_running_seo(monkeypatch):
     from app.services.orchestration import tasks as module
     service = TaskService()
     source = discovery()
@@ -391,15 +391,18 @@ def test_combo_and_pure_geo_share_engine_but_never_scores(monkeypatch):
     async def geo(*args, **kwargs):
         received.append(("geo", kwargs["page_evidence"]))
         return await original(*args, **kwargs)
+    original_sgeo = service.sgeo_audit_service.audit
+    async def sgeo(*args, **kwargs):
+        received.append(("sgeo", kwargs["page_evidence"]))
+        return await original_sgeo(*args, **kwargs)
     async def seo(*args, **kwargs):
-        received.append(("seo", kwargs["page_evidence"]))
-        return SimpleNamespace(overall_score=99, model_dump=lambda **kw: {"overall_score": 99})
+        raise AssertionError("SGEO must not run a second complete SEO scoring engine")
     monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
     monkeypatch.setattr(service.discovery_service, "discover", discover)
     monkeypatch.setattr(module, "collect_page_evidence", collect)
     monkeypatch.setattr(service.geo_audit_service, "audit", geo)
     monkeypatch.setattr(service.seo_audit_service, "audit", seo)
-    monkeypatch.setattr(service.seo_audit_service, "summarize", lambda *a, **kw: SimpleNamespace(model_dump=lambda **kw: {"overall_score": 99}))
+    monkeypatch.setattr(service.sgeo_audit_service, "audit", sgeo)
     def task(kind):
         order = service._step_order_for(kind)
         now = datetime.now(timezone.utc)
@@ -407,12 +410,14 @@ def test_combo_and_pure_geo_share_engine_but_never_scores(monkeypatch):
             task_type=kind, created_at=now, updated_at=now, step_order=order, steps={key: TaskStep(name=key) for key in order})
     pure = asyncio.run(service._run_site_geo_task(task("site_geo_only_audit")))
     combo = asyncio.run(service._run_site_geo_task(task("site_geo_audit")))
-    assert pure["geo"]["score"] == combo["geo"]["score"]
-    assert "seo" not in pure and combo["seo"]["overall_score"] == 99
-    assert combo["summary"]["combined_score"] is None
-    assert combo["summary"]["seo_score"] == 99
-    assert ("backlinks", False) in received and ("backlinks", True) in received
-    assert all(item is shared for name, item in received if name in {"geo", "seo"})
+    assert pure["geo"]["scoring_version"] == "onsite-geo-v2"
+    assert combo["sgeo"]["scoring_version"] == "onsite-sgeo-v1"
+    assert "seo" not in combo and "geo" not in combo and "seo_summary" not in combo
+    assert combo["summary"]["combined_score"] == combo["sgeo"]["score"]
+    assert combo["summary"]["sgeo_score"] == combo["sgeo"]["score"]
+    assert "seo_score" not in combo["summary"] and "geo_score" not in combo["summary"]
+    assert all(value is False for name, value in received if name == "backlinks")
+    assert all(item is shared for name, item in received if name in {"geo", "sgeo"})
 
 
 def test_docs_and_frontend_describe_the_actual_new_rules():
@@ -422,7 +427,7 @@ def test_docs_and_frontend_describe_the_actual_new_rules():
     options = soup.select("#task-type option")
     assert options[0]["value"] == "site_geo_only_audit"
     assert options[0].has_attr("selected")
-    assert "网站 SEO+GEO 审计" in options[2].text
+    assert "网站 SGEO 诊断" in options[2].text
     assert "<<<<<<<" not in html
     docs = BeautifulSoup(client.get("/api-doc").text, "html.parser")
     actual = {node["data-geo-check"]: int(node["data-points"]) for node in docs.select("[data-geo-check]")}
@@ -432,7 +437,7 @@ def test_docs_and_frontend_describe_the_actual_new_rules():
     assert docs.select_one('[data-geo-check="GEO-001"] .scoring-rule-label').get_text() == "HTTP / HTTPS"
     assert docs.select_one('[data-geo-check="GEO-023"] .scoring-rule-label').get_text() == "JSON-LD / Schema.org"
     assert not any("GEO-" in node.get_text() for node in docs.select("[data-geo-check]"))
-    assert "不平均" in docs.text
+    assert "SGEO 评分规则" in docs.text
     assert "combined_score" in docs.text
     assert "/api/v1/audit/geo" in docs.text
     assert "结构代理" in docs.text
@@ -497,7 +502,7 @@ def test_geo_api_task_lifecycle_report_and_source_inventory(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize("task_type,dimension_count,check_count", [
-    ("site_geo_only_audit", 6, 26), ("site_seo_audit", 6, 26), ("site_geo_audit", 12, 52),
+    ("site_geo_only_audit", 6, 26), ("site_seo_audit", 6, 26), ("site_geo_audit", 6, 30),
 ])
 def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
     monkeypatch, tmp_path, task_type, dimension_count, check_count
@@ -540,25 +545,27 @@ def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
             time.sleep(.01)
         assert task["status"] == "completed", task.get("error")
         result = task["result"]
-        actual_dimensions = sum(len(result[key]["dimensions"]) for key in ("seo", "geo") if key in result)
+        actual_dimensions = sum(len(result[key]["dimensions"]) for key in ("seo", "geo", "sgeo") if key in result)
         actual_checks = len(result.get("seo", {}).get("coverage_checks", [])) + sum(
-            len(d["checks"]) for d in result.get("geo", {}).get("dimensions", {}).values())
+            len(d["checks"]) for key in ("geo", "sgeo") for d in result.get(key, {}).get("dimensions", {}).values())
         assert (actual_dimensions, actual_checks) == (dimension_count, check_count)
         if task_type != "site_seo_audit":
-            assert result["geo"]["readiness_status"] == "blocked"
-            assert result["geo"]["coverage"]["unknown_checks"] > 0
+            readiness = result.get("sgeo") or result["geo"]
+            assert readiness["readiness_status"] == "blocked"
+            assert readiness["coverage"]["unknown_checks"] > 0
         if task_type == "site_geo_audit":
-            assert result["summary"]["combined_score"] is None
-            assert result["seo_summary"]["overall_score"] == result["seo"]["overall_score"]
+            assert result["summary"]["combined_score"] == result["sgeo"]["score"]
+            assert result["summary"]["sgeo_score"] == result["sgeo"]["score"]
+            assert not {"seo", "geo", "seo_summary"} & result.keys()
 
         report = client.get(f"/api/v1/tasks/{task_id}/report")
         assert report.status_code == 200
-        for check_id in ("GEO-026", "CHK-026") if task_type == "site_geo_audit" else (
+        for check_id in ("SGEO-026", "SGEO-030") if task_type == "site_geo_audit" else (
             ("CHK-026",) if task_type == "site_seo_audit" else ("GEO-026",)
         ):
             assert check_id in report.text
-        if "geo" in result:
-            for heading in ("Complete GEO checklist", "Verification queue", "Recommendations", "Platform retrieval policies"):
+        if "geo" in result or "sgeo" in result:
+            for heading in (f"Complete {'SGEO' if 'sgeo' in result else 'GEO'} checklist", "Verification queue", "Recommendations", "Platform retrieval policies"):
                 assert heading in report.text
         cached = client.post("/api/v1/tasks/audit", json=request).json()["data"]
         assert cached["cached"] is True
@@ -607,7 +614,7 @@ def test_invalid_site_parameters_return_json_422_instead_of_500(monkeypatch, end
     assert "Site scope requires max_pages >= 5" in response.json()["errors"][0]["ctx"]["error"]
 
 
-def test_combined_export_rebuilds_missing_historical_seo_summary(monkeypatch):
+def test_combined_export_regroups_historical_page_evidence_as_sgeo(monkeypatch):
     from app.services.reporting.geo_report import render_geo_report
 
     async def variants(*args, **kwargs):
@@ -619,5 +626,7 @@ def test_combined_export_rebuilds_missing_historical_seo_summary(monkeypatch):
     geo = audit([evidence()], source).model_dump(mode="json")
     seo = asyncio.run(SeoAuditService().audit(source.url, source, page_evidence=[evidence()])).model_dump(mode="json")
     markdown = render_geo_report({"url": source.url, "geo": geo, "seo": seo, "discovery": source.model_dump(mode="json")})
-    assert all(key in markdown for key in ("GEO-024", "GEO-025", "GEO-026", "CHK-026"))
+    assert all(key in markdown for key in ("SGEO-024", "SGEO-025", "SGEO-026", "SGEO-030"))
+    assert "CHK-026" not in markdown
+    assert "Complete SGEO checklist" in markdown
     assert "Verification queue" in markdown

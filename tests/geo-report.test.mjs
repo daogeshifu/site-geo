@@ -42,6 +42,7 @@ test('combined report preserves independent SEO summary and GEO score', () => {
 test('new task selection and step configuration stay separate from combined audits', () => {
   assert.equal(getTaskTypeConfig().heading.zh, '网站 GEO 审计');
   assert.deepEqual(getTaskStepOrder('site_geo_only_audit'), ['discovery', 'geo', 'observation', 'summary']);
-  assert.deepEqual(getTaskStepOrder('site_geo_audit'), ['discovery', 'seo', 'geo', 'observation', 'summary']);
+  assert.deepEqual(getTaskStepOrder('site_geo_audit'), ['discovery', 'sgeo', 'observation', 'summary']);
+  assert.equal(getTaskTypeConfig('site_geo_audit').heading.zh, '网站 SGEO 诊断');
   assert.deepEqual(getTaskStepOrder('site_geo_only_audit', 'page'), ['page', 'summary']);
 });
