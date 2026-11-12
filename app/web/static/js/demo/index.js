@@ -1,10 +1,11 @@
 import { renderContentAuditReport } from './content-report.js';
-import { renderGeoAuditReport } from './geo-report.js?v=20261111-onsite-geo';
+import { renderGeoAuditReport } from './geo-report.js?v=20261111-report-v2';
+import { mountDiagnosticReport } from './diagnostic-report.js?v=20261111-report-v2';
 import { withAuditScope, renderSinglePageReport } from './page-audit.js?v=20261110-scope';
 import { renderEntityGraph } from './entity-graph.js';
 import { renderStructureGraph } from './knowledge-graph.js';
 import { mountPerceptionClouds } from './perception-cloud.js';
-import { renderSeoAuditReport } from './seo-report.js?v=20260909-checklist';
+import { renderSeoAuditReport } from './seo-report.js?v=20261111-report-v2';
 import { renderSiteAuditReport } from './site-report.js?v=20260930-echarts-cloud';
 import { createSiteLinksExplorer } from './site-links.js';
 import {
@@ -71,7 +72,7 @@ let entityGraphLoading = false;
 let demoTokenRequired = true;
 let demoTokenVerified = false;
 const siteLinks = createSiteLinksExplorer({ host: $('site-links-output'), fetchApi: demoApiFetch });
-const REPORT_CACHE_PREFIX = 'geo-audit-report:v10-onsite-geo:';
+const REPORT_CACHE_PREFIX = 'geo-audit-report:v11-diagnostic-report:';
 let savedSiteOptions = null;
 const DEMO_API_PREFIX = '/api/v1/demo';
 const API_PREFIX = '/api/v1';
@@ -559,6 +560,7 @@ function renderReport(task) {
   if (cachedHtml) {
     host.className = 'report-shell';
     host.innerHTML = cachedHtml;
+    mountDiagnosticReport(host);
     mountPerceptionClouds(host);
     return;
   }

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
@@ -79,7 +80,8 @@ async def app_error_handler(_: Request, exc: AppError) -> ORJSONResponse:
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(_: Request, exc: RequestValidationError) -> ORJSONResponse:
     """处理请求参数校验失败，返回 422 错误"""
-    return ORJSONResponse(status_code=422, content=error_response("validation error", exc.errors()))
+    errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+    return ORJSONResponse(status_code=422, content=error_response("validation error", errors))
 
 
 @app.exception_handler(Exception)

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
+import pytest
 
 from app.core.config import settings
 from app.main import app
@@ -327,3 +328,130 @@ def test_geo_api_task_lifecycle_report_and_source_inventory(monkeypatch, tmp_pat
         from app.services.reporting.site_pages import task_site_pages
         inventory = task_site_pages(task_service.tasks[task_id])
         assert any(page.get("source_key") == "b" * 64 for page in inventory)
+
+
+@pytest.mark.parametrize("task_type,dimension_count,check_count", [
+    ("site_geo_only_audit", 6, 23), ("site_seo_audit", 6, 26), ("site_geo_audit", 12, 49),
+])
+def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
+    monkeypatch, tmp_path, task_type, dimension_count, check_count
+):
+    """Exercise actual engines through v1, replacing only network evidence."""
+    from app.api.routes.tasks import task_service
+    from app.services.orchestration import tasks as task_module
+    from app.services.audit import seo as seo_module
+
+    source = discovery()
+    source.robots.raw_text = "User-agent: *\nAllow: /\nUser-agent: OAI-SearchBot\nDisallow: /docs/\n"
+
+    async def discover(*args, **kwargs):
+        return source
+
+    async def collect(*args, **kwargs):
+        return [evidence(), evidence("https://example.com/docs/widget", kind="documentation")]
+
+    async def variants(*args, **kwargs):
+        return {"http_to_https": True, "non_www_to_preferred": True, "www_to_preferred": True}
+
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    monkeypatch.setitem(settings.__dict__, "demo_access_token", "diagnostic-contract-token")
+    monkeypatch.setattr(task_service, "asset_store", SimpleNamespace(available=False, backend="file"))
+    monkeypatch.setattr(task_service, "cache_service", CacheService(cache_dir=str(tmp_path)))
+    monkeypatch.setattr(task_service.discovery_service, "discover", discover)
+    monkeypatch.setattr(task_module, "collect_page_evidence", collect)
+    monkeypatch.setattr(seo_module, "collect_page_evidence", collect)
+    monkeypatch.setattr(SeoAuditService, "_probe_variants", variants)
+
+    with TestClient(app, headers={"X-API-Token": "diagnostic-contract-token"}) as client:
+        request = {"url": source.url, "task_type": task_type, "feedback_lang": "zh"}
+        response = client.post("/api/v1/tasks/audit", json=request)
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+        for _ in range(100):
+            task = client.get(f"/api/v1/tasks/{task_id}").json()["data"]
+            if task["status"] in {"completed", "failed"}:
+                break
+            time.sleep(.01)
+        assert task["status"] == "completed", task.get("error")
+        result = task["result"]
+        actual_dimensions = sum(len(result[key]["dimensions"]) for key in ("seo", "geo") if key in result)
+        actual_checks = len(result.get("seo", {}).get("coverage_checks", [])) + sum(
+            len(d["checks"]) for d in result.get("geo", {}).get("dimensions", {}).values())
+        assert (actual_dimensions, actual_checks) == (dimension_count, check_count)
+        if task_type != "site_seo_audit":
+            assert result["geo"]["readiness_status"] == "blocked"
+            assert result["geo"]["coverage"]["unknown_checks"] > 0
+        if task_type == "site_geo_audit":
+            assert result["summary"]["combined_score"] is None
+            assert result["seo_summary"]["overall_score"] == result["seo"]["overall_score"]
+
+        report = client.get(f"/api/v1/tasks/{task_id}/report")
+        assert report.status_code == 200
+        for check_id in ("GEO-023", "CHK-026") if task_type == "site_geo_audit" else (
+            ("CHK-026",) if task_type == "site_seo_audit" else ("GEO-023",)
+        ):
+            assert check_id in report.text
+        if "geo" in result:
+            for heading in ("Complete GEO checklist", "Verification queue", "Recommendations", "Platform retrieval policies"):
+                assert heading in report.text
+        cached = client.post("/api/v1/tasks/audit", json=request).json()["data"]
+        assert cached["cached"] is True
+        assert cached["result"] == result
+
+
+def test_v1_sync_and_historical_module_contracts_still_work(monkeypatch):
+    from app.services.audit import seo as seo_module, geo as geo_module
+
+    async def collect(*args, **kwargs):
+        return [evidence()]
+
+    async def variants(*args, **kwargs):
+        return {"http_to_https": True, "non_www_to_preferred": True, "www_to_preferred": True}
+
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    monkeypatch.setitem(settings.__dict__, "demo_access_token", "legacy-contract-token")
+    monkeypatch.setattr(seo_module, "collect_page_evidence", collect)
+    monkeypatch.setattr(geo_module, "collect_page_evidence", collect)
+    monkeypatch.setattr(SeoAuditService, "_probe_variants", variants)
+    request = {"url": "https://example.com/", "discovery": discovery().model_dump(mode="json")}
+    with TestClient(app, headers={"X-Demo-Token": "legacy-contract-token"}) as client:
+        for module in ("visibility", "technical", "content", "schema", "platform", "seo", "geo", "full"):
+            response = client.post(f"/api/v1/audit/{module}", json=request)
+            assert response.status_code == 200, (module, response.text)
+            result = response.json()["data"]
+            if module == "full":
+                assert result["summary"]["scoring_version"] == "geo-audit-v3"
+                assert {"visibility", "technical", "content", "schema", "platform", "summary"} <= result.keys()
+            elif module == "geo":
+                assert result["scoring_version"] == "onsite-geo-v1"
+                assert len(result["dimensions"]) == 6
+            elif module == "seo":
+                assert len(result["coverage_checks"]) == 26
+            else:
+                assert "score" in result and "status" in result
+
+
+@pytest.mark.parametrize("endpoint", ["tasks/audit", "audit/seo", "audit/geo", "audit/full"])
+def test_invalid_site_parameters_return_json_422_instead_of_500(monkeypatch, endpoint):
+    monkeypatch.setitem(settings.__dict__, "demo_access_token", "validation-contract-token")
+    with TestClient(app, headers={"Authorization": "Bearer validation-contract-token"}) as client:
+        response = client.post(f"/api/v1/{endpoint}", json={"url": "https://example.com/", "max_pages": 3})
+    assert response.status_code == 422
+    assert response.json()["success"] is False
+    assert "Site scope requires max_pages >= 5" in response.json()["errors"][0]["ctx"]["error"]
+
+
+def test_combined_export_rebuilds_missing_historical_seo_summary(monkeypatch):
+    from app.services.reporting.geo_report import render_geo_report
+
+    async def variants(*args, **kwargs):
+        return {"http_to_https": True, "non_www_to_preferred": True, "www_to_preferred": True}
+
+    monkeypatch.setattr(SeoAuditService, "_probe_variants", variants)
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    source = discovery()
+    geo = audit([evidence()], source).model_dump(mode="json")
+    seo = asyncio.run(SeoAuditService().audit(source.url, source, page_evidence=[evidence()])).model_dump(mode="json")
+    markdown = render_geo_report({"url": source.url, "geo": geo, "seo": seo, "discovery": source.model_dump(mode="json")})
+    assert "GEO-023" in markdown and "CHK-026" in markdown
+    assert "Verification queue" in markdown

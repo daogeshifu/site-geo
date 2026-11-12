@@ -15,8 +15,8 @@ function render(seo = {}, lang = 'zh') {
 
 test('issues precede coverage and compact, collapsed dimensions', () => {
   const html = render({ dimensions: { technical: { label: 'Technical SEO', score: 64, issues: ['A'] } } });
-  assert.ok(html.indexOf('issue-table-section') < html.indexOf('覆盖清单'));
-  assert.ok(html.indexOf('覆盖清单') < html.indexOf('dimensions-section'));
+  assert.ok(html.indexOf('id="diagnosis-issues"') < html.indexOf('id="diagnosis-coverage"'));
+  assert.ok(html.indexOf('id="diagnosis-coverage"') < html.indexOf('id="diagnosis-dimensions"'));
   assert.match(html, /<details class="dimension-details">/);
   assert.doesNotMatch(html, /<details class="dimension-details" open/);
   assert.doesNotMatch(html, /核心问题/);
