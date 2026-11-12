@@ -9,7 +9,11 @@ WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
 
-RUN pip install --no-cache-dir --upgrade pip \
+# Playwright's bundled Node must start before --with-deps can install browser libraries.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt \
     && playwright install --with-deps chromium
 

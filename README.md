@@ -104,6 +104,25 @@ Compose 强制启用，镜像构建时会安装 Chromium。脚本优先使用新
 `docker compose`；仅有已停止维护的旧版 `docker-compose` v1 或未安装
 Compose 时，会自动使用纯 Docker 命令。
 
+如果镜像构建在 `playwright install --with-deps chromium` 前报
+`playwright/driver/node: ... libatomic.so.1: cannot open shared object file`，
+需要在 **Dockerfile 内、运行 Playwright 之前**安装 `libatomic1`。当前 Dockerfile
+已包含此步骤；只在宿主机安装该包不能补齐镜像内的依赖。
+
+若旧容器报 `docker-<容器ID>.scope was already loaded or has a fragment file`，
+先检查 `docker inspect --format '{{json .State}}' geo-audit-service`。
+确认容器已退出且 `stop/reset-failed` 无效后，可在镜像构建成功后只重建该服务，
+让新容器使用新的 ID；不要为此重启整个 Docker 服务。
+重建前确认 `.env`、`/app/.data` 的实际挂载和备份，保留 Token 与调用日志。
+
+```bash
+COMPOSE_BAKE=false docker compose -p site-geo -f compose.yaml build geo-audit-service &&
+docker compose -p site-geo -f compose.yaml up -d --no-deps --no-build --force-recreate geo-audit-service
+```
+
+这里显式指定 `site-geo`，与部署脚本使用同一个 Compose 项目。构建失败时不会执行
+后面的容器重建；`COMPOSE_BAKE=false` 可用于服务器未安装 buildx 的情况。
+
 常用维护命令：
 
 ```bash
