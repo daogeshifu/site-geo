@@ -1,3 +1,6 @@
+import pytest
+
+from app.core.config import settings
 from app.services.infra.cache import CacheService
 
 
@@ -34,3 +37,14 @@ def test_combined_seo_geo_cache_namespace_differs_from_seo_only() -> None:
         "https://example.com", "standard", task_type="site_seo_audit"
     )
     assert combined_key != seo_key
+
+
+@pytest.mark.parametrize(("task_type", "previous_key"), [
+    ("site_geo_only_audit", "0d1a8e0608d0d79b2fa9711e5677f336b4f4e5fcd274d11d4452139c69ea3fd4"),
+    ("site_geo_audit", "243876db2f533bf9c5798d969dae48df7ce323f3097312a7eaa659027f3c8870"),
+])
+def test_geo_does_not_reuse_reports_from_navigation_extraction_bug(tmp_path, monkeypatch, task_type, previous_key):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    service = CacheService(cache_dir=str(tmp_path))
+    current_key, _, _ = service.build_cache_key("https://example.com", "standard", task_type=task_type)
+    assert current_key != previous_key

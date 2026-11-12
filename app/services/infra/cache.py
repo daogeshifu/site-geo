@@ -59,9 +59,9 @@ class CacheService:
             else "none"
         )
         normalized_pages = max_pages if full_audit else min(max_pages, 8) if task_type != "site_content_audit" else 5
-        # The new score must never reuse legacy six-module GEO payloads.
+        # Also invalidate reports whose navigation cleanup deleted core content.
         task_schema_version = (
-            f"onsite-geo-v1-render-{int(settings.allow_playwright)}"
+            f"onsite-geo-v1-extraction-v2-render-{int(settings.allow_playwright)}"
             if task_type in {"site_geo_only_audit", "site_geo_audit"} else "v1"
         )
         raw_key = (

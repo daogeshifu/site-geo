@@ -67,12 +67,18 @@ RULE_MAP = {row[0]: row for row in RULES}
 
 def main_document(html: str) -> tuple[BeautifulSoup, Any, str]:
     soup = BeautifulSoup(html or "", "lxml")
-    for element in soup.select("script:not([type='application/ld+json']), style, template, nav, footer, aside, [hidden], [aria-hidden='true']"):
+    for element in soup.select("script:not([type='application/ld+json']), style, template, [hidden], [aria-hidden='true']"):
         element.decompose()
     for element in soup.select("[style]"):
-        if re.search(r"(?:display\s*:\s*none|visibility\s*:\s*hidden)", element.get("style", ""), re.I):
+        if element.attrs is not None and re.search(r"(?:display\s*:\s*none|visibility\s*:\s*hidden)", element.get("style", ""), re.I):
             element.decompose()
     root = soup.select_one("main, article, [role='main']") or soup.body or soup.new_tag("main")
+    # Malformed markup can place the content landmark inside navigation. Keep
+    # that landmark while still excluding navigation and other boilerplate.
+    protected = {id(root), *(id(parent) for parent in root.parents)}
+    for element in soup.select("nav, footer, aside"):
+        if id(element) not in protected:
+            element.decompose()
     text = root.get_text(" ", strip=True)
     return soup, root, text
 

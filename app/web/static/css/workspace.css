@@ -1,5 +1,5 @@
 /* Full-width audit workspace. Shared report components retain their semantics. */
-:root { --accent: #087f76; --accent-dark: #05675e; --accent-dim: #e6f5f2; --text: #172b34; --muted: #6f8087; --border: #dfe7e9; --bg: #f3f6f7; }
+:root { --accent: #087f76; --accent-dark: #05675e; --accent-dim: #e6f5f2; --text: #172b34; --muted: #6f8087; --border: #dfe7e9; --bg: #ffffff; }
 body { background: var(--bg); font-size: 13px; }
 button, input, select { font: inherit; }
 button, summary, a, input, select { -webkit-tap-highlight-color: transparent; }

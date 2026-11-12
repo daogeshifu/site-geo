@@ -117,6 +117,51 @@ def test_nav_scripts_and_hidden_copy_are_not_core_content(monkeypatch):
     assert check(result.pages[0], "GEO-009").status == "pass"
 
 
+@pytest.mark.parametrize("landmark", ["main", "article", 'div role="main"'])
+def test_content_survives_navigation_repaired_around_it(monkeypatch, landmark):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    tag = landmark.split()[0]
+    # An unclosed navigation div makes lxml place the later content inside nav.
+    html = (
+        '<html><body><header><nav><div><a href="/">Navigation</a></nav></header>'
+        f'<{landmark}><h1>Widget</h1><p>Press reset.</p>'
+        f'<nav>Contents</nav><aside>Related pages</aside><footer>Copyright</footer></{tag}>'
+        '</body></html>'
+    )
+    assert main_document(html)[2] == "Widget Press reset."
+    result = audit([evidence(html=html)])
+    extraction = check(result.pages[0], "GEO-009")
+    assert extraction.status == "pass"
+    assert extraction.blocker is False
+    assert not any(blocker["check_id"] == "GEO-009" for blocker in result.blockers)
+
+
+@pytest.mark.parametrize("hidden", ["hidden", 'aria-hidden="true"', 'style="display:none"'])
+def test_hidden_content_in_navigation_is_not_rescued(monkeypatch, hidden):
+    monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
+    html = (
+        '<html><body><nav>Navigation'
+        f'<div {hidden}><main><h1>Hidden content</h1></main></div>'
+        '</nav></body></html>'
+    )
+    assert main_document(html)[2] == ""
+    result = audit([evidence(html=html)])
+    assert check(result.pages[0], "GEO-009").status == "fail"
+
+
+def test_body_fallback_still_excludes_navigation():
+    html = '<html><body><nav>Navigation</nav><p>Visible body.</p><footer>Copyright</footer></body></html>'
+    assert main_document(html)[2] == "Visible body."
+
+
+def test_nested_styled_hidden_content_does_not_break_extraction():
+    html = (
+        '<html><body><main><div style="display:none">'
+        '<p style="color:red">Hidden content</p></div><p>Visible body.</p></main></body></html>'
+    )
+    assert main_document(html)[2] == "Visible body."
+
+
 def test_unknown_and_not_applicable_are_distinct_and_reported(monkeypatch):
     monkeypatch.setitem(settings.__dict__, "allow_playwright", False)
     result = audit([evidence()])
