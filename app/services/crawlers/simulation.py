@@ -9,7 +9,12 @@ import httpx
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.services.crawlers.catalog import BY_ID, Agent
-from app.services.crawlers.http import FetchResult, fetch_public
+from app.services.crawlers.http import (
+    FetchResult,
+    fetch_public,
+    visible_request_headers,
+    visible_response_headers,
+)
 from app.services.google_crawler.common import inspect_html, request_http_metadata
 from app.services.google_crawler.google_render import GoogleRenderService
 from app.utils.public_url import normalize_public_url
@@ -80,6 +85,16 @@ class _RobotsStop(Exception):
 
 async def _spider(url: str, agent: Agent, client: httpx.AsyncClient, policy: RobotsPolicy) -> dict:
     robots: dict = {}
+    observed: list[dict] = []
+
+    def record_response(response: httpx.Response) -> None:
+        # A later redirect or body read can fail after these headers have arrived.
+        observed.append({
+            "url": str(response.url),
+            "status_code": response.status_code,
+            "headers": visible_request_headers(response.request.headers),
+            "response_headers": visible_response_headers(response.headers),
+        })
 
     async def check_path(target: str) -> None:
         nonlocal robots
@@ -89,14 +104,32 @@ async def _spider(url: str, agent: Agent, client: httpx.AsyncClient, policy: Rob
 
     try:
         response = await fetch_public(
-            url, client=client, headers=agent.headers(), before_request=check_path
+            url,
+            client=client,
+            headers=agent.headers(),
+            before_request=check_path,
+            on_response=record_response,
         )
     except _RobotsStop:
-        return {"status": "skipped", "robots": robots, "reason": robots["detail"]}
-    except httpx.TimeoutException:
-        return {"status": "failed", "robots": robots, "reason": "目标页面响应超时。"}
+        return {"status": "skipped", "robots": robots, "reason": robots["detail"], "observed_responses": observed}
     except httpx.RequestError as exc:
-        return {"status": "failed", "robots": robots, "reason": f"无法获取目标页面（{exc}）。"}
+        reason = "目标页面响应超时。" if isinstance(exc, httpx.TimeoutException) else f"无法获取目标页面（{exc}）。"
+        failure = {"status": "failed", "robots": robots, "reason": reason, "observed_responses": observed}
+        try:
+            attempted = exc.request
+        except RuntimeError:
+            # Transport errors raised before HTTPX associates a request have no page fields.
+            return failure
+        failure["attempted_request"] = {
+            "url": str(attempted.url),
+            "headers": visible_request_headers(attempted.headers),
+        }
+        return failure
+    except AppError as exc:
+        if not observed:
+            raise
+        reason = f"无法继续访问重定向地址（{exc.message}）。"
+        return {"status": "failed", "robots": robots, "reason": reason, "observed_responses": observed}
 
     status = response.status_code
     content_type = response.headers.get("content-type", "")
@@ -115,18 +148,7 @@ async def _spider(url: str, agent: Agent, client: httpx.AsyncClient, policy: Rob
         "response_time_ms": response.response_time_ms,
         "content_type": content_type,
         "size_bytes": response.size_bytes,
-        "response_headers": {
-            key: response.headers[key]
-            for key in (
-                "content-type",
-                "content-length",
-                "content-encoding",
-                "content-range",
-                "x-robots-tag",
-                "retry-after",
-            )
-            if key in response.headers
-        },
+        "response_headers": visible_response_headers(response.headers),
     }
     result = {
         "status": "passed" if 200 <= status < 300 else "failed",
@@ -195,5 +217,7 @@ async def simulate(url: str, platform_id: str, agent_token: str | None = None) -
             # The spider evidence is already complete and remains independently usable.
             logger.exception("Chromium capture failed for platform %s", platform.id)
             render = {"status": "failed", "reason": "渲染过程已中断，可查看上方的原始抓取结果。"}
+        if "comparison" in render:
+            render["comparison"]["initial_truncated"] = spider["truncated"]
         result["render"] = {**render, "robots": rules}
         return result

@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.core.config import settings
-from app.services.crawlers.http import visible_request_headers
+from app.services.crawlers.http import visible_request_headers, visible_response_headers
 from app.services.google_crawler.common import (
     inspect_html,
     issue,
@@ -281,6 +281,8 @@ class GoogleRenderService:
                 "status_code": status_code,
                 **http_metadata,
                 "headers": request_headers,
+                "response_headers": visible_response_headers(response_headers),
+                "content_type": response_headers.get("content-type", ""),
                 "redirect_count": len(redirect_chain),
                 "redirect_chain": redirect_chain,
                 "render_time_ms": elapsed_ms,
@@ -290,6 +292,7 @@ class GoogleRenderService:
                 "initial_word_count": initial["word_count"],
                 "rendered_word_count": rendered["word_count"],
                 "word_delta": word_delta,
+                "body_text_delta": rendered["body_text_length"] - initial["body_text_length"],
                 "initial_internal_links": initial["internal_link_count"],
                 "rendered_internal_links": rendered["internal_link_count"],
                 "link_delta": link_delta,

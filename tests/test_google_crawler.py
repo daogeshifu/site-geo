@@ -79,6 +79,16 @@ def test_inspect_html_extracts_indexable_content() -> None:
     assert result["directives"] == ["follow", "index"]
     assert result["internal_link_count"] == 1
     assert result["script_count"] == 1
+    assert result["body_text_preview"] == "Primary heading One"
+    assert result["body_text_length"] == len("Primary heading One")
+
+
+def test_body_preview_counts_text_beyond_the_excerpt_and_keeps_empty_bodies_empty() -> None:
+    page = "<title>标题</title><body>" + "🙂中" * 300 + "<style>hidden</style></body>"
+    content = inspect_html(page, "https://example.com/")
+    assert content["body_text_length"] == 600
+    assert content["body_text_preview"] == "🙂中" * 250
+    assert inspect_html("<title>标题</title>", "https://example.com/")["body_text_length"] == 0
 
 
 @pytest.mark.asyncio

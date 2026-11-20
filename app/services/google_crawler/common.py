@@ -103,6 +103,8 @@ def inspect_html(html: str, base_url: str, *, agent_token: str = "Googlebot") ->
     for node in soup(["script", "style", "noscript", "template", "svg"]):
         node.decompose()
     visible_text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()
+    body = soup.body
+    body_text = re.sub(r"\s+", " ", body.get_text(" ", strip=True)).strip() if body else ""
 
     host = (urlparse(base_url).hostname or "").lower()
     internal_links: set[str] = set()
@@ -120,6 +122,8 @@ def inspect_html(html: str, base_url: str, *, agent_token: str = "Googlebot") ->
         "word_count": count_words(visible_text),
         "visible_text": visible_text,
         "text_preview": visible_text[:500],
+        "body_text_preview": body_text[:500],
+        "body_text_length": len(body_text),
         "internal_link_count": len(internal_links),
         "script_count": script_count,
         "html_bytes": len((html or "").encode("utf-8", errors="ignore")),

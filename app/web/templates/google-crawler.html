@@ -1,10 +1,11 @@
+{% from "crawler-stage.html" import stage -%}
 <!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% if platform %}{{ platform.name }} · {% endif %}爬虫测试 · GEO Audit</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20261120-platforms" />
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20261120-evidence" />
 </head>
 <body>
   <header class="topbar">
@@ -46,13 +47,13 @@
       {% endfor %}
     </div>
     {% else %}
-    <a class="back-link" href="/crawler-test"><i class="chevron" aria-hidden="true"></i>平台列表</a>
+    <div class="breadcrumbs"><a class="back-link" href="/crawler-test"><i class="chevron" aria-hidden="true"></i>平台列表</a><span aria-hidden="true">/</span><span>{{ platform.group }}</span></div>
     <header class="page-heading">
       <h1>{{ platform.name }}{% if platform.name.isascii() %} {% endif %}爬虫测试</h1>
       <p>{{ platform.description }}</p>
     </header>
 
-    <form id="crawler-form" class="test-form" data-platform="{{ platform.id }}">
+    <form id="crawler-form" class="test-form" data-platform="{{ platform.id }}" novalidate>
       <div class="input-row">
         <label>测试平台
           <select id="platform-select" name="platform">
@@ -66,7 +67,7 @@
           </select>
         </label>
         <label class="url-field">网页地址
-          <input id="test-url" name="url" type="url" maxlength="2048" placeholder="https://example.com/page" autocomplete="url" required />
+          <input id="test-url" name="url" type="url" maxlength="2048" placeholder="https://example.com/page" autocomplete="url" spellcheck="false" required />
         </label>
         <button id="run-test" type="submit">开始测试</button>
       </div>
@@ -75,7 +76,7 @@
         <label for="agent-select">抓取用途</label>
         <select id="agent-select" name="agent">
           {% for agent in platform.agents %}
-          <option value="{{ agent.token }}">{{ agent.purpose }} · {{ agent.token }}</option>
+          <option value="{{ agent.token }}" data-headers='{{ agent.headers() | tojson }}'>{{ agent.purpose }} · {{ agent.token }}</option>
           {% endfor %}
         </select>
         {% else %}
@@ -83,39 +84,29 @@
         {% endif %}
       </div>
       <details class="profile-details">
-        <summary>模拟请求头与来源</summary>
-        {% for agent in platform.agents %}
-        <div data-agent-profile="{{ agent.token }}" {% if not loop.first %}hidden{% endif %}>
-          <pre>{% for key, value in agent.headers().items() %}{{ key }}: {{ value }}{% if not loop.last %}{{ '\n' }}{% endif %}{% endfor %}</pre>
-          {% if agent.robots_user_agent %}<p>请求 robots.txt 时，User-Agent 另含 <code>robots.txt</code> 标记。</p>{% endif %}
-        </div>
-        {% endfor %}
+        <summary>标识说明与来源</summary>
+        {% if platform.agents | selectattr('robots_user_agent') | list %}<p>此平台部分爬虫请求 robots.txt 时使用专用 User-Agent，实测字段见下方抓取规则。</p>{% endif %}
         {% if platform.id in ("google", "bing", "gemini") %}<p>Googlebot 与 bingbot 的 Chrome 版本按本地 Chromium 填写，独立 HTTP 环境使用固定样本。</p>{% endif %}
         <p>抓取前先检查 robots.txt，规则禁止或无法确认时会显示原因。通用 HTTP 字段采用模拟值。资料核对日期为 <time>{{ reviewed_on }}</time>。</p>
         <div class="sources">{% for label, link in platform.sources %}<a href="{{ link }}" target="_blank" rel="noreferrer">{{ label }}</a>{% endfor %}</div>
       </details>
       <div id="token-row" class="token-row" hidden>
         <label for="demo-token">访问 Token</label>
-        <input id="demo-token" type="password" placeholder="X-API-Token" autocomplete="current-password" />
-        <span>此环境已启用访问保护</span>
+        <div class="secret-field">
+          <input id="demo-token" type="password" placeholder="输入访问 Token" autocomplete="current-password" aria-describedby="token-hint" />
+          <label class="token-visibility"><input type="checkbox" id="toggle-token" aria-label="显示访问 Token" aria-controls="demo-token" />显示</label>
+        </div>
+        <span id="token-hint">此环境已启用访问保护</span>
       </div>
     </form>
     <p id="run-state" role="status" aria-live="polite"></p>
     <div id="error-box" class="error-box" role="alert" hidden></div>
 
-    <section id="panel-spider" class="stage spider" aria-labelledby="spider-heading">
-      <div class="stage-head"><h2 id="spider-heading">spider-bot <small>原始抓取</small></h2><code id="spider-agent">{{ platform.agents[0].token }}</code></div>
-      <div class="stage-body"><p class="stage-empty">开始测试后可查看 HTTP 响应、重定向和原始内容。</p></div>
-    </section>
-    {% if platform.render %}
-    <section id="panel-render" class="stage render" aria-labelledby="render-heading">
-      <div class="stage-head"><h2 id="render-heading">Render-bot <small>JavaScript 渲染</small></h2><code>{{ platform.render.token }}</code></div>
-      <div class="stage-body"><p class="stage-empty">取得 HTML 后，在本地 Chromium 中加载页面并截取 DOM。</p></div>
-    </section>
-    {% endif %}
+    {{ stage('spider', platform.agents[0]) }}
+    {% if platform.render %}{{ stage('render', platform.render) }}{% endif %}
     {% endif %}
   </main>
   <footer>请求来自本工具服务器。显示的状态码和内容对应本次模拟访问。</footer>
-  {% if platform %}<script type="module" src="/static/js/google-crawler.js?v=20261120-platforms"></script>{% endif %}
+  {% if platform %}<script type="module" src="/static/js/google-crawler.js?v=20261120-evidence"></script>{% endif %}
 </body>
 </html>

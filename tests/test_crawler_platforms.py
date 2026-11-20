@@ -118,6 +118,11 @@ async def test_redirect_checks_selected_robots_before_fetching_new_path(monkeypa
     assert data["spider"]["status"] == "skipped"
     assert data["spider"]["robots"]["target"].endswith("/private/test")
     assert data["spider"]["robots"]["allowed"] is False
+    receipts = data["spider"]["observed_responses"]
+    assert [entry["status_code"] for entry in receipts] == [302]
+    assert receipts[0]["url"] == TARGET
+    assert receipts[0]["headers"]["User-Agent"] == BY_ID["openai"].agents[0].user_agent
+    assert "request" not in data["spider"]
 
 
 @pytest.mark.asyncio

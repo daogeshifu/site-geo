@@ -209,6 +209,7 @@ font_func/
 cookies.json
 *test.py
 *.json
+!/premium-ui.json
 *.zip
 json_ld/
 tmp/

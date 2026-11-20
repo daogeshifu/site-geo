@@ -1,0 +1,43 @@
+{% macro stage(kind, agent) %}
+{% set is_render = kind == 'render' %}
+{% set headers = {'User-Agent': agent.user_agent} if is_render else agent.headers() %}
+<section id="panel-{{ kind }}" class="stage {{ kind }}" aria-labelledby="{{ kind }}-heading"
+         data-preset='{{ headers | tojson }}' data-state="idle">
+  <header class="stage-head">
+    <div class="stage-heading">
+      <span class="stage-mark" aria-hidden="true"></span>
+      <h2 id="{{ kind }}-heading">{{ 'JavaScript 渲染' if is_render else '原始抓取' }}</h2>
+      <span class="stage-kind">{{ 'Render-bot' if is_render else 'spider-bot' }}</span>
+    </div>
+    <span class="stage-status">待测试</span>
+  </header>
+  <div class="stage-summary" hidden></div>
+  <div class="evidence-grid">
+    <section class="evidence-pane request-pane" aria-labelledby="{{ kind }}-headers">
+      <div class="pane-heading">
+        <h3 id="{{ kind }}-headers">请求头</h3><span class="header-origin">预设字段</span>
+      </div>
+      <div class="request-data">
+        <dl class="header-table">
+          {% for key, value in headers.items() %}
+          <div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>
+          {% endfor %}
+        </dl>
+      </div>
+    </section>
+    <section class="evidence-pane content-pane" aria-labelledby="{{ kind }}-content">
+      <div class="pane-heading">
+        <h3 id="{{ kind }}-content">内容抓取</h3><span class="content-origin">{{ '渲染后的 DOM' if is_render else '原始响应' }}</span>
+      </div>
+      <div class="content-data">
+        <div class="empty-content">
+          <span class="document-mark" aria-hidden="true"></span>
+          <p>{{ '等待渲染' if is_render else '等待网页响应' }}</p>
+          <small>{{ '抓取到 HTML 后，可查看执行 JavaScript 后的正文和源码。' if is_render else '输入网址开始测试，可查看页面标题、正文及原始数据。' }}</small>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="stage-supplement" hidden></div>
+</section>
+{% endmacro %}

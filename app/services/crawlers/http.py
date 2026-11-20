@@ -29,11 +29,23 @@ REQUEST_HEADER_NAMES = (
     "Sec-Fetch-Mode",
     "Sec-Fetch-Site",
 )
+RESPONSE_HEADER_NAMES = (
+    "content-type",
+    "content-length",
+    "content-encoding",
+    "content-range",
+    "x-robots-tag",
+    "retry-after",
+)
 
 
 def visible_request_headers(headers: Mapping[str, str]) -> dict[str, str]:
     lookup = {key.lower(): value for key, value in headers.items()}
     return {key: lookup[key.lower()] for key in REQUEST_HEADER_NAMES if key.lower() in lookup}
+
+
+def visible_response_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    return {key: headers[key] for key in RESPONSE_HEADER_NAMES if key in headers}
 
 
 @dataclass
@@ -57,6 +69,7 @@ async def fetch_public(
     headers: dict[str, str] | None = None,
     validate_url: bool = True,
     before_request: Callable[[str], Awaitable[None]] | None = None,
+    on_response: Callable[[httpx.Response], None] | None = None,
 ) -> FetchResult:
     current = await normalize_public_url(url) if validate_url else url
     requested = current
@@ -66,6 +79,8 @@ async def fetch_public(
         if before_request:
             await before_request(current)
         async with client.stream("GET", current, headers=headers, follow_redirects=False) as response:
+            if on_response is not None:
+                on_response(response)
             if response.status_code in REDIRECT_CODES and response.headers.get("location"):
                 target = await normalize_public_url(urljoin(current, response.headers["location"]))
                 redirects.append({"status_code": response.status_code, "from": current, "to": target})
