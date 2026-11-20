@@ -36,20 +36,14 @@ from app.utils.public_url import normalize_public_url
 client = TestClient(app)
 
 
-def test_google_crawler_demo_page_is_available() -> None:
+def test_legacy_crawler_link_opens_platform_directory() -> None:
     response = client.get("/google-crawler-test")
     assert response.status_code == 200
-    assert "Googlebot" in response.text
-    assert "Google Render" in response.text
-    assert "Overview" in response.text
-    assert "检测结论" in response.text
-    assert "页面 SEO 基础问题清单" in response.text
-    assert "一键导出 Excel" in response.text
-    assert "<th>修改建议</th>" not in response.text
-    assert "Raw HTML · Render HTML · 结论" in response.text
-    assert 'id="overview-rendering"' in response.text
-    assert "初始状态、重定向链、最终响应" in response.text
-    assert "并非 Google 官方 IP" in response.text
+    assert response.text == client.get("/crawler-test").text
+    assert 'href="/crawler-test/google"' in response.text
+    assert 'id="crawler-form"' not in response.text
+    assert "页面 SEO 基础问题清单" not in response.text
+    assert "一键导出 Excel" not in response.text
 
 
 def test_rendered_html_snapshot_is_utf8_safe_and_size_limited() -> None:

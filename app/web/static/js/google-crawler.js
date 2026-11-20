@@ -1,34 +1,12 @@
 const $ = id => document.getElementById(id);
 const form = $('crawler-form');
 const runButton = $('run-test');
+const agentSelect = $('agent-select');
+const tokenInput = $('demo-token');
 const DEMO_TOKEN_STORAGE_KEY = 'geo-audit-demo-token-today';
-let elapsedTimer = null;
-let startedAt = 0;
-let currentChecklist = [];
-let currentResultUrl = '';
 let restoredTokenDate = null;
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function statusLabel(status) {
-  return {
-    passed: '通过',
-    warning: '需关注',
-    failed: '未通过',
-    skipped: '未执行'
-  }[status] || '未知';
-}
-
-function valueOrDash(value, suffix = '') {
-  return value === null || value === undefined || value === '' ? '—' : `${value}${suffix}`;
-}
+let activeRequest = null;
+let timer = null;
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -80,676 +58,6 @@ function setTokenRowMessage(remembered) {
   message.textContent = remembered ? '今日已记住，无需再次输入' : '此环境已启用访问保护';
 }
 
-function renderChecks(checks = []) {
-  if (!checks.length) return '<div class="empty-issues">本次没有可展示的检查项。</div>';
-  return `<div class="checks">${checks.map(item => `
-    <div class="check ${escapeHtml(item.status)}">
-      <span class="check-mark">${item.status === 'pass' ? '✓' : item.status === 'fail' ? '!' : '•'}</span>
-      <div><strong>${escapeHtml(item.label)}</strong><p>${escapeHtml(item.detail)}</p></div>
-    </div>
-  `).join('')}</div>`;
-}
-
-function renderIssues(issues = []) {
-  if (!issues.length) return '<div class="empty-issues">未发现需要修复的主要问题。</div>';
-  return `<div class="issues">${issues.map(item => `
-    <article class="issue severity-${escapeHtml(item.severity)}">
-      <div class="issue-head">
-        <span class="severity severity-${escapeHtml(item.severity)}">${escapeHtml(item.severity)}</span>
-        <b>${escapeHtml(item.title)}</b>
-      </div>
-      <p>${escapeHtml(item.detail)}</p>
-      <p class="fix"><strong>建议：</strong>${escapeHtml(item.recommendation)}</p>
-    </article>
-  `).join('')}</div>`;
-}
-
-function renderMetrics(items) {
-  return `<div class="metric-grid">${items.map(([label, value, title = '']) => `
-    <div class="metric"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(title || value)}">${escapeHtml(value)}</strong></div>
-  `).join('')}</div>`;
-}
-
-function renderHttpJourney(request = {}, label = 'HTTP 请求路径') {
-  const redirects = Array.isArray(request.redirect_chain) ? request.redirect_chain : [];
-  const initialStatus = request.initial_status_code
-    ?? redirects[0]?.status_code
-    ?? request.status_code;
-  const finalStatus = request.final_status_code ?? request.status_code;
-  const requestedUrl = request.requested_url || '—';
-  const finalUrl = request.final_url || requestedUrl;
-  const steps = redirects.length
-    ? [
-        {
-          type: 'start',
-          label: '初始请求',
-          status: initialStatus,
-          url: requestedUrl
-        },
-        ...redirects.map((item, index) => {
-          const isLast = index === redirects.length - 1;
-          return {
-            type: isLast
-              ? request.outcome === 'rate_limited' ? 'limited' : 'final'
-              : 'redirect',
-            label: isLast ? '最终响应' : `重定向 ${index + 1}`,
-            status: redirects[index + 1]?.status_code ?? finalStatus,
-            url: item.to || finalUrl
-          };
-        })
-      ]
-    : [
-        {
-          type: 'start',
-          label: '初始请求',
-          status: initialStatus,
-          url: requestedUrl
-        },
-        {
-          type: request.outcome === 'rate_limited' ? 'limited' : 'final',
-          label: '最终响应',
-          status: finalStatus,
-          url: finalUrl
-        }
-      ];
-  const retryText = request.outcome === 'rate_limited'
-    ? request.retry_after_seconds !== null && request.retry_after_seconds !== undefined
-      ? `Retry-After：约 ${request.retry_after_seconds} 秒`
-      : request.retry_after
-        ? `Retry-After：${request.retry_after}`
-        : '服务器未提供 Retry-After'
-    : '';
-
-  return `
-    <section class="http-journey${request.outcome === 'rate_limited' ? ' is-rate-limited' : ''}">
-      <div class="http-journey-head">
-        <div><strong>${escapeHtml(label)}</strong><span>分别展示原始 URL、重定向链和最终响应</span></div>
-        ${retryText ? `<em>${escapeHtml(retryText)}</em>` : ''}
-      </div>
-      <div class="http-journey-steps">
-        ${steps.map((step, index) => `
-          ${index ? '<i aria-hidden="true">→</i>' : ''}
-          <div class="http-step step-${escapeHtml(step.type)}">
-            <small>${escapeHtml(step.label)}</small>
-            <b>HTTP ${escapeHtml(valueOrDash(step.status))}</b>
-            <span title="${escapeHtml(step.url)}">${escapeHtml(step.url)}</span>
-          </div>
-        `).join('')}
-      </div>
-      ${request.outcome === 'rate_limited' ? `
-        <p class="rate-limit-note">
-          此 429 表示当前测试服务器的渲染请求被限流，不能据此认定目标页面本身返回 429；
-          本次不会继续推导标题、正文或 hydration 结论。
-        </p>
-      ` : ''}
-    </section>
-  `;
-}
-
-function copyIcon() {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="8" y="8" width="11" height="11" rx="2"></rect>
-      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
-    </svg>
-  `;
-}
-
-function checkIcon() {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m5 12 4 4L19 6"></path>
-    </svg>
-  `;
-}
-
-function renderCopyButton(label) {
-  return `
-    <button class="copy-result" type="button" data-copy-content aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
-      ${copyIcon()}
-      <span>复制</span>
-    </button>
-  `;
-}
-
-function resultWithoutHtmlBodies(result) {
-  const rawHtml = result?.raw_html;
-  let displayResult = result;
-  if (rawHtml) {
-    const summarized = { active_source: rawHtml.active_source };
-    for (const key of ['googlebot', 'browser_control']) {
-      const item = rawHtml[key];
-      summarized[key] = item
-        ? { ...item, html: '[Raw HTML 已在下方单独展示，可使用对应按钮复制]' }
-        : null;
-    }
-    displayResult = { ...displayResult, raw_html: summarized };
-  }
-  if (result?.rendered_html?.html) {
-    displayResult = {
-      ...displayResult,
-      rendered_html: {
-        ...result.rendered_html,
-        html: '[渲染后 HTML 已在下方单独展示，可使用对应按钮复制]'
-      }
-    };
-  }
-  return displayResult;
-}
-
-function renderRawDetails(result, label) {
-  const displayResult = resultWithoutHtmlBodies(result);
-  return `
-    <details class="details" data-copy-container>
-      <summary>
-        <span>${escapeHtml(label)}</span>
-        ${renderCopyButton('复制 JSON 检测结果')}
-      </summary>
-      <pre>${escapeHtml(JSON.stringify(displayResult, null, 2))}</pre>
-    </details>
-  `;
-}
-
-function renderRawHtml(result) {
-  const rawHtml = result?.raw_html || {};
-  const entries = ['googlebot', 'browser_control']
-    .map(key => [key, rawHtml[key]])
-    .filter(([, item]) => item && typeof item.html === 'string');
-  if (!entries.length) return '';
-
-  return `
-    <section class="raw-html-section">
-      <div class="raw-html-title">
-        <div>
-          <h4>网页原始 Raw HTML</h4>
-          <p>完整展示实际取得的原始响应；标记“用于检测”的响应是本次内容与渲染判断的数据源。</p>
-        </div>
-        <span>${entries.length} 份响应</span>
-      </div>
-      <div class="raw-html-list">
-        ${entries.map(([key, item]) => `
-          <article class="raw-html-card${item.used_for_analysis ? ' active-source' : ''}" data-copy-container>
-            <header>
-              <div>
-                <strong>${escapeHtml(item.label || key)}</strong>
-                <p>
-                  初始 HTTP ${escapeHtml(valueOrDash(item.initial_status_code ?? item.status_code))}
-                  → 最终 HTTP ${escapeHtml(valueOrDash(item.final_status_code ?? item.status_code))}
-                  · ${escapeHtml(valueOrDash(item.html_bytes, ' bytes'))}
-                  ${item.truncated ? ' · 已截断' : ''}
-                </p>
-              </div>
-              <div class="raw-html-actions">
-                ${item.used_for_analysis ? '<span class="source-badge">用于检测</span>' : ''}
-                ${renderCopyButton(`复制${item.label || '原始 HTML'}`)}
-              </div>
-            </header>
-            <pre>${escapeHtml(item.html)}</pre>
-          </article>
-        `).join('')}
-      </div>
-    </section>
-  `;
-}
-
-function renderRenderedHtml(result) {
-  const renderedHtml = result?.rendered_html;
-  if (!renderedHtml || typeof renderedHtml.html !== 'string') return '';
-  const captureStateLabel = {
-    network_idle: '网络空闲后截取',
-    timeout: '等待超时后截取',
-    navigation_error: '导航异常后截取'
-  }[renderedHtml.capture_state] || '渲染结束后截取';
-
-  return `
-    <section class="raw-html-section">
-      <div class="raw-html-title">
-        <div>
-          <h4>JavaScript 渲染后 HTML</h4>
-          <p>这是 Chromium 执行 JavaScript 后通过 DOM 序列化取得的快照，可与上方 Googlebot Raw HTML 对照；它不是服务器原始响应。</p>
-        </div>
-        <span>Render DOM</span>
-      </div>
-      <div class="raw-html-list">
-        <article class="raw-html-card active-source" data-copy-container>
-          <header>
-            <div>
-              <strong>${escapeHtml(renderedHtml.label || 'JavaScript 渲染后 HTML')}</strong>
-              <p>
-                最终 HTTP ${escapeHtml(valueOrDash(result.request?.final_status_code ?? result.request?.status_code))}
-                · ${escapeHtml(valueOrDash(renderedHtml.html_bytes, ' bytes'))}
-                · ${escapeHtml(captureStateLabel)}
-                ${renderedHtml.truncated ? ' · 展示已截断' : ''}
-              </p>
-            </div>
-            <div class="raw-html-actions">
-              <span class="source-badge">渲染后 DOM</span>
-              ${renderCopyButton('复制渲染后 HTML')}
-            </div>
-          </header>
-          <pre>${escapeHtml(renderedHtml.html)}</pre>
-        </article>
-      </div>
-    </section>
-  `;
-}
-
-function renderOverview(overview = {}) {
-  const seo = overview.seo || {};
-  const rendering = overview.rendering || {};
-  const isClientRendered = rendering.type === 'client_rendered';
-  const isServerRendered = ['server_rendered', 'hybrid_rendered'].includes(rendering.type);
-  const isRenderingFailure = ['thin_content', 'hydration_loss'].includes(rendering.type)
-    || rendering.status === 'failed';
-  const renderingLabel = rendering.label || (isClientRendered
-    ? '客户端渲染'
-    : isServerRendered
-      ? '服务端渲染 / 静态输出'
-      : '渲染方式待确认');
-  const renderingPanel = $('overview-rendering');
-  renderingPanel.className = `rendering-verdict ${
-    isClientRendered ? 'is-client' : isServerRendered ? 'is-server' : isRenderingFailure ? 'is-error' : 'is-unknown'
-  }`;
-  renderingPanel.innerHTML = `
-    <span class="rendering-verdict-icon">${isClientRendered || isRenderingFailure ? '!' : isServerRendered ? '✓' : '?'}</span>
-    <div>
-      <small>页面渲染方式</small>
-      <strong>${escapeHtml(renderingLabel)}</strong>
-      <p>${isClientRendered
-        ? '核心内容依赖 JavaScript 客户端渲染，对搜索引擎抓取、稳定索引和内容识别不利。'
-        : isServerRendered
-          ? '核心内容已在初始 HTML 中输出，对搜索引擎抓取和索引更友好。'
-          : isRenderingFailure
-            ? '页面核心内容不足或渲染后发生丢失，需要优先检查内容输出和 hydration。'
-            : '当前数据不足，暂时无法准确判断页面渲染方式。'}</p>
-    </div>
-    <em>${isClientRendered ? '黄色警告 · 需关注' : isServerRendered ? 'SEO 友好' : isRenderingFailure ? '未通过' : '待确认'}</em>
-  `;
-  $('overview-summary').textContent = overview.summary || '本次检测未返回总览结论，请查看下方问题清单。';
-  $('overview-verdict').textContent = statusLabel(overview.status || seo.status);
-  $('overview-verdict').className = `status-pill status-${overview.status || seo.status || 'warning'}`;
-}
-
-function checklistStatus(status) {
-  if (status === 'pass' || status === 'passed') return { key: 'passed', label: '无问题' };
-  if (status === 'fail' || status === 'failed') return { key: 'failed', label: '有问题' };
-  if (status === 'skipped') return { key: 'skipped', label: '未检测' };
-  return { key: 'warning', label: '需关注' };
-}
-
-function combineChecklistStatuses(rawStatus, renderStatus) {
-  const statuses = [rawStatus, renderStatus].map(status => checklistStatus(status).key);
-  if (statuses.includes('failed')) return 'failed';
-  if (statuses.includes('warning')) return 'warning';
-  if (statuses.every(status => status === 'skipped')) return 'skipped';
-  if (statuses.includes('skipped')) return 'warning';
-  return 'passed';
-}
-
-function buildProblemChecklist(data) {
-  const googlebot = data.googlebot || {};
-  const googleRender = data.google_render || {};
-  const googlebotRequest = googlebot.request || {};
-  const fallbackUsed = googlebot.access?.browser_fallback_used === true;
-  const rawRequest = fallbackUsed ? googlebot.control_request || googlebotRequest : googlebotRequest;
-  const content = googlebot.content || {};
-  const crawlability = googlebot.crawlability || {};
-  const indexability = googlebot.indexability || {};
-  const renderedContent = googleRender.rendered_content || {};
-  const renderRequest = googleRender.request || {};
-  const diagnostics = googleRender.diagnostics || {};
-  const checks = [...(googlebot.checks || []), ...(googleRender.checks || [])];
-  const findCheck = key => checks.find(item => item.key === key);
-  const renderExecuted = googleRender.status !== 'skipped'
-    && Boolean(googleRender.request || googleRender.rendered_content);
-  const renderRateLimited = renderRequest.outcome === 'rate_limited';
-  const renderComparable = renderExecuted
-    && renderRequest.status_code === 200
-    && !renderRateLimited;
-  const rawSource = fallbackUsed ? '用户 UA' : 'Googlebot';
-  const row = (category, item, whitepaperUrl, rawStatus, rawFinding, renderStatus, renderFinding, recommendation) => {
-    const status = combineChecklistStatuses(rawStatus, renderStatus);
-    return {
-      category,
-      item,
-      whitepaperUrl,
-      ...checklistStatus(status),
-      rawSource,
-      rawFinding: rawFinding || '未取得结果',
-      renderFinding: renderFinding || '未取得结果',
-      finding: `Raw HTML（${rawSource}）：${rawFinding || '未取得结果'}\nRender HTML：${renderFinding || '未取得结果'}`,
-      recommendation
-    };
-  };
-  const finalUrl = rawRequest.final_url || data.url || '';
-  const htmlBytes = Number(content.html_bytes ?? rawRequest.html_bytes ?? 0);
-  const renderedHtmlBytes = Number(renderedContent.html_bytes || 0);
-  const resourceFailures = (diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length;
-  const jsErrors = (diagnostics.page_errors || []).length;
-  const renderUnavailableText = renderRateLimited
-    ? `当前测试服务器收到 HTTP 429，本次未评估${renderRequest.retry_after_seconds !== null && renderRequest.retry_after_seconds !== undefined ? `；建议 ${renderRequest.retry_after_seconds} 秒后重试` : ''}`
-    : googleRender.status === 'skipped'
-      ? '本次未执行渲染'
-      : '未取得可用渲染数据';
-  const renderedDirectives = renderedContent.directives || [];
-  const renderedNoindex = renderedDirectives.includes('noindex');
-  const renderedFinalUrl = renderRequest.final_url || '';
-  const pageSizeStatus = bytes => bytes > 3 * 1024 * 1024
-    ? 'fail'
-    : bytes > 1024 * 1024
-      ? 'warning'
-      : bytes
-        ? 'pass'
-        : 'warning';
-  const h1Status = (count, missingStatus = 'fail') => Number(count) === 1
-    ? 'pass'
-    : Number(count) === 0
-      ? missingStatus
-      : 'warning';
-  const rows = [];
-
-  rows.push(row(
-    'SEO 规则', 'Robots.txt 抓取权限', 'https://www.idtcpack.com/seo_book/robots',
-    findCheck('robots')?.status || (crawlability.allowed === true ? 'pass' : crawlability.allowed === false ? 'fail' : 'warning'),
-    findCheck('robots')?.detail || crawlability.detail,
-    renderExecuted ? (crawlability.allowed === false ? 'fail' : 'pass') : 'skipped',
-    renderExecuted
-      ? crawlability.allowed === false ? '抓取被阻止，渲染结果不能代表可正常访问' : '已在当前抓取权限基础上执行渲染'
-      : renderUnavailableText,
-    crawlability.allowed === false ? '调整 robots.txt，允许 Googlebot 抓取需要参与搜索的页面与资源。' : '保持规则清晰，并避免屏蔽核心 CSS、JS 和页面路径。'
-  ));
-  rows.push(row(
-    'SEO 规则', 'HTTPS 页面访问', 'https://www.idtcpack.com/seo_book/https',
-    finalUrl.startsWith('https://') ? 'pass' : 'warning',
-    finalUrl ? `最终访问地址为 ${finalUrl}` : '未取得最终访问地址',
-    renderExecuted ? (renderedFinalUrl.startsWith('https://') ? 'pass' : 'warning') : 'skipped',
-    renderExecuted ? renderedFinalUrl ? `最终渲染地址为 ${renderedFinalUrl}` : '未取得最终渲染地址' : renderUnavailableText,
-    '全站启用 HTTPS，并将 HTTP 版本通过 301 永久重定向到 HTTPS。'
-  ));
-  rows.push(row(
-    '引擎规范', 'HTTP 状态码', 'https://www.idtcpack.com/seo_book/http',
-    rawRequest.status_code === 200 ? 'pass' : 'fail',
-    `初始 HTTP ${valueOrDash(rawRequest.initial_status_code ?? rawRequest.status_code)}，最终 HTTP ${valueOrDash(rawRequest.final_status_code ?? rawRequest.status_code)}，耗时 ${valueOrDash(rawRequest.response_time_ms, ' ms')}`,
-    renderExecuted
-      ? renderRequest.outcome === 'rate_limited'
-        ? 'warning'
-        : renderRequest.status_code === 200
-          ? 'pass'
-          : 'fail'
-      : 'skipped',
-    renderExecuted
-      ? renderRequest.outcome === 'rate_limited'
-        ? `渲染请求返回 HTTP 429，被当前测试服务器限流${renderRequest.retry_after_seconds !== null && renderRequest.retry_after_seconds !== undefined ? `，建议 ${renderRequest.retry_after_seconds} 秒后重试` : ''}`
-        : `初始 HTTP ${valueOrDash(renderRequest.initial_status_code ?? renderRequest.status_code)}，最终 HTTP ${valueOrDash(renderRequest.final_status_code ?? renderRequest.status_code)}`
-      : renderUnavailableText,
-    '核心可索引页面应稳定返回 HTTP 200；修复 4xx、5xx 和不必要的重定向。'
-  ));
-  rows.push(row(
-    '引擎规范', 'URL 重定向', 'https://www.idtcpack.com/seo_book/url',
-    Number(rawRequest.redirect_count || 0) <= 1 ? 'pass' : 'warning',
-    `本次经过 ${Number(rawRequest.redirect_count || 0)} 次重定向`,
-    renderExecuted ? (!renderedFinalUrl || renderedFinalUrl === finalUrl ? 'pass' : 'warning') : 'skipped',
-    renderExecuted
-      ? renderedFinalUrl === finalUrl ? '渲染最终地址与 Raw HTML 一致' : `渲染最终地址为 ${renderedFinalUrl || '未知'}`
-      : renderUnavailableText,
-    '减少重定向链，目标页面尽量一次跳转到最终规范 URL。'
-  ));
-  rows.push(row(
-    '引擎规范', 'Noindex 索引指令', 'https://www.idtcpack.com/seo_book/noindex',
-    findCheck('indexable')?.status || (indexability.indexable === true ? 'pass' : indexability.indexable === false ? 'fail' : 'warning'),
-    findCheck('indexable')?.detail || `索引状态为 ${indexability.state || '待确认'}`,
-    renderComparable ? (renderedNoindex ? 'fail' : 'pass') : 'skipped',
-    renderComparable ? renderedNoindex ? '渲染 DOM 检测到 noindex' : '渲染 DOM 未检测到 noindex' : renderUnavailableText,
-    '需要参与搜索的页面不要设置 noindex，并确认响应头与 HTML Meta 指令一致。'
-  ));
-  rows.push(row(
-    '引擎规范', '移动端渲染', 'https://www.idtcpack.com/seo_book/mobile',
-    rawRequest.status_code === 200 ? 'pass' : 'warning',
-    `作为 Googlebot Smartphone 的初始 HTML 输入，HTTP ${valueOrDash(rawRequest.status_code)}`,
-    renderExecuted ? findCheck('render_status')?.status || googleRender.status : 'skipped',
-    renderComparable ? `使用 ${googleRender.engine || '移动端渲染引擎'} 完成模拟` : renderUnavailableText,
-    '使用移动优先布局，并在 Google Search Console 中复核真实移动版渲染结果。'
-  ));
-  rows.push(row(
-    '引擎规范', 'JavaScript 加载', 'https://www.idtcpack.com/seo_book/js',
-    Number(content.word_count || 0) >= 50 ? 'pass' : 'warning',
-    `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
-    renderComparable ? findCheck('javascript')?.status || (jsErrors ? 'fail' : 'pass') : 'skipped',
-    renderComparable ? findCheck('javascript')?.detail || `发现 ${jsErrors} 个页面级 JavaScript 异常` : renderUnavailableText,
-    '修复首屏 JavaScript 异常，确保核心正文和链接不依赖失败的客户端请求。'
-  ));
-  rows.push(row(
-    'SEO 元素', 'Title 标题', 'https://www.idtcpack.com/seo_book/title',
-    content.title ? 'pass' : 'warning',
-    content.title ? `检测到 Title：${content.title}` : '未检测到 Title',
-    renderComparable ? (renderedContent.title ? 'pass' : 'fail') : 'skipped',
-    renderComparable ? renderedContent.title ? `检测到 Title：${renderedContent.title}` : '未检测到 Title' : renderUnavailableText,
-    '为页面设置唯一、准确且与搜索意图相关的 Title 标题。'
-  ));
-  rows.push(row(
-    'SEO 元素', 'H1 主标题', 'https://www.idtcpack.com/seo_book/h',
-    h1Status(content.h1_count, 'warning'),
-    `检测到 ${Number(content.h1_count || 0)} 个 H1${content.h1 ? `：${content.h1}` : ''}`,
-    renderComparable ? h1Status(renderedContent.h1_count) : 'skipped',
-    renderComparable
-      ? `检测到 ${Number(renderedContent.h1_count || 0)} 个 H1${renderedContent.h1 ? `：${renderedContent.h1}` : ''}`
-      : renderUnavailableText,
-    '每个页面保留一个清晰的主 H1，并让层级标题准确描述内容结构。'
-  ));
-  rows.push(row(
-    'SEO 元素', 'Canonical 规范链接', 'https://www.idtcpack.com/seo_book/canonical',
-    content.canonical ? 'pass' : 'warning',
-    content.canonical ? `Canonical 为 ${content.canonical}` : '未检测到 Canonical',
-    renderComparable
-      ? renderedContent.canonical
-        ? content.canonical && renderedContent.canonical !== content.canonical ? 'warning' : 'pass'
-        : 'warning'
-      : 'skipped',
-    renderComparable
-      ? renderedContent.canonical ? `Canonical 为 ${renderedContent.canonical}` : '未检测到 Canonical'
-      : renderUnavailableText,
-    '为可索引页面设置指向首选 URL 的绝对 Canonical，并避免冲突信号。'
-  ));
-  rows.push(row(
-    '网站内容', '核心内容完整性', 'https://www.idtcpack.com/seo_book/js',
-    findCheck('content')?.status || (Number(content.word_count || 0) >= 50 ? 'pass' : 'warning'),
-    findCheck('content')?.detail || `初始 HTML 约 ${Number(content.word_count || 0)} 个词/字符单元`,
-    renderComparable
-      ? findCheck('rendered_content')?.status || (Number(renderedContent.word_count || 0) >= 50 ? 'pass' : 'fail')
-      : 'skipped',
-    renderComparable
-      ? findCheck('rendered_content')?.detail || `渲染后约 ${Number(renderedContent.word_count || 0)} 个词/字符单元`
-      : renderUnavailableText,
-    '优先在初始 HTML 输出核心正文；强依赖 JavaScript 的页面建议使用 SSR 或静态生成。'
-  ));
-  rows.push(row(
-    '网站内容', '网页 HTML 体积', 'https://www.idtcpack.com/seo_book/pagesize',
-    pageSizeStatus(htmlBytes),
-    htmlBytes ? `初始 HTML 约 ${Math.round(htmlBytes / 1024)} KB` : '未取得 HTML 体积',
-    renderComparable ? pageSizeStatus(renderedHtmlBytes) : 'skipped',
-    renderComparable
-      ? renderedHtmlBytes ? `渲染 DOM 约 ${Math.round(renderedHtmlBytes / 1024)} KB` : '未取得渲染 DOM 体积'
-      : renderUnavailableText,
-    '精简重复标签、内联数据和无用代码，避免过大的 HTML 延迟抓取与解析。'
-  ));
-  rows.push(row(
-    '网站内容', '核心资源加载', 'https://www.idtcpack.com/seo_book/js',
-    rawRequest.status_code === 200 ? 'pass' : 'warning',
-    `初始 HTML 引用了 ${Number(content.script_count || 0)} 个脚本`,
-    renderComparable ? findCheck('resources')?.status || (resourceFailures ? 'warning' : 'pass') : 'skipped',
-    renderComparable ? findCheck('resources')?.detail || `发现 ${resourceFailures} 个异常资源` : renderUnavailableText,
-    '确保核心 JS、CSS、图片、字体和 API 可公开访问并稳定返回成功状态。'
-  ));
-  return rows;
-}
-
-function renderProblemChecklist(data) {
-  currentChecklist = buildProblemChecklist(data);
-  currentResultUrl = data.url || $('test-url').value;
-  const totals = currentChecklist.reduce((acc, item) => {
-    acc[item.key] = (acc[item.key] || 0) + 1;
-    return acc;
-  }, {});
-  $('checklist-stats').innerHTML = [
-    ['all', '检查事项', currentChecklist.length],
-    ['failed', '有问题', totals.failed || 0],
-    ['warning', '需关注', totals.warning || 0],
-    ['passed', '无问题', totals.passed || 0],
-    ['skipped', '未检测', totals.skipped || 0]
-  ].map(([key, label, value]) => `
-    <div class="checklist-stat status-${key}"><strong>${value}</strong><span>${label}</span></div>
-  `).join('');
-  $('checklist-body').innerHTML = currentChecklist.map(item => `
-    <tr>
-      <td data-label="分类"><span class="category-label">${escapeHtml(item.category)}</span></td>
-      <td data-label="检查事项">
-        <a class="checklist-item-link" href="${escapeHtml(item.whitepaperUrl)}" target="_blank" rel="noreferrer">
-          ${escapeHtml(item.item)}
-        </a>
-      </td>
-      <td data-label="是否有问题"><span class="checklist-status status-${escapeHtml(item.key)}">${escapeHtml(item.label)}</span></td>
-      <td data-label="检测结论">
-        <div class="checklist-source-line">
-          <strong>Raw HTML（${escapeHtml(item.rawSource)}）</strong>
-          <span>${escapeHtml(item.rawFinding)}</span>
-        </div>
-        <div class="checklist-source-line">
-          <strong>Render HTML</strong>
-          <span>${escapeHtml(item.renderFinding)}</span>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-}
-
-function xmlCell(value, styleId = '') {
-  const safe = escapeHtml(String(value ?? '')).replaceAll('\n', '&#10;');
-  return `<Cell${styleId ? ` ss:StyleID="${styleId}"` : ''}><Data ss:Type="String">${safe}</Data></Cell>`;
-}
-
-function exportChecklistExcel() {
-  if (!currentChecklist.length) return;
-  const rows = currentChecklist.map(item => `<Row>${
-    [item.category, item.item, item.label, item.finding, item.recommendation, item.whitepaperUrl]
-      .map(value => xmlCell(value, 'Body')).join('')
-  }</Row>`).join('');
-  const workbook = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:FontName="Arial" ss:Size="10"/></Style>
-  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="15" ss:Color="#FFFFFF"/><Interior ss:Color="#1677FF" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="Meta"><Font ss:Color="#526176"/><Interior ss:Color="#EEF5FF" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#132238" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>
-  <Style ss:ID="Body"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DFE5EC"/></Borders></Style>
- </Styles>
- <Worksheet ss:Name="SEO问题清单"><Table>
-  <Column ss:Width="90"/><Column ss:Width="150"/><Column ss:Width="80"/><Column ss:Width="410"/><Column ss:Width="360"/><Column ss:Width="240"/>
-  <Row ss:Height="28">${xmlCell('页面 SEO 基础问题清单', 'Title')}<Cell ss:MergeAcross="4" ss:StyleID="Title"/></Row>
-  <Row>${xmlCell('检测页面', 'Meta')}${xmlCell(currentResultUrl, 'Meta')}<Cell ss:MergeAcross="3" ss:StyleID="Meta"/></Row>
-  <Row>${xmlCell('导出时间', 'Meta')}${xmlCell(new Date().toLocaleString('zh-CN'), 'Meta')}<Cell ss:MergeAcross="3" ss:StyleID="Meta"/></Row>
-  <Row>${['分类', '检查事项', '是否有问题', '检测结论', '修改建议', '白皮书链接'].map(value => xmlCell(value, 'Header')).join('')}</Row>
-  ${rows}
- </Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>
-</Workbook>`;
-  const blob = new Blob(['\ufeff', workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const hostname = (() => {
-    try { return new URL(currentResultUrl).hostname.replaceAll('.', '-'); } catch { return 'page'; }
-  })();
-  link.href = downloadUrl;
-  link.download = `SEO问题清单-${hostname}.xls`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-  const exportButton = $('export-checklist');
-  exportButton.classList.add('exported');
-  exportButton.querySelector('span').textContent = '已开始下载';
-  window.setTimeout(() => {
-    exportButton.classList.remove('exported');
-    exportButton.querySelector('span').textContent = '一键导出 Excel';
-  }, 1600);
-}
-
-function renderGooglebot(result) {
-  const request = result.request || {};
-  const crawl = result.crawlability || {};
-  const indexability = result.indexability || {};
-  const content = result.content || {};
-  const usedBrowserFallback = result.access?.browser_fallback_used === true;
-  const controlRequest = result.control_request || {};
-  const analyzedHtmlBytes = usedBrowserFallback
-    ? controlRequest.html_bytes
-    : request.html_bytes;
-  return `
-    <div class="panel-head">
-      <div><h3>Googlebot Smartphone</h3><p>${usedBrowserFallback
-        ? '模拟 Googlebot 请求被 WAF 拦截；本区保留 Googlebot HTTP 结果，并使用普通浏览器对照响应补充 robots、索引指令和初始 HTML 分析。'
-        : '使用公开的移动版 Googlebot User-Agent 请求页面，并检查 robots.txt、HTTP 响应、索引指令与初始 HTML。'}</p></div>
-      <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>/ 100 <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
-    </div>
-    ${renderMetrics([
-      ['初始状态', valueOrDash(request.initial_status_code ?? request.status_code)],
-      ['最终状态', valueOrDash(request.final_status_code ?? request.status_code)],
-      ['响应时间', valueOrDash(request.response_time_ms, ' ms')],
-      ['robots.txt', crawl.allowed === true ? '允许' : crawl.allowed === false ? '阻止' : '不确定'],
-      ['索引状态', indexability.indexable === true ? '允许' : indexability.indexable === false ? '不允许' : '待确认'],
-      [usedBrowserFallback ? '初始内容（浏览器对照）' : '初始内容', valueOrDash(content.word_count, ' 词/字符')],
-      ['内部链接', valueOrDash(content.internal_link_count)],
-      [usedBrowserFallback ? 'Raw HTML（浏览器对照）' : 'HTML 体积', analyzedHtmlBytes ? `${Math.round(analyzedHtmlBytes / 1024)} KB` : '—']
-    ])}
-    ${renderHttpJourney(request, 'Googlebot Raw HTTP 请求路径')}
-    ${usedBrowserFallback ? renderHttpJourney(controlRequest, '普通浏览器对照请求路径') : ''}
-    <h4 class="section-title">检查项 <span>${(result.checks || []).length} 项</span></h4>
-    ${renderChecks(result.checks)}
-    <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
-    ${renderIssues(result.issues)}
-    ${renderRawDetails(result, '查看抓取详情与原始结果')}
-    ${renderRawHtml(result)}
-  `;
-}
-
-function renderGoogleRender(result) {
-  const request = result.request || {};
-  const comparison = result.comparison || {};
-  const diagnostics = result.diagnostics || {};
-  const metrics = result.status === 'skipped'
-    ? [
-        ['执行状态', statusLabel(result.status)],
-        ['渲染引擎', result.engine || '—'],
-        ['服务可用', result.available ? '是' : '否'],
-        ['评分', valueOrDash(result.score)]
-      ]
-    : [
-        ['初始状态', valueOrDash(request.initial_status_code ?? request.status_code)],
-        ['最终状态', valueOrDash(request.final_status_code ?? request.status_code)],
-        ['渲染耗时', valueOrDash(request.render_time_ms, ' ms')],
-        ['重定向', valueOrDash(request.redirect_count)],
-        ['渲染后内容', valueOrDash(comparison.rendered_word_count, ' 词/字符')],
-        ['内容变化', valueOrDash(comparison.word_delta)],
-        ['JS 页面异常', valueOrDash((diagnostics.page_errors || []).length)],
-        ['异常资源', valueOrDash((diagnostics.failed_resources || []).length + (diagnostics.http_errors || []).length)]
-      ];
-  return `
-    <div class="panel-head">
-      <div><h3>Google Web Rendering 模拟</h3><p>${result.mode === 'browser_fallback'
-        ? '模拟 Googlebot 被 WAF 拦截，本次改用普通浏览器 UA 执行 JavaScript，仅用于判断 CSR/SSR 与页面资源状态；真实 Googlebot 结果需由 Search Console 确认。'
-        : '使用移动视口和 Googlebot Smartphone UA 的无头 Chromium 执行 JavaScript，对比初始 HTML 与渲染 DOM，并记录脚本、资源和网络异常。'}</p></div>
-      <div class="panel-score"><strong>${valueOrDash(result.score)}</strong>${result.score === null ? '' : ' / 100'} <span class="mini-status status-${escapeHtml(result.status)}">${statusLabel(result.status)}</span></div>
-    </div>
-    ${renderMetrics(metrics)}
-    ${result.status === 'skipped' ? '' : renderHttpJourney(request, 'Google Render 主文档请求路径')}
-    <h4 class="section-title">检查项 <span>${(result.checks || []).length} 项</span></h4>
-    ${renderChecks(result.checks)}
-    <h4 class="section-title">问题与修复建议 <span>${(result.issues || []).length} 项</span></h4>
-    ${renderIssues(result.issues)}
-    ${renderRawDetails(result, '查看渲染详情与原始结果')}
-    ${renderRenderedHtml(result)}
-  `;
-}
-
 async function copyResultText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     await navigator.clipboard.writeText(text);
@@ -768,134 +76,236 @@ async function copyResultText(text) {
   if (!copied) throw new Error('浏览器未允许复制');
 }
 
-function setLoading(loading) {
-  runButton.disabled = loading;
-  runButton.classList.toggle('busy', loading);
-  $('empty-state').hidden = true;
-  $('results').hidden = true;
-  $('error-box').hidden = true;
-  $('loading-state').hidden = !loading;
-  if (loading) {
-    startedAt = performance.now();
-    elapsedTimer = window.setInterval(() => {
-      $('elapsed-time').textContent = `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
-    }, 100);
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function addMetrics(body, rows) {
+  const list = element('dl', undefined, 'metrics');
+  for (const [label, value] of rows) {
+    if (value == null || value === '') continue;
+    const pair = element('div');
+    pair.append(element('dt', label), element('dd', value));
+    list.append(pair);
+  }
+  body.append(list);
+}
+
+function addDetails(body, label, text, open = false) {
+  if (text == null || text === '') return;
+  const details = element('details', undefined, 'evidence');
+  details.open = open;
+  const heading = element('summary', label);
+  const pre = element('pre', text);
+  const button = element('button', '复制', 'copy');
+  button.type = 'button';
+  button.setAttribute('aria-label', '复制' + label);
+  button.addEventListener('click', async () => {
+    try {
+      await copyResultText(pre.textContent);
+      button.textContent = '已复制';
+    } catch {
+      button.textContent = '请选中文本复制';
+    }
+    window.setTimeout(() => { button.textContent = '复制'; }, 1800);
+  });
+  const content = element('div', undefined, 'evidence-content');
+  content.append(button, pre);
+  details.append(heading, content);
+  body.append(details);
+}
+
+function headerLines(headers = {}) {
+  return Object.entries(headers).map(([name, value]) => name + ': ' + value).join('\n');
+}
+
+function httpEvidence(body, request) {
+  if (!request) return;
+  const redirects = request.redirect_chain || [];
+  const hops = [...redirects.map(hop => [hop.status_code, hop.from]), [request.status_code, request.final_url]];
+  const path = element('ol', undefined, 'http-path');
+  path.setAttribute('aria-label', 'HTTP 请求路径');
+  for (const [code, url] of hops) {
+    const row = element('li');
+    row.append(element('b', code == null ? '无响应' : 'HTTP ' + code), element('span', url));
+    path.append(row);
+  }
+  body.append(path);
+  if (request.retry_after) body.append(element('p', 'Retry-After: ' + request.retry_after, 'notice'));
+  addDetails(body, '实际请求头（主要字段）', headerLines(request.headers));
+  addDetails(body, '响应头', headerLines(request.response_headers));
+}
+
+function robotsEvidence(body, rules) {
+  if (!rules) return;
+  const text = [rules.url, rules.token + ' · ' + rules.detail];
+  if (rules.status_code != null) text.push('HTTP ' + rules.status_code);
+  if (rules.request_headers) text.push('', headerLines(rules.request_headers));
+  addDetails(body, 'robots.txt 抓取规则', text.join('\n'));
+  if (rules.content_use) {
+    const usage = rules.content_use;
+    body.append(element('p', usage.token + ' 内容使用规则 · ' + (usage.allowed ? '允许' : '禁止') + '（匹配 ' + usage.matched + '）', 'notice'));
+  }
+}
+
+function drawStage(stageId, result) {
+  const body = $(stageId).querySelector('.stage-body');
+  body.replaceChildren();
+  const request = result.request;
+  if (result.reason) body.append(element('p', result.reason, 'notice'));
+  if (result.status === 'skipped' || !request) {
+    robotsEvidence(body, result.robots);
+    return;
+  }
+
+  const isRender = stageId === 'panel-render';
+  const rows = [
+    ['最终响应', request.status_code == null ? '无响应' : 'HTTP ' + request.status_code],
+    ['耗时', (isRender ? request.render_time_ms : request.response_time_ms) + ' ms'],
+  ];
+  if (isRender && request.status_code === 200) {
+    const comparison = result.comparison || {};
+    rows.push(['渲染后文本', comparison.rendered_word_count], ['文本增减', comparison.word_delta]);
+  } else if (!isRender) {
+    rows.push(['读取字节', request.size_bytes?.toLocaleString()], ['内容类型', request.content_type]);
+  }
+  addMetrics(body, rows);
+  if (result.content?.title || result.comparison?.title_after) {
+    body.append(element('p', '页面标题 · ' + (result.content?.title || result.comparison.title_after), 'page-title'));
+  }
+  httpEvidence(body, request);
+  robotsEvidence(body, result.robots);
+  const { raw_html, rendered_html, ...metadata } = result;
+  addDetails(body, isRender ? '渲染详情（JSON）' : '抓取详情（JSON）', JSON.stringify(metadata, null, 2));
+
+  if (isRender) {
+    const snapshot = rendered_html;
+    if (request.network_idle_timed_out) body.append(element('p', '等待网络空闲超时，以下为当时取得的 DOM。', 'notice'));
+    const diagnostics = result.diagnostics || {};
+    if (Object.values(diagnostics).some(items => items.length)) {
+      addDetails(body, '脚本与资源异常', JSON.stringify(diagnostics, null, 2));
+    }
+    if (snapshot) addDetails(body, '渲染后 HTML' + (snapshot.truncated ? '（已截断）' : ''), snapshot.html, true);
+  } else if (raw_html) {
+    const label = result.is_html ? '原始 HTML' : '响应正文';
+    addDetails(body, label + (result.truncated ? '（已截断）' : ''), raw_html, true);
   } else {
-    clearInterval(elapsedTimer);
+    body.append(element('p', raw_html === '' ? '服务器返回了空正文。' : '此响应为非文本内容。', 'notice'));
   }
 }
 
-function showResults(data) {
-  const url = data.url || $('test-url').value;
-  $('result-title').textContent = data.status === 'passed' ? '页面可正常抓取与渲染' : data.status === 'failed' ? '检测到阻断性问题' : '检测完成，有项目需要关注';
-  $('result-url').textContent = url;
-  $('result-url').href = url;
-  $('overall-score').querySelector('strong').textContent = valueOrDash(data.score);
-  $('overall-status').textContent = statusLabel(data.status);
-  $('overall-status').className = `status-pill status-${data.status}`;
-  $('disclaimer').textContent = data.disclaimer || '';
-  renderOverview(data.overview || {});
-  renderProblemChecklist(data);
-  $('panel-googlebot').innerHTML = renderGooglebot(data.googlebot || {});
-  $('panel-google-render').innerHTML = renderGoogleRender(data.google_render || {});
-  $('results').hidden = false;
-  $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+function showStageMessage(message, renderMessage = message) {
+  $('panel-spider').querySelector('.stage-body').replaceChildren(element('p', message, 'stage-empty'));
+  $('panel-render')?.querySelector('.stage-body').replaceChildren(element('p', renderMessage, 'stage-empty'));
 }
 
-async function readError(response) {
-  try {
-    const payload = await response.json();
-    return payload.message || payload.detail || '检测请求失败';
-  } catch {
-    return `检测请求失败（HTTP ${response.status}）`;
-  }
+function endRequest() {
+  if (activeRequest) activeRequest.abort();
+  activeRequest = null;
+  clearInterval(timer);
+  runButton.disabled = false;
+  runButton.textContent = '开始测试';
+  form.removeAttribute('aria-busy');
 }
+
+function selectAgent() {
+  endRequest();
+  const token = agentSelect.value;
+  $('spider-agent').textContent = token;
+  for (const profile of form.querySelectorAll('[data-agent-profile]')) {
+    profile.hidden = profile.dataset.agentProfile !== token;
+  }
+  $('error-box').hidden = true;
+  $('run-state').textContent = '';
+  showStageMessage('使用所选标识开始测试后，可查看本次响应。');
+}
+
+$('platform-select').addEventListener('change', event => {
+  endRequest();
+  const next = new URL('/crawler-test/' + encodeURIComponent(event.target.value), location.origin);
+  const url = $('test-url').value;
+  if (url) next.hash = new URLSearchParams({ url }).toString();
+  location.assign(next.href);
+});
+agentSelect?.addEventListener('change', selectAgent);
+const carriedUrl = new URLSearchParams(location.hash.slice(1)).get('url');
+if (carriedUrl) $('test-url').value = carriedUrl;
+window.addEventListener('pageshow', () => {
+  $('platform-select').value = form.dataset.platform;
+  if (agentSelect && $('spider-agent').textContent !== agentSelect.value) selectAgent();
+});
 
 async function loadTokenStatus() {
   try {
     const response = await fetch('/api/v1/demo/token-status');
     const payload = await response.json();
-    const tokenRequired = Boolean(payload.data?.token_required);
-    $('token-row').hidden = !tokenRequired;
-    if (tokenRequired) {
-      setTokenRowMessage(restoreDemoTokenForToday());
-    } else {
-      forgetSavedDemoToken();
-    }
+    $('token-row').hidden = !payload.data?.token_required;
+    if (!$('token-row').hidden) setTokenRowMessage(restoreDemoTokenForToday());
   } catch {
-    $('token-row').hidden = true;
+    $('token-row').hidden = false;
   }
 }
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
+  if (activeRequest) return;
   const url = $('test-url').value.trim();
-  if (!url) return;
+  const errorBox = $('error-box');
+  errorBox.hidden = true;
   if (restoredTokenDate && restoredTokenDate !== localDateKey()) {
     forgetSavedDemoToken();
-    $('demo-token').value = '';
+    tokenInput.value = '';
     $('token-row').hidden = false;
     setTokenRowMessage(false);
-    $('error-message').textContent = '日期已变化，请重新输入 Demo Token。';
-    $('error-box').hidden = false;
+    errorBox.textContent = '日期已变化，请重新输入访问 Token。';
+    errorBox.hidden = false;
     return;
   }
-  setLoading(true);
+  const controller = new AbortController();
+  activeRequest = controller;
+  const token = tokenInput.value.trim();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['X-API-Token'] = token;
+  runButton.disabled = true;
+  runButton.textContent = '测试中…';
+  form.setAttribute('aria-busy', 'true');
+  $('run-state').textContent = '正在测试';
+  const start = performance.now();
+  timer = setInterval(() => { $('run-state').textContent = '正在测试 · ' + Math.floor((performance.now() - start) / 1000) + ' 秒'; }, 1000);
+  showStageMessage('正在读取 robots.txt 与网页响应…', '等待抓取结果…');
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    const token = $('demo-token').value.trim();
-    if (token) headers['X-Demo-Token'] = token;
-    const response = await fetch('/api/v1/demo/google-crawler/test', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ url })
+    const response = await fetch('/api/v1/crawler/test', {
+      method: 'POST', headers, signal: controller.signal,
+      body: JSON.stringify({ url, platform: form.dataset.platform, agent: agentSelect?.value }),
     });
-    if (!response.ok) {
+    const payload = await response.json();
+    if (controller.signal.aborted) return;
+    if (!response.ok || !payload.success) {
       if (response.status === 401) {
         forgetSavedDemoToken();
-        $('demo-token').value = '';
+        tokenInput.value = '';
         $('token-row').hidden = false;
         setTokenRowMessage(false);
       }
-      throw new Error(await readError(response));
+      throw new Error(payload.message || '请求失败（HTTP ' + response.status + '）');
     }
-    const payload = await response.json();
-    if (!payload.success) throw new Error(payload.message || '检测请求失败');
     rememberDemoToken(token);
     setTokenRowMessage(Boolean(token));
-    setLoading(false);
-    showResults(payload.data);
+    const data = payload.data;
+    drawStage('panel-spider', data.spider);
+    if (data.render) drawStage('panel-render', data.render);
+    $('run-state').textContent = '测试完成 · ' + data.url;
   } catch (error) {
-    setLoading(false);
-    $('error-message').textContent = error.message || '检测请求失败';
-    $('error-box').hidden = false;
-  }
-});
-
-$('export-checklist').addEventListener('click', exportChecklistExcel);
-
-document.addEventListener('click', async event => {
-  const button = event.target.closest('[data-copy-content]');
-  if (!button) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const pre = button.closest('[data-copy-container]')?.querySelector('pre');
-  if (!pre) return;
-  try {
-    await copyResultText(pre.textContent || '');
-    button.classList.add('copied');
-    button.innerHTML = `${checkIcon()}<span>已复制</span>`;
-    window.setTimeout(() => {
-      button.classList.remove('copied');
-      button.innerHTML = `${copyIcon()}<span>复制</span>`;
-    }, 1600);
-  } catch {
-    button.classList.add('copy-failed');
-    button.querySelector('span').textContent = '复制失败';
-    window.setTimeout(() => {
-      button.classList.remove('copy-failed');
-      button.innerHTML = `${copyIcon()}<span>复制</span>`;
-    }, 1800);
+    if (controller.signal.aborted) return;
+    errorBox.textContent = error.message || '测试请求失败';
+    errorBox.hidden = false;
+    $('run-state').textContent = '';
+    showStageMessage('测试未完成。');
+  } finally {
+    if (activeRequest === controller) endRequest();
   }
 });
 

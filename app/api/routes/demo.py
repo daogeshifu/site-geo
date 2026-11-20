@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.templating import Jinja2Templates
 
 from app.api.demo_access import API_TOKEN_HEADER, DEMO_TOKEN_HEADER, is_demo_token_enabled, require_demo_token
 from app.api.routes.report import build_task_report_response
@@ -11,6 +12,7 @@ from app.api.routes.tasks import build_pending_graph_payload, task_service
 from app.core.exceptions import AppError
 from app.models.responses import success_response
 from app.models.task import TaskAuditRequest
+from app.services.crawlers.catalog import BY_ID, GROUPS, PLATFORMS, REVIEWED_ON
 from app.services.reporting.site_pages import task_site_pages
 from app.services.reporting.seo_excel import build_seo_excel_export
 from app.services.infra.page_sources import read_page_source
@@ -19,7 +21,7 @@ from app.services.infra.page_sources import read_page_source
 router = APIRouter(tags=["demo"])
 
 TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "demo.html"
-GOOGLE_CRAWLER_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "google-crawler.html"
+templates = Jinja2Templates(directory=TEMPLATE_PATH.parent)
 API_DOC_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "web" / "templates" / "api-doc.html"
 
 
@@ -35,10 +37,16 @@ async def demo_page() -> HTMLResponse:
     return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
-@router.get("/google-crawler-test", response_class=HTMLResponse)
-async def google_crawler_demo_page() -> HTMLResponse:
-    """返回 Googlebot / Google Render 双检测 demo。"""
-    return HTMLResponse(GOOGLE_CRAWLER_TEMPLATE_PATH.read_text(encoding="utf-8"))
+@router.get("/google-crawler-test", response_class=HTMLResponse, include_in_schema=False)
+@router.get("/crawler-test", response_class=HTMLResponse)
+@router.get("/crawler-test/{platform_id}", response_class=HTMLResponse)
+async def crawler_demo_page(request: Request, platform_id: str | None = None) -> HTMLResponse:
+    platform = BY_ID.get(platform_id)
+    if platform_id is not None and platform is None:
+        raise HTTPException(404, "未知的爬虫平台")
+    return templates.TemplateResponse(request=request, name="google-crawler.html", context={
+        "platform": platform, "groups": GROUPS, "platforms": PLATFORMS, "reviewed_on": REVIEWED_ON,
+    })
 
 
 @router.get("/api-doc", response_class=HTMLResponse)

@@ -81,7 +81,7 @@ def request_http_metadata(
     }
 
 
-def inspect_html(html: str, base_url: str) -> dict[str, Any]:
+def inspect_html(html: str, base_url: str, *, agent_token: str = "Googlebot") -> dict[str, Any]:
     soup = BeautifulSoup(html or "", "lxml")
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
     h1_tags = soup.find_all("h1")
@@ -92,13 +92,14 @@ def inspect_html(html: str, base_url: str) -> dict[str, Any]:
     directives: list[str] = []
     for meta in soup.find_all("meta"):
         name = (meta.get("name") or "").strip().lower()
-        if name in {"robots", "googlebot"}:
+        if name in {"robots", agent_token.lower()}:
             directives.extend(
                 item.strip().lower()
                 for item in (meta.get("content") or "").split(",")
                 if item.strip()
             )
 
+    script_count = len(soup.find_all("script"))
     for node in soup(["script", "style", "noscript", "template", "svg"]):
         node.decompose()
     visible_text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()
@@ -120,7 +121,7 @@ def inspect_html(html: str, base_url: str) -> dict[str, Any]:
         "visible_text": visible_text,
         "text_preview": visible_text[:500],
         "internal_link_count": len(internal_links),
-        "script_count": len(BeautifulSoup(html or "", "lxml").find_all("script")),
+        "script_count": script_count,
         "html_bytes": len((html or "").encode("utf-8", errors="ignore")),
     }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from urllib.parse import urlparse
 
@@ -24,11 +25,19 @@ def _is_public_ip(value: str) -> bool:
 async def normalize_public_url(url: str) -> str:
     """Normalize a user supplied URL and reject SSRF-sensitive destinations."""
     try:
-        normalized = normalize_url(url)
+        raw = url.strip()
+        scheme = re.match(r"^([a-z][a-z0-9+.\-]*)://", raw, re.I)
+        if scheme:
+            protocol = scheme[1].lower()
+            if protocol not in {"http", "https"}:
+                raise ValueError("Only http and https URLs are supported")
+            raw = protocol + raw[len(scheme[1]):]
+        normalized = normalize_url(raw)
+        parsed = urlparse(normalized)
+        port = parsed.port
     except ValueError as exc:
         raise AppError(400, str(exc)) from exc
 
-    parsed = urlparse(normalized)
     if parsed.scheme not in {"http", "https"}:
         raise AppError(400, "Only http and https URLs are supported")
     if parsed.username or parsed.password:
@@ -43,7 +52,7 @@ async def normalize_public_url(url: str) -> str:
         records = await asyncio.to_thread(
             socket.getaddrinfo,
             hostname,
-            parsed.port or (443 if parsed.scheme == "https" else 80),
+            port or (443 if parsed.scheme == "https" else 80),
             type=socket.SOCK_STREAM,
         )
     except socket.gaierror as exc:

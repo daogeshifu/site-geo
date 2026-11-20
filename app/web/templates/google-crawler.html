@@ -3,154 +3,119 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Google 爬虫测试 · GEO Audit Console</title>
-  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20260730-http-path" />
+  <title>{% if platform %}{{ platform.name }} · {% endif %}爬虫测试 · GEO Audit</title>
+  <link rel="stylesheet" href="/static/css/google-crawler.css?v=20261120-platforms" />
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-mark">G</span>
-      <span><strong>GEO Audit</strong><small>Search diagnostics</small></span>
-    </a>
+    <a class="brand" href="/"><span class="brand-mark">G.</span><span><strong>GEO Audit</strong><small>Search diagnostics</small></span></a>
     <nav aria-label="主导航">
       <a href="/">网站诊断</a>
-      <a class="active" href="/google-crawler-test">Google 爬虫测试</a>
+      <a class="active" href="/crawler-test" {% if not platform %}aria-current="page"{% endif %}>爬虫测试</a>
       <a href="/api-doc">API 文档</a>
     </nav>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="eyebrow"><span class="live-dot"></span> Google Search 模拟检测</div>
-      <h1>Googlebot 抓到了什么，<br /><span>Google Render 又看到了什么？</span></h1>
-      <p>输入任意公开页面链接，一次检查初始状态、重定向链、最终响应、索引指令、Raw HTML，以及 JavaScript 渲染后的内容与资源异常。</p>
-
-      <form id="crawler-form" class="test-form">
-        <label for="test-url">需要检测的页面</label>
-        <div class="input-row">
-          <div class="url-input">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a2 2 0 0 0 2.8 0l3-3a2 2 0 0 0-2.8-2.8l-1.1 1.1m-1 6.6-1.1 1.1a2 2 0 1 1-2.8-2.8l3-3a2 2 0 0 1 2.8 0" /></svg>
-            <input id="test-url" name="url" type="url" placeholder="https://example.com/page" autocomplete="url" required />
-          </div>
-          <button id="run-test" type="submit">
-            <span class="button-label">开始测试</span>
-            <span class="button-spinner" aria-hidden="true"></span>
-          </button>
-        </div>
-        <div id="token-row" class="token-row" hidden>
-          <label for="demo-token">Demo Token</label>
-          <input id="demo-token" type="password" placeholder="X-Demo-Token" autocomplete="current-password" />
-          <span>此环境已启用访问保护</span>
-        </div>
-      </form>
-
-      <div class="flow" aria-label="检测流程">
-        <div><b>01</b><span><strong>问题清单</strong><small>Raw HTML · Render HTML · 结论</small></span></div>
-        <i></i>
-        <div><b>02</b><span><strong>Googlebot</strong><small>robots.txt · HTTP · 初始 HTML</small></span></div>
-        <i></i>
-        <div><b>03</b><span><strong>Google Render</strong><small>Chromium · JS · 渲染 DOM</small></span></div>
-      </div>
-    </section>
-
-    <section id="empty-state" class="empty-state">
-      <div class="empty-icon">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2m2-11v4m-2-2h4" /></svg>
-      </div>
-      <h2>等待开始检测</h2>
-      <p>检测通常需要几秒钟；JavaScript 较重的页面可能需要更长时间。</p>
-    </section>
-
-    <section id="loading-state" class="loading-state" hidden>
-      <div class="loading-head">
-        <div><span class="pulse"></span><strong>正在模拟 Google 抓取与渲染</strong></div>
-        <span id="elapsed-time">0.0s</span>
-      </div>
-      <div class="loading-grid">
-        <article><span class="skeleton icon"></span><div><b>Googlebot</b><small id="crawl-loading-copy">正在检查 robots.txt 与页面响应…</small></div></article>
-        <article><span class="skeleton icon"></span><div><b>Google Render</b><small>正在等待抓取前置检查…</small></div></article>
-      </div>
-      <div class="loading-bar"><span></span></div>
-    </section>
-
-    <section id="results" class="results" hidden>
-      <div class="result-overview">
-        <div>
-          <span class="section-kicker">Test result</span>
-          <h2 id="result-title">检测完成</h2>
-          <a id="result-url" href="#" target="_blank" rel="noreferrer"></a>
-        </div>
-        <div class="overview-score">
-          <div id="overall-score" class="score-ring"><strong>—</strong><small>综合分</small></div>
-          <span id="overall-status" class="status-pill">—</span>
-        </div>
-      </div>
-      <p id="disclaimer" class="disclaimer"></p>
-
-      <section id="overview-panel" class="diagnostic-overview" aria-labelledby="overview-heading">
-        <div class="overview-heading">
-          <div>
-            <span class="section-kicker">Overview</span>
-            <h3 id="overview-heading">检测结论</h3>
-          </div>
-          <span id="overview-verdict" class="status-pill">—</span>
-        </div>
-        <div id="overview-rendering" class="rendering-verdict is-unknown"></div>
-        <p id="overview-summary" class="overview-summary"></p>
+    {% if not platform %}
+    <header class="page-heading">
+      <h1>爬虫测试</h1>
+      <p>选择一个平台，查看它的爬虫标识、网页原始响应和支持的渲染结果。</p>
+    </header>
+    <div class="catalog">
+      {% for group in groups %}
+      <section class="platform-group" aria-labelledby="group-{{ loop.index }}">
+        <h2 id="group-{{ loop.index }}">{{ group }}</h2>
+        <ul>
+          {% for item in platforms if item.group == group %}
+          <li><a class="platform-link" href="/crawler-test/{{ item.id }}">
+            <span class="platform-name">{{ item.name }}</span>
+            <span class="platform-mode">
+              {%- if item.identity == "通用预览" %}通用预览
+              {%- elif item.identity == "关联爬虫参考" %}{{ item.agents[0].token }} 参考
+              {%- elif item.identity == "公开名称模拟" %}{{ item.agents[0].token }} · {{ item.agents[0].purpose }}
+              {%- elif item.render %}抓取 + 渲染
+              {%- else %}{{ item.agents[0].token }}
+              {%- endif -%}
+            </span>
+            <i class="chevron" aria-hidden="true"></i>
+          </a></li>
+          {% endfor %}
+        </ul>
       </section>
-
-      <div class="section-break section-break-checklist" aria-hidden="true">
-        <span>01</span>
-        <div><small>SEO checklist</small><strong>问题清单</strong></div>
-        <i></i>
-      </div>
-      <section class="result-section checklist-section" aria-labelledby="checklist-heading">
-        <header class="checklist-heading">
-          <div>
-            <span class="section-kicker">Based on SEO white paper</span>
-            <h3 id="checklist-heading">页面 SEO 基础问题清单</h3>
-            <p>对照 Raw HTML 与 Render HTML 综合判断；点击检查事项可查看对应白皮书说明。</p>
-          </div>
-          <button id="export-checklist" class="export-button" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
-            <span>一键导出 Excel</span>
-          </button>
-        </header>
-        <div id="checklist-stats" class="checklist-stats"></div>
-        <div class="checklist-table-wrap">
-          <table class="checklist-table">
-            <thead><tr><th>分类</th><th>检查事项</th><th>是否有问题</th><th>检测结论</th></tr></thead>
-            <tbody id="checklist-body"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <div class="section-break section-break-googlebot" aria-hidden="true">
-        <span>02</span>
-        <div><small>Crawl &amp; index</small><strong>Googlebot</strong></div>
-        <i></i>
-      </div>
-      <section id="panel-googlebot" class="result-section result-panel googlebot-panel" aria-label="Googlebot 抓取与索引细项"></section>
-
-      <div class="section-break section-break-render" aria-hidden="true">
-        <span>03</span>
-        <div><small>Render &amp; resources</small><strong>Google Render</strong></div>
-        <i></i>
-      </div>
-      <section id="panel-google-render" class="result-section result-panel render-panel" aria-label="Google Render 渲染与资源细项"></section>
-    </section>
-
-    <div id="error-box" class="error-box" hidden>
-      <strong>检测未完成</strong>
-      <p id="error-message"></p>
+      {% endfor %}
     </div>
+    {% else %}
+    <a class="back-link" href="/crawler-test"><i class="chevron" aria-hidden="true"></i>平台列表</a>
+    <header class="page-heading">
+      <h1>{{ platform.name }}{% if platform.name.isascii() %} {% endif %}爬虫测试</h1>
+      <p>{{ platform.description }}</p>
+    </header>
+
+    <form id="crawler-form" class="test-form" data-platform="{{ platform.id }}">
+      <div class="input-row">
+        <label>测试平台
+          <select id="platform-select" name="platform">
+            {% for group in groups %}
+            <optgroup label="{{ group }}">
+              {% for item in platforms if item.group == group %}
+              <option value="{{ item.id }}" {% if item == platform %}selected{% endif %}>{{ item.name }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="url-field">网页地址
+          <input id="test-url" name="url" type="url" maxlength="2048" placeholder="https://example.com/page" autocomplete="url" required />
+        </label>
+        <button id="run-test" type="submit">开始测试</button>
+      </div>
+      <div class="profile-row">
+        {% if platform.agents|length > 1 %}
+        <label for="agent-select">抓取用途</label>
+        <select id="agent-select" name="agent">
+          {% for agent in platform.agents %}
+          <option value="{{ agent.token }}">{{ agent.purpose }} · {{ agent.token }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <span>{{ platform.identity }}</span><code>{{ platform.agents[0].token }}</code>
+        {% endif %}
+      </div>
+      <details class="profile-details">
+        <summary>模拟请求头与来源</summary>
+        {% for agent in platform.agents %}
+        <div data-agent-profile="{{ agent.token }}" {% if not loop.first %}hidden{% endif %}>
+          <pre>{% for key, value in agent.headers().items() %}{{ key }}: {{ value }}{% if not loop.last %}{{ '\n' }}{% endif %}{% endfor %}</pre>
+          {% if agent.robots_user_agent %}<p>请求 robots.txt 时，User-Agent 另含 <code>robots.txt</code> 标记。</p>{% endif %}
+        </div>
+        {% endfor %}
+        {% if platform.id in ("google", "bing", "gemini") %}<p>Googlebot 与 bingbot 的 Chrome 版本按本地 Chromium 填写，独立 HTTP 环境使用固定样本。</p>{% endif %}
+        <p>抓取前先检查 robots.txt，规则禁止或无法确认时会显示原因。通用 HTTP 字段采用模拟值。资料核对日期为 <time>{{ reviewed_on }}</time>。</p>
+        <div class="sources">{% for label, link in platform.sources %}<a href="{{ link }}" target="_blank" rel="noreferrer">{{ label }}</a>{% endfor %}</div>
+      </details>
+      <div id="token-row" class="token-row" hidden>
+        <label for="demo-token">访问 Token</label>
+        <input id="demo-token" type="password" placeholder="X-API-Token" autocomplete="current-password" />
+        <span>此环境已启用访问保护</span>
+      </div>
+    </form>
+    <p id="run-state" role="status" aria-live="polite"></p>
+    <div id="error-box" class="error-box" role="alert" hidden></div>
+
+    <section id="panel-spider" class="stage spider" aria-labelledby="spider-heading">
+      <div class="stage-head"><h2 id="spider-heading">spider-bot <small>原始抓取</small></h2><code id="spider-agent">{{ platform.agents[0].token }}</code></div>
+      <div class="stage-body"><p class="stage-empty">开始测试后可查看 HTTP 响应、重定向和原始内容。</p></div>
+    </section>
+    {% if platform.render %}
+    <section id="panel-render" class="stage render" aria-labelledby="render-heading">
+      <div class="stage-head"><h2 id="render-heading">Render-bot <small>JavaScript 渲染</small></h2><code>{{ platform.render.token }}</code></div>
+      <div class="stage-body"><p class="stage-empty">取得 HTML 后，在本地 Chromium 中加载页面并截取 DOM。</p></div>
+    </section>
+    {% endif %}
+    {% endif %}
   </main>
-
-  <footer>
-    <p>本工具使用公开 Googlebot User-Agent 与本地 Chromium 做近似模拟；请求来自本工具服务器，并非 Google 官方 IP。</p>
-    <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">最终确认请使用 Google Search Console ↗</a>
-  </footer>
-
-  <script type="module" src="/static/js/google-crawler.js?v=20260806-render-html"></script>
+  <footer>请求来自本工具服务器。显示的状态码和内容对应本次模拟访问。</footer>
+  {% if platform %}<script type="module" src="/static/js/google-crawler.js?v=20261120-platforms"></script>{% endif %}
 </body>
 </html>

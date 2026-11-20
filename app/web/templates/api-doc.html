@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="GEO Audit API 接入文档：异步网站审计、任务查询、页面证据、Google 爬虫测试与评分规则。" />
+  <meta name="description" content="GEO Audit API 接入文档，包含异步网站审计、任务查询、页面证据、多平台爬虫测试与评分规则。" />
   <title>API 文档 · GEO Audit</title>
   <link rel="stylesheet" href="/static/css/api-doc.css?v=20261111-scoring-cards" />
   <script src="/static/js/api-doc.js?v=20261111-docs-layout" defer></script>
@@ -24,7 +24,7 @@
     <a class="header-title" href="/api-doc" aria-current="page">开发文档</a>
     <nav class="header-links" aria-label="主导航">
       <a class="product-link" href="/">网站诊断</a>
-      <a class="product-link" href="/google-crawler-test">Google 爬虫测试</a>
+      <a class="product-link" href="/crawler-test">爬虫测试</a>
       <a class="button button-primary button-small" href="/docs" target="_blank" rel="noreferrer">API 调试<svg class="icon" aria-hidden="true"><use href="#icon-external" /></svg></a>
     </nav>
   </header>
@@ -46,7 +46,7 @@
           <a href="#task-report"><span class="nav-method method-get">GET</span>导出审计报告</a>
           <a href="#page-evidence"><span class="nav-method method-get">GET</span>页面证据与导出</a>
           <a href="#audit-modules"><span class="nav-method method-post">POST</span>单模块调用</a>
-          <a href="#google-crawler"><span class="nav-method method-post">POST</span>Google 爬虫测试</a>
+          <a href="#google-crawler"><span class="nav-method method-post">POST</span>爬虫测试</a>
         </div>
         <div class="nav-group"><p class="nav-group-title">诊断说明</p><a href="#seo-checklist">检测清单说明<span class="nav-count">26</span></a><a href="#seo-scoring">SEO 评分规则</a><a href="#geo-scoring">GEO 评分规则</a><a href="#sgeo-scoring">SGEO 评分规则</a><a href="#data-sources">数据来源与运行机制</a></div>
       </nav>
@@ -57,7 +57,7 @@
       <div class="doc-intro">
         <div class="breadcrumbs"><span>开发文档</span><span aria-hidden="true">/</span><span>接入指南</span></div>
         <div class="doc-title"><h1>GEO Audit API</h1><span class="version">v1</span></div>
-        <p class="doc-lead">将网站审计、页面证据与 Google 爬虫诊断接入你的应用。</p>
+        <p class="doc-lead">将网站审计、页面证据与多平台爬虫测试接入你的应用。</p>
         <dl class="api-facts"><div><dt>基础路径</dt><dd><code>/api/v1</code></dd></div><div><dt>数据格式</dt><dd>JSON</dd></div><div><dt>访问认证</dt><dd><a href="#authentication">API Token</a></dd></div></dl>
       </div>
 
@@ -222,12 +222,19 @@
       </section>
 
       <section class="doc-section endpoint-section" id="google-crawler" data-doc-section aria-labelledby="google-crawler-title">
-        <h3 class="endpoint-title" id="google-crawler-title">Google 爬虫测试 API</h3>
-        <p>独立运行 Googlebot 抓取、Chromium 渲染诊断，或一次返回两项测试结果。</p>
+        <h3 class="endpoint-title" id="google-crawler-title">爬虫测试 API</h3>
+        <div class="endpoint"><span class="method method-get">GET</span><code>/api/v1/crawler/platforms</code></div><p class="endpoint-description">返回平台 ID、可选爬虫标识、渲染配置与来源。</p>
+        <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/crawler/test</code></div><p class="endpoint-description">提交平台 ID 和公开网页地址。可选的 <code>agent</code> 取该平台的爬虫标识，默认使用第一项。<code>spider</code> 包含原始响应，支持渲染的平台另返回 <code>render</code>。</p>
+        <div class="code-block"><div class="code-toolbar"><span>JSON</span><span class="code-caption">多平台抓取请求</span></div><pre><code>{
+  "url": "https://example.com/",
+  "platform": "openai",
+  "agent": "OAI-SearchBot"
+}</code></pre></div>
+        <h4>Google 专用接口</h4>
         <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/googlebot</code></div><p class="endpoint-description">检查 robots.txt、HTTP 状态、索引指令和初始 HTML。</p>
         <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/google-render</code></div><p class="endpoint-description">运行抓取前置检查与 Chromium JavaScript 渲染诊断。</p>
         <div class="endpoint"><span class="method method-post">POST</span><code>/api/v1/google-crawler/test</code></div><p class="endpoint-description">一次返回 Googlebot 与 Google Render 两项结果。</p>
-        <div class="code-block"><div class="code-toolbar"><span>JSON</span><span class="code-caption">通用请求体</span></div><pre><code>{
+        <div class="code-block"><div class="code-toolbar"><span>JSON</span><span class="code-caption">Google 专用接口请求体</span></div><pre><code>{
   "url": "https://example.com/"
 }</code></pre></div>
       </section>

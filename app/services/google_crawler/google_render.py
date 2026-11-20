@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.services.crawlers.http import visible_request_headers
 from app.services.google_crawler.common import (
     inspect_html,
     issue,
@@ -72,35 +74,26 @@ class GoogleRenderService:
             )
         return headers, redirects
 
-    async def test(
+    async def capture(
         self,
         url: str,
         *,
+        user_agent: str,
         initial_html: str = "",
-        crawl_allowed: bool | None = True,
-        user_agent: str | None = None,
-        mode: str = "googlebot",
+        agent_token: str = "Googlebot",
+        mobile: bool = True,
+        allow_resource: Callable[[str], Awaitable[bool]] | None = None,
     ) -> dict[str, Any]:
+        """Capture actual Chromium evidence without running an SEO assessment."""
         normalized = await normalize_public_url(url)
-        if crawl_allowed is False:
-            return self._skipped(
-                "robots_blocked",
-                "robots.txt 阻止了 Googlebot；Google Search 不会继续渲染这个页面。",
-            )
         if not settings.allow_playwright:
-            return self._skipped(
-                "renderer_disabled",
-                "服务器未启用 Playwright 渲染。请设置 ALLOW_PLAYWRIGHT=true 并安装 Chromium。",
-            )
+            return {"status": "skipped", "code": "renderer_disabled", "reason": "服务器未启用 Playwright 渲染。请设置 ALLOW_PLAYWRIGHT=true 并安装 Chromium。"}
         try:
             from playwright.async_api import Error as PlaywrightError
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
             from playwright.async_api import async_playwright
         except ImportError:
-            return self._skipped(
-                "renderer_unavailable",
-                "Playwright 未安装。请安装项目渲染依赖和 Chromium。",
-            )
+            return {"status": "skipped", "code": "renderer_unavailable", "reason": "Playwright 未安装。请安装项目渲染依赖和 Chromium。"}
 
         console_errors: list[str] = []
         page_errors: list[str] = []
@@ -111,6 +104,7 @@ class GoogleRenderService:
         final_url = normalized
         status_code: int | None = None
         response_headers: dict[str, str] = {}
+        request_headers: dict[str, str] = {}
         redirect_chain: list[dict[str, Any]] = []
         timed_out = False
 
@@ -121,17 +115,14 @@ class GoogleRenderService:
                     args=["--disable-dev-shm-usage", "--no-sandbox"],
                 )
             except PlaywrightError:
-                return self._skipped(
-                    "renderer_launch_failed",
-                    "Chromium 无法启动。请安装与 Playwright 版本匹配的浏览器运行时。",
-                )
-            effective_user_agent = user_agent or GOOGLEBOT_SMARTPHONE_UA
+                return {"status": "skipped", "code": "renderer_launch_failed", "reason": "Chromium 无法启动。请安装与 Playwright 版本匹配的浏览器运行时。"}
             context = await browser.new_context(
-                user_agent=effective_user_agent,
-                viewport={"width": 412, "height": 915},
-                device_scale_factor=2,
-                is_mobile=True,
-                has_touch=True,
+                user_agent=user_agent,
+                viewport={"width": 412, "height": 915} if mobile else {"width": 1280, "height": 800},
+                device_scale_factor=2 if mobile else 1,
+                is_mobile=mobile,
+                has_touch=mobile,
+                service_workers="block",
                 locale="en-US",
                 timezone_id="America/Los_Angeles",
             )
@@ -140,27 +131,66 @@ class GoogleRenderService:
                 f"{urlparse(normalized).scheme}://{urlparse(normalized).netloc}"
             }
 
-            async def guard_route(route: Any) -> None:
-                request_url = route.request.url
+            async def resource_allowed(request_url: str) -> bool:
                 if not request_url.startswith(("http://", "https://")):
-                    await route.continue_()
-                    return
+                    return False
                 parsed_request = urlparse(request_url)
                 origin = f"{parsed_request.scheme}://{parsed_request.netloc}"
-                if origin in validated_origins:
-                    await route.continue_()
-                    return
-                try:
-                    await normalize_public_url(request_url)
-                except Exception:
-                    if len(blocked_private_resources) < 20:
-                        blocked_private_resources.append(request_url)
-                    await route.abort("blockedbyclient")
-                    return
-                validated_origins.add(origin)
-                await route.continue_()
+                if origin not in validated_origins:
+                    try:
+                        await normalize_public_url(request_url)
+                    except Exception:
+                        if len(blocked_private_resources) < 20:
+                            blocked_private_resources.append(request_url)
+                        return False
+                    validated_origins.add(origin)
+                return allow_resource is None or await allow_resource(request_url)
 
-            await page.route("**/*", guard_route)
+            async def guard_route(route: Any) -> None:
+                request_url = route.request.url
+                if request_url.startswith(("data:", "about:", "blob:")) or await resource_allowed(request_url):
+                    await route.continue_()
+                else:
+                    await route.abort("blockedbyclient")
+
+            await context.route("**/*", guard_route)
+            if allow_resource:
+                # Playwright only routes the first request of a server redirect.
+                # Chromium exposes each subsequent hop before it leaves the browser.
+                session = await context.new_cdp_session(page)
+
+                async def guard_browser_request(event: dict) -> None:
+                    params: dict[str, Any] = {"requestId": event["requestId"]}
+                    command = "Fetch.continueRequest"
+                    if event.get("redirectedRequestId") and not await resource_allowed(event["request"]["url"]):
+                        command = "Fetch.failRequest"
+                        params["errorReason"] = "BlockedByClient"
+                    elif agent_token == "Googlebot":
+                        # Googlebot normally omits Accept-Language, unlike a desktop browser.
+                        params["headers"] = [
+                            {"name": name, "value": value}
+                            for name, value in event["request"]["headers"].items()
+                            if name.lower() != "accept-language"
+                        ]
+                    try:
+                        await session.send(command, params)
+                    except PlaywrightError:
+                        if not page.is_closed():
+                            raise
+
+                session.on("Fetch.requestPaused", guard_browser_request)
+                await session.send("Fetch.enable", {"patterns": [
+                    {"urlPattern": "http://*"}, {"urlPattern": "https://*"},
+                ]})
+
+                async def guard_socket(route: Any) -> None:
+                    target = route.url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+                    if await resource_allowed(target):
+                        route.connect_to_server()
+                    else:
+                        await route.close()
+
+                await context.route_web_socket("**/*", guard_socket)
             page.on(
                 "console",
                 lambda message: console_errors.append(message.text[:500])
@@ -201,6 +231,8 @@ class GoogleRenderService:
                 )
                 status_code = response.status if response else None
                 response_headers, redirect_chain = await self._navigation_details(response)
+                if response is not None:
+                    request_headers = visible_request_headers(await response.request.all_headers())
                 try:
                     await page.wait_for_load_state(
                         "networkidle",
@@ -223,8 +255,8 @@ class GoogleRenderService:
                 await browser.close()
 
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
-        initial = inspect_html(initial_html, normalized)
-        rendered = inspect_html(rendered_html, final_url)
+        initial = inspect_html(initial_html, normalized, agent_token=agent_token)
+        rendered = inspect_html(rendered_html, final_url, agent_token=agent_token)
         rendered_html_result = _rendered_html_snapshot(rendered_html)
         word_delta = rendered["word_count"] - initial["word_count"]
         link_delta = rendered["internal_link_count"] - initial["internal_link_count"]
@@ -238,8 +270,91 @@ class GoogleRenderService:
             headers=response_headers,
             redirect_chain=redirect_chain,
         )
-        rate_limited = http_metadata["outcome"] == "rate_limited"
         navigation_succeeded = status_code == 200
+        return {
+            "status": "failed" if not navigation_succeeded else "warning" if timed_out else "passed",
+            "engine": "Playwright Chromium",
+            "user_agent": user_agent,
+            "request": {
+                "requested_url": normalized,
+                "final_url": final_url,
+                "status_code": status_code,
+                **http_metadata,
+                "headers": request_headers,
+                "redirect_count": len(redirect_chain),
+                "redirect_chain": redirect_chain,
+                "render_time_ms": elapsed_ms,
+                "network_idle_timed_out": timed_out,
+            },
+            "comparison": {
+                "initial_word_count": initial["word_count"],
+                "rendered_word_count": rendered["word_count"],
+                "word_delta": word_delta,
+                "initial_internal_links": initial["internal_link_count"],
+                "rendered_internal_links": rendered["internal_link_count"],
+                "link_delta": link_delta,
+                "content_retention_percent": content_retention,
+                "title_before": initial["title"],
+                "title_after": rendered["title"],
+                "h1_before": initial["h1"],
+                "h1_after": rendered["h1"],
+            },
+            "rendered_content": {
+                key: value for key, value in rendered.items() if key != "visible_text"
+            },
+            "rendered_html": {
+                **rendered_html_result,
+                "final_url": final_url,
+                "capture_state": (
+                    "network_idle"
+                    if navigation_succeeded and not timed_out
+                    else "timeout"
+                    if timed_out
+                    else "navigation_error"
+                ),
+            },
+            "diagnostics": {
+                "page_errors": page_errors,
+                "console_errors": console_errors,
+                "failed_resources": failed_resources,
+                "http_errors": http_errors,
+                "blocked_private_resources": blocked_private_resources,
+            },
+        }
+
+    async def test(
+        self,
+        url: str,
+        *,
+        initial_html: str = "",
+        crawl_allowed: bool | None = True,
+        user_agent: str | None = None,
+        mode: str = "googlebot",
+    ) -> dict[str, Any]:
+        if crawl_allowed is False:
+            await normalize_public_url(url)
+            return self._skipped("robots_blocked", "robots.txt 阻止了 Googlebot；Google Search 不会继续渲染这个页面。")
+        evidence = await self.capture(url, initial_html=initial_html, user_agent=user_agent or GOOGLEBOT_SMARTPHONE_UA)
+        if evidence["status"] == "skipped":
+            return self._skipped(evidence["code"], evidence["reason"])
+
+        http_metadata = evidence["request"]
+        status_code = http_metadata["status_code"]
+        elapsed_ms = http_metadata["render_time_ms"]
+        timed_out = http_metadata["network_idle_timed_out"]
+        navigation_succeeded = status_code == 200
+        rate_limited = http_metadata["outcome"] == "rate_limited"
+        rendered = evidence["rendered_content"]
+        comparison = evidence["comparison"]
+        initial_words = comparison["initial_word_count"]
+        word_delta = comparison["word_delta"]
+        content_retention = comparison["content_retention_percent"]
+        diagnostics = evidence["diagnostics"]
+        console_errors = diagnostics["console_errors"]
+        page_errors = diagnostics["page_errors"]
+        failed_resources = diagnostics["failed_resources"]
+        http_errors = diagnostics["http_errors"]
+        blocked_private_resources = diagnostics["blocked_private_resources"]
 
         issues: list[dict[str, str]] = []
         score = 100
@@ -296,8 +411,8 @@ class GoogleRenderService:
             issues.append(issue("rendered_content_thin", "high", "渲染后核心内容仍过少", f"渲染后约 {rendered['word_count']} 个词/字符单元。", "检查 API 请求、客户端路由、鉴权、懒加载与 JS 异常。"))
         if (
             navigation_succeeded
-            and initial["word_count"] >= 50
-            and rendered["word_count"] < initial["word_count"] * 0.6
+            and initial_words >= 50
+            and rendered["word_count"] < initial_words * 0.6
         ):
             score -= 20
             issues.append(issue("content_lost_after_render", "high", "渲染后丢失大量正文", f"渲染后只保留初始内容的约 {content_retention}%。", "检查 hydration 是否覆盖或移除了服务端输出内容。"))
@@ -401,59 +516,14 @@ class GoogleRenderService:
             },
         ]
         return {
+            **evidence,
             "service": "google_render",
             "status": status_from_issues(issues, score=score),
             "score": score,
             "simulated": True,
             "available": True,
-            "engine": "Playwright Chromium",
             "mode": mode,
-            "user_agent": effective_user_agent,
             "googlebot_equivalent": mode == "googlebot",
-            "request": {
-                "requested_url": normalized,
-                "final_url": final_url,
-                "status_code": status_code,
-                **http_metadata,
-                "redirect_count": len(redirect_chain),
-                "redirect_chain": redirect_chain,
-                "render_time_ms": elapsed_ms,
-                "network_idle_timed_out": timed_out,
-            },
-            "comparison": {
-                "initial_word_count": initial["word_count"],
-                "rendered_word_count": rendered["word_count"],
-                "word_delta": word_delta,
-                "initial_internal_links": initial["internal_link_count"],
-                "rendered_internal_links": rendered["internal_link_count"],
-                "link_delta": link_delta,
-                "content_retention_percent": content_retention,
-                "title_before": initial["title"],
-                "title_after": rendered["title"],
-                "h1_before": initial["h1"],
-                "h1_after": rendered["h1"],
-            },
-            "rendered_content": {
-                key: value for key, value in rendered.items() if key != "visible_text"
-            },
-            "rendered_html": {
-                **rendered_html_result,
-                "final_url": final_url,
-                "capture_state": (
-                    "network_idle"
-                    if navigation_succeeded and not timed_out
-                    else "timeout"
-                    if timed_out
-                    else "navigation_error"
-                ),
-            },
-            "diagnostics": {
-                "page_errors": page_errors,
-                "console_errors": console_errors,
-                "failed_resources": failed_resources,
-                "http_errors": http_errors,
-                "blocked_private_resources": blocked_private_resources,
-            },
             "checks": checks,
             "issues": issues,
         }

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Request
 
 from app.api.demo_access import require_demo_token
-from app.models.requests import GoogleCrawlerTestRequest
+from app.models.requests import CrawlerTestRequest, GoogleCrawlerTestRequest
 from app.models.responses import success_response
+from app.services.crawlers.catalog import PLATFORMS, REVIEWED_ON
+from app.services.crawlers.simulation import simulate
 from app.services.google_crawler import (
     GoogleRenderService,
     GooglebotService,
@@ -12,9 +16,21 @@ from app.services.google_crawler import (
 )
 
 
-router = APIRouter(tags=["google-crawler"])
+router = APIRouter(tags=["爬虫测试"])
 googlebot_service = GooglebotService()
 google_render_service = GoogleRenderService()
+
+
+@router.get("/api/v1/crawler/platforms")
+async def crawler_platforms() -> dict:
+    """列出可选平台、爬虫标识、渲染能力和资料来源。"""
+    return success_response({"reviewed_on": REVIEWED_ON, "platforms": [asdict(p) for p in PLATFORMS]})
+
+
+@router.post("/api/v1/crawler/test")
+async def test_platform_crawler(payload: CrawlerTestRequest) -> dict:
+    """以所选标识模拟一次公开网页抓取，按平台能力返回渲染结果。"""
+    return success_response(await simulate(payload.url, payload.platform, payload.agent))
 
 
 def _render_fallback_options(googlebot_result: dict) -> dict:

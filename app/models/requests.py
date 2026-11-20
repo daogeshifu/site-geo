@@ -73,6 +73,13 @@ class GoogleCrawlerTestRequest(BaseModel):
     url: str = Field(..., min_length=3, max_length=2048)
 
 
+class CrawlerTestRequest(GoogleCrawlerTestRequest):
+    """选择目录中的平台及其抓取标识。"""
+
+    platform: str = Field(..., min_length=1, max_length=40)
+    agent: str | None = Field(default=None, min_length=1, max_length=80)
+
+
 class AuditModuleRequest(UrlRequest):
     """单模块审计请求，可携带预先完成的 discovery 结果以复用"""
 

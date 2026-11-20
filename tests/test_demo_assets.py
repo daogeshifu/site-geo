@@ -37,7 +37,9 @@ def test_api_doc_is_separate_and_links_to_interactive_docs() -> None:
     response = client.get("/api-doc")
     assert response.status_code == 200
     assert "API 调用步骤" in response.text
-    assert "Google 爬虫测试 API" in response.text
+    assert 'href="/crawler-test">爬虫测试</a>' in response.text
+    assert "/api/v1/crawler/test" in response.text
+    assert "/api/v1/google-crawler/googlebot" in response.text
     assert 'href="/docs"' in response.text
     assert "立即测试 API" in response.text
     assert 'id="seo-checklist"' in response.text

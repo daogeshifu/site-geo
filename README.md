@@ -58,7 +58,7 @@ ALLOW_PLAYWRIGHT=true ./start.sh
 ```
 
 未启用或无法完成时，对应规则为待核验。当前模拟不来自真实搜索/AI爬虫IP，不模拟当地网络位置。
-Google爬虫独立工具仍位于 `/google-crawler-test`。
+爬虫测试入口为 `/crawler-test`，原地址 `/google-crawler-test` 也打开平台目录。选择平台后输入网址，可以切换平台、核对请求标识与资料来源，并比较原始响应和可用的 Chromium 渲染结果。多平台 API 与 Google 专用接口见 `/api-doc#google-crawler`。
 
 ## 技术栈
 

@@ -65,7 +65,10 @@ def _match_rule(target_path: str, rules: dict[str, list[str]]) -> bool:
     return longest_allow >= longest_disallow
 
 
-def _parse_robots_text(text: str) -> tuple[dict[str, dict[str, list[str]]], list[str]]:
+RobotsRules = dict[str, dict[str, list[str]]]
+
+
+def parse_robots_text(text: str) -> tuple[RobotsRules, list[str]]:
     """解析 robots.txt 文本，返回 (规则字典, Sitemap URL 列表)
 
     规则字典格式：{user_agent: {"allow": [...], "disallow": [...]}}
@@ -122,16 +125,24 @@ def _resolve_agent_rule(agent_name: str, parsed_rules: dict[str, dict[str, list[
     return RobotsUserAgentRule(allowed=_match_rule(target_path, rules), matched_user_agent=matched_agent)
 
 
+def robot_path_rule(parsed: RobotsRules, agent: str, url: str) -> RobotsUserAgentRule:
+    parts = urlparse(url)
+    path = parts.path or "/"
+    if parts.params:
+        path += ";" + parts.params
+    if parts.query:
+        path += "?" + parts.query
+    return _resolve_agent_rule(agent, parsed, path)
+
+
 def inspect_robot_path(robots: RobotsResult, url: str) -> dict[str, bool | None]:
     """Return unknown for incomplete evidence; never infer deep paths from '/'."""
     if robots.status_code is not None and 400 <= robots.status_code < 500 and robots.status_code != 429:
         return {agent: True for agent in SEARCH_CRAWLERS}
     if robots.raw_text is None or (robots.status_code is not None and robots.status_code >= 400):
         return {agent: None for agent in SEARCH_CRAWLERS}
-    parsed, _ = _parse_robots_text(robots.raw_text)
-    parts = urlparse(url)
-    path = (parts.path or "/") + ("?" + parts.query if parts.query else "")
-    return {agent: _resolve_agent_rule(agent, parsed, path).allowed for agent in SEARCH_CRAWLERS}
+    parsed, _ = parse_robots_text(robots.raw_text)
+    return {agent: robot_path_rule(parsed, agent, url).allowed for agent in SEARCH_CRAWLERS}
 
 
 async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None) -> RobotsResult:
@@ -153,7 +164,7 @@ async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None)
     if response.status_code >= 400:
         return RobotsResult(url=robots_url, exists=False, status_code=response.status_code)
 
-    parsed_rules, sitemaps = _parse_robots_text(response.text)
+    parsed_rules, sitemaps = parse_robots_text(response.text)
     # 解析所有 AI 爬虫的访问状态
     agents = {name: _resolve_agent_rule(name, parsed_rules) for name in AI_CRAWLERS}
     # 检查通配符规则是否允许全站访问

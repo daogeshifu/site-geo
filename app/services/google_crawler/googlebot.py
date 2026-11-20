@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import time
 import urllib.robotparser
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
 from app.core.config import settings
 from app.core.exceptions import AppError
+from app.services.crawlers.catalog import GOOGLEBOT_SMARTPHONE_UA
+from app.services.crawlers.http import FetchResult as _HttpResult, fetch_public
 from app.services.google_crawler.browser_raw import (
     BrowserRawHtmlService,
     BrowserRawResponse,
@@ -23,11 +24,6 @@ from app.services.google_crawler.common import (
 from app.utils.public_url import normalize_public_url
 
 
-GOOGLEBOT_SMARTPHONE_UA = (
-    "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile "
-    "Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
-)
 ACCESS_CHALLENGE_STATUS_CODES = {401, 403, 406, 418, 429, 446, 451}
 ACCESS_CHALLENGE_MARKERS = (
     "access denied",
@@ -37,26 +33,12 @@ ACCESS_CHALLENGE_MARKERS = (
     "cloudflare ray id",
     "akamai",
 )
-MAX_HTML_BYTES = 2_000_000
-REDIRECT_CODES = {301, 302, 303, 307, 308}
 
 
 @dataclass
 class GooglebotRun:
     result: dict[str, Any]
     html: str
-
-
-@dataclass
-class _HttpResult:
-    requested_url: str
-    final_url: str
-    status_code: int
-    headers: dict[str, str]
-    text: str
-    response_time_ms: int
-    redirect_chain: list[dict[str, Any]]
-    truncated: bool
 
 
 class GooglebotService:
@@ -93,45 +75,7 @@ class GooglebotService:
         client: httpx.AsyncClient,
         validate_url: bool = True,
     ) -> _HttpResult:
-        current = await normalize_public_url(url) if validate_url else url
-        requested = current
-        redirects: list[dict[str, Any]] = []
-        started_at = time.perf_counter()
-
-        for _ in range(6):
-            response = await client.get(current, follow_redirects=False)
-            if response.status_code in REDIRECT_CODES and response.headers.get("location"):
-                next_url = urljoin(current, response.headers["location"])
-                next_url = await normalize_public_url(next_url)
-                redirects.append(
-                    {
-                        "status_code": response.status_code,
-                        "from": current,
-                        "to": next_url,
-                    }
-                )
-                current = next_url
-                continue
-
-            raw = response.content
-            truncated = len(raw) > MAX_HTML_BYTES
-            raw = raw[:MAX_HTML_BYTES]
-            encoding = response.encoding or "utf-8"
-            try:
-                text = raw.decode(encoding, errors="replace")
-            except LookupError:
-                text = raw.decode("utf-8", errors="replace")
-            return _HttpResult(
-                requested_url=requested,
-                final_url=str(response.url),
-                status_code=response.status_code,
-                headers={key.lower(): value for key, value in response.headers.items()},
-                text=text,
-                response_time_ms=int((time.perf_counter() - started_at) * 1000),
-                redirect_chain=redirects,
-                truncated=truncated,
-            )
-        raise AppError(502, "Too many redirects while testing URL")
+        return await fetch_public(url, client=client, validate_url=validate_url)
 
     async def _inspect_robots(
         self,
