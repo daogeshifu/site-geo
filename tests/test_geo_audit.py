@@ -433,7 +433,7 @@ def test_sgeo_uses_shared_evidence_and_its_own_rubric_without_running_seo(monkey
     pure = asyncio.run(service._run_site_geo_task(task("site_geo_only_audit")))
     combo = asyncio.run(service._run_site_geo_task(task("site_geo_audit")))
     assert pure["geo"]["scoring_version"] == "onsite-geo-v3"
-    assert combo["sgeo"]["scoring_version"] == "onsite-sgeo-v1"
+    assert combo["sgeo"]["scoring_version"] == "onsite-sgeo-v2"
     assert "seo" not in combo and "geo" not in combo and "seo_summary" not in combo
     assert combo["summary"]["combined_score"] == combo["sgeo"]["score"]
     assert combo["summary"]["sgeo_score"] == combo["sgeo"]["score"]
@@ -529,7 +529,7 @@ def test_geo_api_task_lifecycle_report_and_source_inventory(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize("task_type,dimension_count,check_count", [
-    ("site_geo_only_audit", 6, 27), ("site_seo_audit", 6, 26), ("site_geo_audit", 6, 30),
+    ("site_geo_only_audit", 6, 27), ("site_seo_audit", 6, 26), ("site_geo_audit", 6, 29),
 ])
 def test_v1_task_results_reports_and_cache_keep_all_diagnostic_dimensions(
     monkeypatch, tmp_path, task_type, dimension_count, check_count

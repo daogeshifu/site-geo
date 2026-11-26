@@ -37,16 +37,17 @@ def page_checks(result, index=0):
     return {c.id: c for d in result.pages[index].dimensions.values() for c in d.checks}
 
 
-def test_sgeo_rubric_has_thirty_uniquely_owned_checks_and_one_hundred_points():
-    assert len(RULES) == len({row[0] for row in RULES}) == 30
+def test_sgeo_rubric_has_twenty_nine_uniquely_owned_checks_and_one_hundred_points():
+    assert len(RULES) == len({row[0] for row in RULES}) == 29
     assert sum(row[2] for row in RULES) == 100
     assert sum(row[0] for row in DIMENSIONS.values()) == 100
     for key, (weight, *_rest) in DIMENSIONS.items():
         assert sum(row[2] for row in RULES if row[1] == key) == weight
     result = audit()
-    assert result.scoring_version == SGEO_SCORING_VERSION
+    assert result.scoring_version == SGEO_SCORING_VERSION == "onsite-sgeo-v2"
     assert len(result.dimensions) == 6
-    assert set(checks(result)) == {f"SGEO-{i:03}" for i in range(1, 31)}
+    expected_ids = {f"SGEO-{i:03}" for i in range(1, 31) if i != 4}
+    assert set(checks(result)) == expected_ids
     assert sum(d.weight for d in result.dimensions.values()) == pytest.approx(1)
 
 
@@ -112,11 +113,11 @@ def test_a_blocker_is_reported_even_when_the_measured_score_is_high():
 
 def test_unknown_and_inapplicable_checks_are_distinct_and_do_not_invent_findings():
     result = audit()
+    assert page_checks(result)["SGEO-020"].status == "na"
     assert page_checks(result)["SGEO-029"].status == "na"
     assert page_checks(result)["SGEO-030"].status == "na"
-    for key in ("SGEO-004", "SGEO-011", "SGEO-020"):
-        assert page_checks(result)[key].status == "unknown"
-        assert checks(result)[key].label not in result.issues
+    assert page_checks(result)["SGEO-011"].status == "unknown"
+    assert checks(result)["SGEO-011"].label not in result.issues
     assert result.provisional is True
     assert audit([]).score is None
     assert audit([]).score_range == [0, 100]
@@ -145,17 +146,25 @@ def test_image_policy_does_not_require_eager_images_to_be_lazy(attributes, expec
     assert page_checks(result)["SGEO-029"].status == expected
 
 
-@pytest.mark.parametrize("attributes,expected", [
-    ('hreflang="en-GB" href="/en/"', 'pass'),
-    ('hreflang="x-default" href="/"', 'pass'),
-    ('hreflang="not a language" href="/en/"', 'fail'),
-    ('hreflang="en"', 'fail'),
+@pytest.mark.parametrize("tags,expected", [
+    ('<link rel="alternate" hreflang="en" href="https://example.com/"><link rel="alternate" hreflang="x-default" href="https://example.com/">', 'pass'),
+    ('<link rel="alternate" hreflang="en-GB" href="/en/">', 'partial'),
+    ('<link rel="alternate" hreflang="not a language" href="/en/">', 'fail'),
+    ('<link rel="alternate" hreflang="en">', 'fail'),
 ])
-def test_alternate_links_check_declared_language_and_url_without_claiming_reciprocity(attributes, expected):
-    result = audit([evidence(html=HTML.replace('</head>', f'<link rel="alternate" {attributes}></head>'))])
+def test_alternate_links_check_declared_language_and_url_without_claiming_reciprocity(tags, expected):
+    result = audit([evidence(html=HTML.replace('</head>', f'{tags}</head>'))])
     check = page_checks(result)["SGEO-030"]
     assert check.status == expected
     assert check.evidence["reciprocal_links_verified"] is False
+
+
+def test_sgeo_v2_multilingual_missing_hreflang_and_payload_signal_ratio():
+    de_missing = audit([evidence("https://example.com/de/widget")])
+    assert page_checks(de_missing)["SGEO-030"].status == "fail"
+    bloated = audit([evidence(html=HTML + "<!--" + ("x" * 600_000) + "-->")])
+    assert page_checks(bloated)["SGEO-028"].value < 0.5
+    assert page_checks(bloated)["SGEO-028"].evidence["text_to_html_ratio"] is not None
 
 
 def test_duplicate_metadata_is_one_shared_check_and_redirect_aliases_are_not_duplicates():
@@ -255,4 +264,7 @@ def test_scoring_documentation_matches_live_sgeo_rule_registry():
         card = docs.select_one(f'[data-sgeo-dimension="{key}"]')
         assert card.select_one('h3').text == zh
         assert int(card['data-weight']) == weight
+    expected_order = ["access", "discovery", "extraction", "semantics", "answers", "trust"]
+    assert list(DIMENSIONS) == expected_order
+    assert [node['data-sgeo-dimension'] for node in docs.select('[data-sgeo-dimension]')] == expected_order
     assert docs.select_one('#sgeo-scoring')

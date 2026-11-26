@@ -96,7 +96,7 @@
         <div class="table-wrap"><table><thead><tr><th>任务类型</th><th>评分口径</th><th>结果位置</th></tr></thead><tbody>
 <tr><td><code>site_geo_only_audit</code> 网站 GEO 审计</td><td>站内六维就绪度，onsite-geo-v3（27项检查）；不含外链、OG/Twitter卡片、一般安全响应头或平台推测分</td><td><code>result.geo.score</code> / <code>summary.geo_score</code></td></tr>
 <tr><td><code>site_seo_audit</code> 网站 SEO 审计</td><td>SEO既有六维、权重按95归一；外链为品牌权威支持信号，OG/Twitter属于技术支持检查</td><td><code>result.seo.overall_score</code> / <code>summary.overall_score</code></td></tr>
-<tr><td><code>site_geo_audit</code> 网站 SGEO 诊断</td><td>六维、30项唯一检查，onsite-sgeo-v1；融合搜索与生成式检索的共用能力</td><td><code>result.sgeo.score</code> / <code>summary.sgeo_score</code></td></tr>
+<tr><td><code>site_geo_audit</code> 网站 SGEO 诊断</td><td>六维、29项唯一检查，onsite-sgeo-v2；融合搜索与生成式检索的共用能力</td><td><code>result.sgeo.score</code> / <code>summary.sgeo_score</code></td></tr>
 <tr><td><code>site_content_audit</code> 网站内容审计</td><td>单篇内容评分，独立于上述站点评分</td><td><code>result.content</code> / <code>result.summary</code></td></tr>
 </tbody></table></div>
         <p class="doc-note">页面默认首选网站 GEO 审计。为兼容已有调用，API省略 task_type 时仍默认 site_seo_audit；请显式传入所需类型。三种站点任务均按精确 host 与语言路径限制抓取；图谱可选、独立构建。</p>
@@ -154,20 +154,20 @@
     "steps": { "discovery": { "status": "completed", "data": {...} }, ... },
     "result": {
       "sgeo": {
-        "scoring_version": "onsite-sgeo-v1",
+        "scoring_version": "onsite-sgeo-v2",
         "score": 72.5,
         "status": "provisional",
         "readiness_status": "unverified",
         "provisional": true,
         "score_range": [65.2, 75.8],
         "coverage": { "evidence_coverage": 0.894, "sampled_pages": 8, ... },
-        "dimensions": { "access": {...}, "discovery": {...}, "extraction": {...}, "answers": {...}, "trust": {...}, "semantics": {...} },
+        "dimensions": { "access": {...}, "discovery": {...}, "extraction": {...}, "semantics": {...}, "answers": {...}, "trust": {...} },
         "pages": [...], "blockers": [...], "auxiliary": { "scored": false, ... }
       },
       "discovery": { "scope_root_url": "https://example.com/", ... },
       "observation": { "provided": false, "scored": false },
       "summary": {
-        "scoring_version": "onsite-sgeo-v1",
+        "scoring_version": "onsite-sgeo-v2",
         "sgeo_score": 72.5,
         "overall_score": 72.5,
         "combined_score": 72.5
@@ -404,82 +404,80 @@
       </section>
       <section class="doc-section scoring-section" id="sgeo-scoring" data-doc-section aria-labelledby="sgeo-scoring-title">
         <span id="seo-geo-scoring" aria-hidden="true"></span>
-        <div class="section-heading"><h2 id="sgeo-scoring-title">SGEO 评分规则</h2><span class="section-note">onsite-sgeo-v1</span></div>
-        <p>将搜索优化与生成式检索融合为六个维度、30项唯一检查，总权重100%。同一问题只在所属维度计分一次，直接从页面证据计算统一的 SGEO 分数。</p>
+        <div class="section-heading"><h2 id="sgeo-scoring-title">SGEO 评分规则</h2><span class="section-note">onsite-sgeo-v2</span></div>
+        <p>将搜索优化与生成式检索融合为六个维度、29项唯一检查，总权重100%（与 <code>onsite-geo-v3</code> 共享升级后的底层检测与维度排序）。同一问题只在所属维度计分一次，直接从页面证据计算统一的 SGEO 分数。</p>
         <div class="scoring-formula"><strong>SGEO总分</strong><p>Σ（已测维度分 × 权重）÷ 已测维度权重之和</p><span>维度分 = 已获积分 ÷ 已测积分 × 100；不适用项在维度内归一，未知项保留在分数区间中。</span></div>
-        <p class="doc-note">复用抓取、索引、正文、内容、可信和语义方面的基础证据，重新划分维度与权重，不使用 SEO、GEO 总分或维度分做平均。独立 SEO 和 GEO 任务继续使用各自的原有规则。</p>
+        <p class="doc-note">复用抓取、WAF 探针、反 CSR 空壳、Sitemap、Schema/sameAs 与跨页事实等升级证据，补充移动视口、图片加载策略与完整多语言核验，不使用 SEO、GEO 总分或维度分做平均。</p>
         <div class="scoring-grid" aria-label="SGEO六维评分细项">
 <article class="scoring-card" data-sgeo-dimension="access" data-weight="20" aria-labelledby="sgeo-access-title">
   <header class="scoring-card-header"><h3 id="sgeo-access-title">可获取：访问、抓取与性能</h3><span class="scoring-weight">20%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <p class="scoring-basis">全局满分分配 20分 · 共用检查唯一归属</p>
   <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-001" data-points="4"><span class="scoring-rule-label">HTTP与HTTPS可用</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">修复失败响应，并将公开页面统一到可访问的 HTTPS 地址。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-002" data-points="5"><span class="scoring-rule-label">目标路径检索爬虫规则</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按目标路径核对 robots.txt，允许期望服务的搜索与 AI 检索爬虫。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-003" data-points="3"><span class="scoring-rule-label">当前抓取无访问挑战</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">为公开正文移除登录、验证码和访问挑战，并复测抓取响应。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-004" data-points="1"><span class="scoring-rule-label">抓取稳定性</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">补充不同时段的重复抓取记录，确认响应与正文持续可用。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-025" data-points="3"><span class="scoring-rule-label">页面加载速度（HTML获取）</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">优化服务端响应、缓存与跳转链，缩短 HTML 获取耗时。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-001" data-points="4"><span class="scoring-rule-label">HTTP状态、HTTPS、主域与重定向规范</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">稳定 200 OK 且无软 404，HTTP 与 www/非www 统一 301 至首选 HTTPS 主域，重定向 ≤1 跳。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-002" data-points="5"><span class="scoring-rule-label">Robots.txt与AI检索爬虫精细化放行</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按路径放行国际+中文站国内检索爬虫，解析 Content-Signal 并提示 Google-Extended 误屏蔽。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-003" data-points="4"><span class="scoring-rule-label">CDN/WAF放行与AI爬虫访问挑战</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">通过 AI 检索爬虫 UA 实测无 403/429、WAF 拦截、验证码或登录挑战。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-025" data-points="3"><span class="scoring-rule-label">页面加载速度（TTFB与HTML获取）</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">优化 TTFB、缓存与跳转链，缩短 HTML 获取耗时（≤800ms 最佳）。</p></li>
 <li class="scoring-rule" data-sgeo-check="SGEO-027" data-points="2"><span class="scoring-rule-label">移动端视口声明</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">声明 width=device-width 的 viewport，并另行验证实际移动端布局。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-028" data-points="1"><span class="scoring-rule-label">HTML 页面体量</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">减少内联脚本、重复标记与无效 HTML，并复测正文响应体积。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-028" data-points="1"><span class="scoring-rule-label">HTML响应体量与正文信噪比</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">精简内联脚本与状态数据，控制 HTML 体积并提升有效正文占比。</p></li>
 <li class="scoring-rule" data-sgeo-check="SGEO-029" data-points="1"><span class="scoring-rule-label">图片资源与加载策略</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">为图片提供可发现的资源地址，避免高优先级图片同时延迟加载。</p></li>
 </ul></article>
 <article class="scoring-card" data-sgeo-dimension="discovery" data-weight="15" aria-labelledby="sgeo-discovery-title">
   <header class="scoring-card-header"><h3 id="sgeo-discovery-title">可发现：页面发现与索引</h3><span class="scoring-weight">15%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <p class="scoring-basis">全局满分分配 15分 · 共用检查唯一归属</p>
   <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-005" data-points="3"><span class="scoring-rule-label">可抓取导航与内链</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">用可抓取的 HTML 链接连接核心页面，并提供清晰的链接文字。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-006" data-points="3"><span class="scoring-rule-label">发现机制有效覆盖</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">将目标页面接入导航链或有效 Sitemap，修复孤立页面。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-007" data-points="3"><span class="scoring-rule-label">规范网址与跳转一致</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">统一 canonical、最终跳转地址与 Sitemap 中的首选网址。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-008" data-points="3"><span class="scoring-rule-label">索引与摘要指令</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">移除公开页面误设的 noindex，并核对摘要限制是否符合检索目标。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-024" data-points="1"><span class="scoring-rule-label">llms.txt可用与导航完整</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">提供含站点简介与内容导航的可读 llms.txt，作为辅助发现入口。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-026" data-points="2"><span class="scoring-rule-label">URL静态化与参数规范</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">提供稳定的内容路径，清理会话参数与哈希路由，统一规范网址。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-005" data-points="2"><span class="scoring-rule-label">可抓取导航与语义化内链</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">用可抓取的标准 HTML 链接连接核心页面，减少伪链接并提供清晰语义锚文本。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-006" data-points="3"><span class="scoring-rule-label">XML Sitemap质量与页面发现覆盖</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">核验 Sitemap 合法性、全 HTTPS、lastmod、robots.txt 声明及页面发现覆盖。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-007" data-points="3"><span class="scoring-rule-label">Canonical规范链接与跳转一致</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">配置自引用 Canonical（含 HTTP Link 头）并与最终跳转地址一致。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-008" data-points="3"><span class="scoring-rule-label">索引与摘要指令（Noindex/Nosnippet）</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">移除公开页面误设的 noindex，核对 Meta Robots 与 X-Robots-Tag 摘要限制。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-024" data-points="2"><span class="scoring-rule-label">llms.txt与Markdown纯文本直出</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">评估 /llms.txt 结构与链接可达性，以及 /llms-full.txt 或 .md 纯文本直出。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-026" data-points="2"><span class="scoring-rule-label">URL静态化与语义规范</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">使用简洁小写、语义化路径，清理会话参数与哈希路由。</p></li>
 </ul></article>
-<article class="scoring-card" data-sgeo-dimension="extraction" data-weight="15" aria-labelledby="sgeo-extraction-title">
-  <header class="scoring-card-header"><h3 id="sgeo-extraction-title">可理解：正文读取与信息提取</h3><span class="scoring-weight">15%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+<article class="scoring-card" data-sgeo-dimension="extraction" data-weight="18" aria-labelledby="sgeo-extraction-title">
+  <header class="scoring-card-header"><h3 id="sgeo-extraction-title">可理解：正文读取与信息提取</h3><span class="scoring-weight">18%</span></header>
+  <p class="scoring-basis">全局满分分配 18分 · 共用检查唯一归属</p>
   <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-009" data-points="7"><span class="scoring-rule-label">核心正文可提取</span><strong class="scoring-rule-value">7分</strong><p class="scoring-rule-note">让核心正文在可获取的 HTML 中完整呈现，减少对交互和脚本的依赖。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-010" data-points="4"><span class="scoring-rule-label">关键信息载体完整</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">补齐表格、列表和代码内容，为信息图片提供可读替代文本。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-011" data-points="4"><span class="scoring-rule-label">原始与渲染正文一致</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">补充浏览器渲染对照，确保关键正文在原始与渲染 HTML 中一致。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-009" data-points="8"><span class="scoring-rule-label">初始HTML核心正文直出与反CSR空壳</span><strong class="scoring-rule-value">8分</strong><p class="scoring-rule-note">在初始 HTML 中完整直出核心正文，识别并阻断 CSR 空壳与 Loading 占位页。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-010" data-points="6"><span class="scoring-rule-label">关键信息载体与标准HTML语义表格</span><strong class="scoring-rule-value">6分</strong><p class="scoring-rule-note">标准 HTML 表格（thead/th）、列表、代码与信息图片替代文本完整。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-011" data-points="4"><span class="scoring-rule-label">原始HTML与渲染后DOM一致性</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">同步对比正文、H1/H2 标题、表格与关键内链在原始与渲染 DOM 中的留存率。</p></li>
 </ul></article>
-<article class="scoring-card" data-sgeo-dimension="answers" data-weight="25" aria-labelledby="sgeo-answers-title">
-  <header class="scoring-card-header"><h3 id="sgeo-answers-title">可引用：内容价值与答案适配</h3><span class="scoring-weight">25%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+<article class="scoring-card" data-sgeo-dimension="semantics" data-weight="12" aria-labelledby="sgeo-semantics-title">
+  <header class="scoring-card-header"><h3 id="sgeo-semantics-title">可识别：元数据与实体语义</h3><span class="scoring-weight">12%</span></header>
+  <p class="scoring-basis">全局满分分配 12分 · 共用检查唯一归属</p>
   <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-012" data-points="6"><span class="scoring-rule-label">页面主题与正文对应</span><strong class="scoring-rule-value">6分</strong><p class="scoring-rule-note">使页面标题、主标题与正文主题对应，并补齐相关说明。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-013" data-points="5"><span class="scoring-rule-label">结论或关键信息易定位</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">在开头或清晰的信息区直接给出结论、产品要点或操作入口。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-014" data-points="5"><span class="scoring-rule-label">段落自包含与组织</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">整理标题层级和段落指代，使关键段落脱离上下文仍可理解。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-015" data-points="5"><span class="scoring-rule-label">页面任务所需信息</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按页面任务补齐操作步骤、产品参数、服务范围或适用条件。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-016" data-points="4"><span class="scoring-rule-label">具体表达与低冗余</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">删去重复和空泛段落，用具体事实、范围与示例表达信息。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-021" data-points="2"><span class="scoring-rule-label">页面TDK与语言元数据</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">补齐准确且跨页唯一的 Title、Description 与合法 HTML lang，不套用固定字符数。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-022" data-points="3"><span class="scoring-rule-label">实体命名、@id与权威关联（sameAs/about/mentions）</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">统一实体名称与稳定 @id，配置 sameAs、about、mentions 等权威实体关联。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-023" data-points="5"><span class="scoring-rule-label">适用Schema.org（JSON-LD）与正文一致性</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">按全页面类型部署标准 Schema.org（Organization/Product/TechArticle/FAQPage）并与正文对齐。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-030" data-points="2"><span class="scoring-rule-label">多语言与区域标记（hreflang）</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">多语言站点校验 hreflang 语法、自引用、x-default 与 HTML lang 一致性（单语站自动不适用）。</p></li>
+</ul></article>
+<article class="scoring-card" data-sgeo-dimension="answers" data-weight="20" aria-labelledby="sgeo-answers-title">
+  <header class="scoring-card-header"><h3 id="sgeo-answers-title">可引用：内容价值与答案适配</h3><span class="scoring-weight">20%</span></header>
+  <p class="scoring-basis">全局满分分配 20分 · 共用检查唯一归属</p>
+  <ul class="scoring-rules">
+<li class="scoring-rule" data-sgeo-check="SGEO-012" data-points="5"><span class="scoring-rule-label">Title/H1意图聚焦与正文对应</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">保持单 H1 规范，使页面标题、主标题与正文主题聚焦对应。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-013" data-points="5"><span class="scoring-rule-label">首段结论前置与问答摘要结构</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">在首段或清晰信息区直给结论、TL;DR 摘要或问答式标题块。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-014" data-points="4"><span class="scoring-rule-label">标题层级规范与段落自包含性</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">保持 H1–H6 层级清晰与段落自包含，不刻意切碎长文。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-015" data-points="4"><span class="scoring-rule-label">页面任务核心信息完备度</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">按产品、对比选型、文档、服务等页面类型补齐任务核心信息。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-016" data-points="2"><span class="scoring-rule-label">具象量化表达与低冗余</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">减少重复与空泛套话，用量化数据、规格范围与案例表达信息。</p></li>
 </ul></article>
 <article class="scoring-card" data-sgeo-dimension="trust" data-weight="15" aria-labelledby="sgeo-trust-title">
   <header class="scoring-card-header"><h3 id="sgeo-trust-title">可信赖：主体、依据与时效</h3><span class="scoring-weight">15%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
+  <p class="scoring-basis">全局满分分配 15分 · 共用检查唯一归属</p>
   <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-017" data-points="4"><span class="scoring-rule-label">发布主体或责任团队</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">标明作者、发布主体或责任团队，并提供可访问的主体信息。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-018" data-points="6"><span class="scoring-rule-label">关键主张依据可追溯</span><strong class="scoring-rule-value">6分</strong><p class="scoring-rule-note">为关键主张补充来源、原始资料或可核验的方法说明。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-019" data-points="3"><span class="scoring-rule-label">日期与适用版本</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">展示适用的发布日期、更新日期或版本，并与正文保持一致。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-020" data-points="2"><span class="scoring-rule-label">跨页面关键事实一致</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">补充跨页面核验，统一价格、产品规格、主体与其他关键事实。</p></li>
-</ul></article>
-<article class="scoring-card" data-sgeo-dimension="semantics" data-weight="10" aria-labelledby="sgeo-semantics-title">
-  <header class="scoring-card-header"><h3 id="sgeo-semantics-title">可识别：元数据与实体语义</h3><span class="scoring-weight">10%</span></header>
-  <p class="scoring-basis">共用检查唯一归属；按逐页适用证据计算</p>
-  <ul class="scoring-rules">
-<li class="scoring-rule" data-sgeo-check="SGEO-021" data-points="3"><span class="scoring-rule-label">标题、描述与语言元数据</span><strong class="scoring-rule-value">3分</strong><p class="scoring-rule-note">补齐准确且可区分的标题、描述与语言声明，不套用固定字符数。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-022" data-points="2"><span class="scoring-rule-label">实体命名及标识一致</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">统一页面、可见正文与结构化数据中的实体名称和标识。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-023" data-points="4"><span class="scoring-rule-label">适用Schema及正文一致性</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">使用适合页面任务的 Schema，修复语法并与可见正文保持一致。</p></li>
-<li class="scoring-rule" data-sgeo-check="SGEO-030" data-points="1"><span class="scoring-rule-label">多语言版本声明</span><strong class="scoring-rule-value">1分</strong><p class="scoring-rule-note">补齐有效的 hreflang 与版本链接，另行验证语言版本互返关系。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-017" data-points="4"><span class="scoring-rule-label">官方发布主体、作者与责任团队</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">在可见区与结构化数据中标明官方发布主体、作者或责任团队。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-018" data-points="5"><span class="scoring-rule-label">关键主张与数据出处可追溯</span><strong class="scoring-rule-value">5分</strong><p class="scoring-rule-note">排除购买/登录等非来源链接，识别行内出处、标准编号与参考来源区。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-019" data-points="4"><span class="scoring-rule-label">机器可读时效性与版本价格明确度</span><strong class="scoring-rule-value">4分</strong><p class="scoring-rule-note">检查中英文可见日期与机器可读日期、适用版本及产品明确报价。</p></li>
+<li class="scoring-rule" data-sgeo-check="SGEO-020" data-points="2"><span class="scoring-rule-label">跨页面关键实体与事实一致性</span><strong class="scoring-rule-value">2分</strong><p class="scoring-rule-note">跨采样页自动初筛组织名、@id 与产品报价冲突（单页或无结构化实体时为不适用）。</p></li>
 </ul></article>
 </div>
-        <h3 class="subheading">统一计分与结果读取</h3>
+        <h3 class="subheading">统一计分与 v2 同步升级</h3>
         <ul><li>按页面类型等权、同类型页面等权汇总；失败页面保留在样本中。每项检查按实际适用页面计算，不适用项在维度内归一。</li>
-<li>待核验不视为通过。暂定分只基于已测证据，并同时返回证据覆盖率与分数上下界；关键阻断优先于分数显示。</li>
-<li>标题、描述与语言统一检查；不设固定标题字符数、统一字数或 FAQ 门槛。Schema 只核对适用性、有效性与正文一致，不累加类型数量。</li>
-<li>移动视口是声明检查，HTML 体量使用250KB/1MB启发式预算；HTML 获取耗时沿用800/1500/3000/5000ms分档。它们不是实际移动布局或 Core Web Vitals 测量。</li>
-<li>图片检查资源可发现性与显式高优先级/延迟加载冲突；不要求所有图片懒加载。多语言仅检查已声明版本的链接，未声明且无截断时记为不适用，互返关系需另行核验。</li>
-<li>llms.txt为辅助发现入口，仅占1分，不宣称任何平台必须采用。分析代码、社交卡片、安全头、训练授权、站外权威和平台曝光均不进入 SGEO 总分。</li>
-<li>抓取稳定性、未完成的渲染对照和缺少审核依据的跨页事实保持待核验。结构代理检查不能证明事实正确或搜索意图完全满足。</li></ul>
+<li>维度顺序同步调整为「访问与性能 → 发现与索引 → 正文提取 → 元数据与实体语义 → 内容与答案 → 主体与时效」，与 GEO 评分保持一致。</li>
+<li>原 <code>SGEO-004</code>（多时段抓取稳定性）移入持续观测层，<code>SGEO-020</code> 接入采样结构化实体自动初筛，使启用渲染核验的优质站点可真实达到 <code>ready</code>。</li>
+<li><code>SGEO-028</code> 融合 HTML 体积（250KB/500KB/1MB）与正文信噪比；<code>SGEO-030</code> 补齐多语言路径缺失检测、自引用、<code>x-default</code> 与 <code>html lang</code> 一致性（单语站自动 <code>na</code>，互返关系仍需另行验证）。</li>
+<li><code>SGEO-024</code> 升级为 2 分（含 <code>llms.txt</code>、<code>llms-full.txt</code> 与 Markdown 直出）；<code>SGEO-022/023</code> 提级至 3 分/5 分。分析代码、社交卡片、一般安全头、纯训练授权、站外权威和平台推测均不进入 SGEO 总分。</li>
+<li>未完成的渲染对照保留待核验；结构代理检查不能代替 Core Web Vitals、实际移动布局和人工深度事实核查。</li></ul>
         <dl class="scoring-fields"><dt>任务类型</dt><dd><code>site_geo_audit</code>（沿用原标识）</dd><dt>统一分数</dt><dd><code>result.sgeo.score</code> / <code>summary.sgeo_score</code></dd><dt>兼容别名</dt><dd><code>summary.overall_score</code> / <code>summary.combined_score</code> 均指 SGEO 分</dd><dt>诊断详情</dt><dd><code>result.sgeo.dimensions</code> / <code>pages</code> / <code>blockers</code> / <code>coverage</code></dd></dl>
-        <p class="doc-note">SGEO 是站内搜索就绪度，实际收录、排名与 AI 引用需独立观测。比较前后变化时，应保持评分版本、页面集合与采样设置一致。历史双分报告可按保存证据重新归并；未保存的新检查保持待核验，不改写历史存储分数。</p>
+        <p class="doc-note">SGEO 是站内搜索与生成式引擎就绪度，实际收录、排名与 AI 引用需独立观测。比较前后变化时，应保持评分版本、页面集合与采样设置一致。缓存按 <code>onsite-sgeo-v2</code> 自动与历史 v1 隔离。</p>
         <p class="doc-note">设计依据：<a href="https://developers.google.com/search/docs/appearance/ai-features" target="_blank" rel="noreferrer">Google 对 AI 搜索功能的基础优化说明</a>；分值和权重为本产品的诊断规则。</p>
       </section>
 
@@ -490,7 +488,7 @@
 <li>外链质量属于SEO/外部权威支持数据：现有SEO通过品牌权威支持分间接使用外链；OG/Twitter卡片在SEO技术支持分中使用，不是新版GEO一级维度，也不进入GEO总分。安全响应头保留技术检查，实际阻断访问的问题计入GEO可达性。</li>
 <li>Content-Signal / LLM-Policy 解析后展示在证据与辅助面板中（仅在显式误设 <code>search=no</code> 或 <code>ai-input=no</code> 时告警/扣分）；训练授权、外链、社交卡片、一般安全头、平台推测分均不进入GEO总分。Schema按页面类型检查适用性、实体关联与可见内容一致，不累计非标准类型。</li>
 <li>实际收录、真实AI引用、品牌提及、流量与转化作为Observation独立展示；不因缺少这些站外观测扣站内GEO分。</li>
-<li>SEO保留seo-audit-v1权重和评分含义；GEO升级至onsite-geo-v3；SGEO使用onsite-sgeo-v1。不同版本不应直接横比。</li>
+<li>SEO保留seo-audit-v1权重和评分含义；GEO升级至onsite-geo-v3；SGEO同步升级至onsite-sgeo-v2。不同版本不应直接横比。</li>
 <li>结果缓存按任务类型、评分版本、页面数量、语言、审计模式及GEO渲染开关隔离；force_refresh=true绕过结果和站点快照缓存。渲染需ALLOW_PLAYWRIGHT=true及Chromium；启用后会增加浏览器测量耗时。</li>
 <li>premium在SEO/内容审计中沿用AI增强；GEO与SGEO分值始终规则驱动，llm_enhanced=false，不以模型推断填补未知事实。</li>
 <li>历史/audit/full及五模块仍输出geo-audit-v3，兼容旧接入；旧版引用概率与AI认知百分比属于规则推算，不是观测数据，新任务不输出。</li></ul>

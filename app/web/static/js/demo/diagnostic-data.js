@@ -23,17 +23,17 @@ const SGEO_DIMENSIONS = {
   access: ['可获取：访问、抓取与性能', 'Retrievable: Access, crawling and performance'],
   discovery: ['可发现：页面发现与索引', 'Discoverable: Discovery and indexing'],
   extraction: ['可理解：正文读取与信息提取', 'Understandable: Content extraction'],
+  semantics: ['可识别：元数据与实体语义', 'Recognizable: Metadata and entity semantics'],
   answers: ['可引用：内容价值与答案适配', 'Citable: Content and answer readiness'],
-  trust: ['可信赖：主体、依据与时效', 'Trustworthy: Identity, evidence and freshness'],
-  semantics: ['可识别：元数据与实体语义', 'Recognizable: Metadata and entity semantics']
+  trust: ['可信赖：主体、依据与时效', 'Trustworthy: Identity, evidence and freshness']
 };
 const SGEO_SUMMARIES = {
-  access: ['HTTP、检索权限、响应速度，以及移动端与图片加载基础。', 'HTTP access, retrieval permissions, response speed, viewport and image loading.'],
-  discovery: ['导航、Sitemap、规范网址、索引指令与辅助发现入口。', 'Navigation, sitemaps, canonical URLs, indexing directives and discovery aids.'],
-  extraction: ['核心正文、信息载体完整性，以及原始与渲染内容的一致性。', 'Main content, complete information containers and raw/rendered consistency.'],
-  answers: ['主题对应、答案定位、段落组织与页面任务所需信息。', 'Topic alignment, prominent answers, content organization and page-task details.'],
-  trust: ['责任主体、主张依据、适用日期与跨页面事实一致性。', 'Publisher identity, claim support, applicable dates and cross-page consistency.'],
-  semantics: ['标题、描述、语言声明，以及实体命名和结构化数据的一致性。', 'Titles, descriptions, language declarations, entity names and structured-data alignment.']
+  access: ['HTTP/主域/重定向、AI 检索权限与 WAF 探针、响应速度、移动端视口与图片加载基础。', 'HTTP/host/redirects, AI retrieval & WAF probes, speed, viewport, payload ratio and image loading.'],
+  discovery: ['语义导航、XML Sitemap 质量、Canonical、索引指令、llms.txt/Markdown 与 URL 规范。', 'Semantic navigation, XML Sitemap quality, canonicals, indexing, llms.txt/Markdown and URL hygiene.'],
+  extraction: ['初始 HTML 直出与反 CSR 空壳、语义表格载体完整性，以及原始与渲染 DOM 一致性。', 'Initial HTML anti-CSR extraction, semantic tables and raw/rendered DOM consistency.'],
+  semantics: ['TDK 与语言声明、实体命名与 sameAs 关联、全类型 Schema.org 及多语言 hreflang。', 'TDK & lang, entity names & sameAs links, page-appropriate Schema.org and multilingual hreflang.'],
+  answers: ['单 H1 与主题对应、首段结论/问答摘要、标题层级与自包含段落、任务信息与量化表达。', 'Single H1 & topic focus, prominent answers/Q&A, clean hierarchy, task details and concrete metrics.'],
+  trust: ['责任主体、可追溯出处、机器可读日期/版本/报价与跨页结构化事实一致性。', 'Publisher identity, traceable sources, machine-readable dates/versions/pricing and cross-page consistency.']
 };
 const GEO_DIAGNOSTICS = [
   ['HTTP / HTTPS / 主域 / 重定向', 'HTTP / HTTPS / Host / Redirects'],
@@ -70,8 +70,9 @@ export const sgeoDimensionName = (key, fallback, lang) => SGEO_DIMENSIONS[key] ?
 const sgeoDiagnosticName = (id, fallback, lang) => {
   const extra = {
     'SGEO-021': 'Title / Description / HTML lang', 'SGEO-027': 'Meta viewport / device-width',
-    'SGEO-028': tx(lang, 'HTML 响应体积', 'HTML response size'),
-    'SGEO-029': 'Image src / srcset / loading / fetchpriority', 'SGEO-030': 'Hreflang / Alternate URLs'
+    'SGEO-028': tx(lang, 'HTML 体量 / 正文信噪比', 'HTML payload / Content-to-noise ratio'),
+    'SGEO-029': 'Image src / srcset / loading / fetchpriority',
+    'SGEO-030': tx(lang, 'Hreflang / 多语言区域标记', 'Hreflang / Multilingual annotations')
   };
   return extra[id] || geoDiagnosticName(id.replace('SGEO-', 'GEO-'), fallback, lang);
 };

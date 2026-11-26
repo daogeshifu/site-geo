@@ -3,7 +3,7 @@ from pydantic import Field
 
 from app.models.geo import GeoAuditResult, GeoPageResult
 
-SGEO_SCORING_VERSION = "onsite-sgeo-v1"
+SGEO_SCORING_VERSION = "onsite-sgeo-v2"
 
 
 class SgeoPageResult(GeoPageResult):
