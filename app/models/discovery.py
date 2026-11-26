@@ -99,6 +99,8 @@ class RobotsResult(BaseModel):
     has_sitemap_directive: bool = False  # 是否包含 Sitemap 指令
     sitemaps: list[str] = Field(default_factory=list)
     user_agents: dict[str, RobotsUserAgentRule] = Field(default_factory=dict)  # 各 AI 爬虫访问状态
+    content_signals: dict[str, str] = Field(default_factory=dict)  # Content-Signal 授权声明（ai-train/search/ai-input）
+    llm_policy_urls: list[str] = Field(default_factory=list)       # LLM-Policy 政策声明链接
     raw_preview: str = ""              # robots.txt 原始内容前 300 字符
     raw_text: str | None = None        # 完整策略证据；None 表示旧快照未留存，不能用于路径判定
 
@@ -111,6 +113,12 @@ class SitemapResult(BaseModel):
     status_code: int | None = None
     discovered_urls: list[str] = Field(default_factory=list)
     total_urls_sampled: int = 0   # 实际采样的 URL 数量
+    invalid_xml: bool = False
+    has_sitemap_index: bool = False
+    non_https_urls: list[str] = Field(default_factory=list)
+    dirty_urls: list[str] = Field(default_factory=list)
+    lastmod_count: int = 0
+    lastmod_ratio: float = 0.0
 
 
 class LlmsResult(BaseModel):
@@ -126,6 +134,11 @@ class LlmsResult(BaseModel):
     final_url: str | None = None
     content_type: str | None = None
     structure_checks: dict[str, bool] = Field(default_factory=dict)
+    full_url: str | None = None
+    full_exists: bool = False
+    full_status_code: int | None = None
+    markdown_links: list[str] = Field(default_factory=list)
+    sampled_link_checks: list[dict[str, Any]] = Field(default_factory=list)
     error: str | None = None
 
 

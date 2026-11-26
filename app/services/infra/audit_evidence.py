@@ -23,7 +23,10 @@ class PageEvidence:
     html: str | None = None
     status_code: int | None = None
     response_time_ms: int | None = None
+    ttfb_ms: int | None = None
     response_headers: dict = field(default_factory=dict)
+    redirect_chain: list[dict] = field(default_factory=list)
+    redirect_count: int | None = None
     source_key: str | None = None
     source_truncated: bool = False
     fetched_at: str | None = None
@@ -31,10 +34,12 @@ class PageEvidence:
     reused: bool = False
     rendered_html: str | None = None
     render_note: str | None = None
+    crawler_probes: dict[str, dict] = field(default_factory=dict)
 
     def metadata(self) -> dict:
         return {name: getattr(self, name) for name in (
-            "status_code", "response_time_ms", "response_headers", "source_key",
+            "status_code", "response_time_ms", "ttfb_ms", "response_headers",
+            "redirect_chain", "redirect_count", "source_key",
             "source_truncated", "fetched_at",
         )}
 

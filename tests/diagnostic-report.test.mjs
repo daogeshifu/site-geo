@@ -258,3 +258,39 @@ test('report navigation opens its section without triggering workspace history r
   assert.equal(scrolls, 1);
 });
 
+test('onsite-geo-v3 27-check reports render GEO-027/028 diagnostics and expanded global/domestic platforms', () => {
+  const geo = {
+    scoring_version: 'onsite-geo-v3',
+    score: 88.5,
+    status: 'good',
+    readiness_status: 'ready',
+    provisional: false,
+    dimensions: {
+      access: { key: 'access', weight: 0.2, score: 90, checks: [
+        { id: 'GEO-001', dimension: 'access', label: 'HTTP', status: 'pass', max_points: 5 },
+        { id: 'GEO-002', dimension: 'access', label: 'Robots', status: 'pass', max_points: 6 }
+      ] },
+      extraction: { key: 'extraction', weight: 0.18, score: 85, checks: [
+        { id: 'GEO-027', dimension: 'extraction', label: 'HTML信噪比', status: 'partial', max_points: 2 }
+      ] },
+      semantics: { key: 'semantics', weight: 0.12, score: 95, checks: [
+        { id: 'GEO-028', dimension: 'semantics', label: 'Hreflang', status: 'pass', max_points: 2 }
+      ] }
+    },
+    pages: [{
+      url: 'https://example.cn/',
+      dimensions: {
+        access: { key: 'access', checks: [{ id: 'GEO-002', status: 'pass', evidence: {
+          policies: { 'OAI-SearchBot': true, 'PerplexityBot': true, 'Claude-SearchBot': true, Googlebot: true, bingbot: true, Bytespider: false, Baiduspider: true, 'Kimi-SearchBot': true }
+        } }] }
+      }
+    }]
+  };
+  const html = render({ geo }, 'zh');
+  assert.match(html, /HTML 体量 \/ 正文信噪比/);
+  assert.match(html, /Hreflang \/ 多语言区域标记/);
+  assert.match(html, /<h4>Claude<\/h4>/);
+  assert.match(html, /豆包 \/ 头条搜索/);
+  assert.match(html, /<h4>Kimi<\/h4>/);
+});
+

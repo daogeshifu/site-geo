@@ -15,13 +15,86 @@ AI_CRAWLERS = [
     "GPTBot",          # OpenAI 训练爬虫
     "OAI-SearchBot",   # OpenAI 搜索爬虫
     "ChatGPT-User",    # ChatGPT 实时搜索
-    "ClaudeBot",       # Anthropic Claude 爬虫
-    "PerplexityBot",   # Perplexity AI 爬虫
-    "Google-Extended", # Google Gemini/AI Overviews 爬虫
+    "ClaudeBot",       # Anthropic Claude 训练爬虫
+    "Claude-SearchBot",  # Anthropic Claude 搜索爬虫
+    "Claude-User",     # Anthropic Claude 实时读取
+    "PerplexityBot",   # Perplexity AI 搜索爬虫
+    "Perplexity-User", # Perplexity 实时读取
+    "Google-Extended", # Google Gemini/AI Overviews 内容使用控制
+    "Baiduspider",     # 百度搜索爬虫
+    "Bytespider",      # 头条/豆包检索关联爬虫
+    "Kimi-SearchBot",  # Kimi 搜索索引爬虫
 ]
 
 # Search/retrieval policies are evaluated separately from training permission.
-SEARCH_CRAWLERS = ["Googlebot", "bingbot", "OAI-SearchBot", "PerplexityBot"]
+GLOBAL_SEARCH_CRAWLERS = [
+    "Googlebot",
+    "bingbot",
+    "OAI-SearchBot",
+    "ChatGPT-User",
+    "PerplexityBot",
+    "Perplexity-User",
+    "Claude-SearchBot",
+    "Claude-User",
+]
+DOMESTIC_SEARCH_CRAWLERS = [
+    "Baiduspider",
+    "Bytespider",
+    "Kimi-SearchBot",
+]
+TRAINING_CRAWLERS = [
+    "GPTBot",
+    "ClaudeBot",
+    "CCBot",
+    "DeepseekBot",
+]
+SEARCH_CRAWLERS = list(GLOBAL_SEARCH_CRAWLERS)
+
+
+def search_crawlers_for_site(url: str, locale: str | None = None) -> list[str]:
+    """Return retrieval crawlers applicable to the target site's locale/region."""
+    crawlers = list(GLOBAL_SEARCH_CRAWLERS)
+    host = (urlparse(url).netloc or "").lower()
+    lang = (locale or "").strip().lower()
+    if lang.startswith("zh") or host.endswith(".cn"):
+        crawlers.extend(DOMESTIC_SEARCH_CRAWLERS)
+    return crawlers
+
+
+def parse_content_signals(raw_value: str) -> dict[str, str]:
+    """Parse Content-Signal directives such as 'ai-train=no, search=yes, ai-input=yes'."""
+    signals: dict[str, str] = {}
+    if not raw_value:
+        return signals
+    for part in re.split(r"[,;]", raw_value):
+        token = part.strip()
+        if "=" not in token:
+            continue
+        key, val = token.split("=", 1)
+        key = key.strip().lower()
+        val = val.strip().lower()
+        if key in {"ai-train", "search", "ai-input", "train", "input"} and val:
+            signals[key] = val
+    return signals
+
+
+def parse_robots_extras(text: str) -> tuple[dict[str, str], list[str]]:
+    """Extract Content-Signal and LLM-Policy declarations from robots.txt."""
+    content_signals: dict[str, str] = {}
+    llm_policy_urls: list[str] = []
+    for raw_line in (text or "").splitlines():
+        cleaned = raw_line.strip().lstrip("#").strip()
+        if ":" not in cleaned:
+            continue
+        key, value = cleaned.split(":", 1)
+        directive = key.strip().lower()
+        content = value.strip()
+        if directive in {"content-signal", "content-signals"}:
+            content_signals.update(parse_content_signals(content))
+        elif directive in {"llm-policy", "ai-policy"} and content:
+            if content not in llm_policy_urls:
+                llm_policy_urls.append(content)
+    return content_signals, llm_policy_urls
 
 
 def _normalize_robot_path(value: str) -> str:
@@ -135,14 +208,36 @@ def robot_path_rule(parsed: RobotsRules, agent: str, url: str) -> RobotsUserAgen
     return _resolve_agent_rule(agent, parsed, path)
 
 
-def inspect_robot_path(robots: RobotsResult, url: str) -> dict[str, bool | None]:
+def inspect_robot_path(
+    robots: RobotsResult,
+    url: str,
+    *,
+    crawlers: list[str] | None = None,
+    locale: str | None = None,
+) -> dict[str, bool | None]:
     """Return unknown for incomplete evidence; never infer deep paths from '/'."""
+    selected = list(crawlers) if crawlers is not None else search_crawlers_for_site(url, locale=locale)
     if robots.status_code is not None and 400 <= robots.status_code < 500 and robots.status_code != 429:
-        return {agent: True for agent in SEARCH_CRAWLERS}
+        return {agent: True for agent in selected}
     if robots.raw_text is None or (robots.status_code is not None and robots.status_code >= 400):
-        return {agent: None for agent in SEARCH_CRAWLERS}
+        return {agent: None for agent in selected}
     parsed, _ = parse_robots_text(robots.raw_text)
-    return {agent: robot_path_rule(parsed, agent, url).allowed for agent in SEARCH_CRAWLERS}
+    return {agent: robot_path_rule(parsed, agent, url).allowed for agent in selected}
+
+
+def inspect_google_extended(robots: RobotsResult, url: str) -> bool | None:
+    """Inspect Google-Extended (controls Gemini app citation eligibility)."""
+    if robots.status_code is not None and 400 <= robots.status_code < 500 and robots.status_code != 429:
+        return True
+    if robots.raw_text is None or (robots.status_code is not None and robots.status_code >= 400):
+        return None
+    parsed, _ = parse_robots_text(robots.raw_text)
+    return robot_path_rule(parsed, "Google-Extended", url).allowed
+
+
+def inspect_training_crawlers(robots: RobotsResult, url: str) -> dict[str, bool | None]:
+    """Inspect training-only crawlers for transparent, unscored reporting."""
+    return inspect_robot_path(robots, url, crawlers=TRAINING_CRAWLERS)
 
 
 async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None) -> RobotsResult:
@@ -165,6 +260,7 @@ async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None)
         return RobotsResult(url=robots_url, exists=False, status_code=response.status_code)
 
     parsed_rules, sitemaps = parse_robots_text(response.text)
+    content_signals, llm_policy_urls = parse_robots_extras(response.text)
     # 解析所有 AI 爬虫的访问状态
     agents = {name: _resolve_agent_rule(name, parsed_rules) for name in AI_CRAWLERS}
     # 检查通配符规则是否允许全站访问
@@ -177,6 +273,8 @@ async def inspect_robots(base_url: str, client: httpx.AsyncClient | None = None)
         has_sitemap_directive=bool(sitemaps),
         sitemaps=sitemaps,
         user_agents=agents,
+        content_signals=content_signals,
+        llm_policy_urls=llm_policy_urls,
         raw_preview=response.text[:300],  # 前 300 字符用于调试
         raw_text=response.text if len(response.text.encode("utf-8")) <= 512_000 else None,
     )

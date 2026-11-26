@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import deque
+import re
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -10,39 +12,57 @@ from app.models.discovery import SitemapResult
 from app.utils.fetcher import fetch_url
 from app.utils.url_utils import get_site_root
 
+DIRTY_SITEMAP_URL_RE = re.compile(r"(?:[?&](?:utm_|sessionid|phpsessid|jsessionid|sid|replytocom)=|;jsessionid=|#)", re.I)
+
 
 def _strip_ns(tag: str) -> str:
     """去除 XML 命名空间前缀（如 {http://www.sitemaps.org/schemas/sitemap/0.9}urlset → urlset）"""
     return tag.split("}", 1)[-1]
 
 
-def _parse_sitemap_xml(xml_text: str) -> tuple[list[str], list[str]]:
-    """解析 Sitemap XML，返回 (URL 列表, 子 Sitemap 列表)
-
-    支持两种格式：
-    - urlset：标准 Sitemap，从 <loc> 提取 URL
-    - sitemapindex：Sitemap 索引，从 <loc> 提取子 Sitemap URL
-    """
+def _parse_sitemap_details(xml_text: str) -> tuple[list[str], list[str], int, bool]:
+    """解析 Sitemap XML，返回 (URL 列表, 子 Sitemap 列表, 有效 lastmod 数量, 是否 XML 解析失败)"""
     try:
         root = ElementTree.fromstring(xml_text.encode("utf-8"))
     except ElementTree.ParseError:
-        return [], []
+        return [], [], 0, True
 
     tag = _strip_ns(root.tag)
     urls: list[str] = []
     sitemap_indexes: list[str] = []
+    lastmod_count = 0
 
     if tag == "urlset":
-        # 标准 Sitemap：收集所有 <loc> 中的 URL
-        for node in root.findall(".//{*}loc"):
-            if node.text:
-                urls.append(node.text.strip())
+        for entry in root.findall(".//{*}url"):
+            loc = entry.find("{*}loc")
+            if loc is not None and loc.text and loc.text.strip():
+                urls.append(loc.text.strip())
+                lastmod = entry.find("{*}lastmod")
+                if lastmod is not None and lastmod.text and lastmod.text.strip():
+                    lastmod_count += 1
+        if not urls:
+            for node in root.findall(".//{*}loc"):
+                if node.text and node.text.strip():
+                    urls.append(node.text.strip())
     elif tag == "sitemapindex":
-        # Sitemap 索引：收集子 Sitemap 的 URL（待后续递归处理）
-        for node in root.findall(".//{*}loc"):
-            if node.text:
-                sitemap_indexes.append(node.text.strip())
+        for entry in root.findall(".//{*}sitemap"):
+            loc = entry.find("{*}loc")
+            if loc is not None and loc.text and loc.text.strip():
+                sitemap_indexes.append(loc.text.strip())
+                lastmod = entry.find("{*}lastmod")
+                if lastmod is not None and lastmod.text and lastmod.text.strip():
+                    lastmod_count += 1
+        if not sitemap_indexes:
+            for node in root.findall(".//{*}loc"):
+                if node.text and node.text.strip():
+                    sitemap_indexes.append(node.text.strip())
 
+    return urls, sitemap_indexes, lastmod_count, False
+
+
+def _parse_sitemap_xml(xml_text: str) -> tuple[list[str], list[str]]:
+    """解析 Sitemap XML，返回 (URL 列表, 子 Sitemap 列表)"""
+    urls, sitemap_indexes, _, _ = _parse_sitemap_details(xml_text)
     return urls, sitemap_indexes
 
 
@@ -51,29 +71,22 @@ async def inspect_sitemap(
     client: httpx.AsyncClient | None = None,
     candidate_urls: list[str] | None = None,
 ) -> SitemapResult:
-    """发现并解析站点的 Sitemap，收集 URL 样本
-
-    优先级：robots.txt 中声明的 Sitemap > /sitemap.xml > /sitemap_index.xml
-    支持 Sitemap 索引（多层 Sitemap），通过 BFS 递归发现子 Sitemap
-    采样限制：settings.max_sitemap_urls（默认 50 个 URL）
-
-    Args:
-        base_url: 站点根 URL
-        client: 可选的共享 HTTP 客户端
-        candidate_urls: 候选 Sitemap URL（来自 robots.txt 的 Sitemap 指令）
-    """
+    """发现并解析站点的 Sitemap，收集 URL 样本与质量指标"""
     default_candidates = [
         f"{get_site_root(base_url)}/sitemap.xml",
         f"{get_site_root(base_url)}/sitemap_index.xml",
     ]
-    # 优先尝试候选 URL，再尝试默认路径
     merged_candidates = (candidate_urls or []) + default_candidates
-    pending = deque(dict.fromkeys(merged_candidates))  # 去重并保持顺序
+    pending = deque(dict.fromkeys(merged_candidates))
     visited: set[str] = set()
     discovered_urls: list[str] = []
-    primary_url: str | None = None   # 第一个成功响应的 Sitemap URL
+    primary_url: str | None = None
     status_code: int | None = None
-    sitemap_index_count = 0  # 已处理的 Sitemap 索引数量（防止无限递归）
+    sitemap_index_count = 0
+    invalid_xml = False
+    has_sitemap_index = False
+    lastmod_count = 0
+    total_url_entries = 0
 
     while pending and len(discovered_urls) < settings.max_sitemap_urls:
         current_url = pending.popleft()
@@ -83,7 +96,7 @@ async def inspect_sitemap(
         try:
             response = await fetch_url(current_url, client=client)
         except Exception:
-            continue  # 忽略单个 Sitemap 抓取失败
+            continue
 
         if response.status_code >= 400:
             status_code = response.status_code
@@ -91,27 +104,43 @@ async def inspect_sitemap(
 
         primary_url = primary_url or current_url
         status_code = response.status_code
-        urls, nested_sitemaps = _parse_sitemap_xml(response.text)
+        urls, nested_sitemaps, entry_lastmod, parse_failed = _parse_sitemap_details(response.text)
+        if parse_failed:
+            invalid_xml = True
+            continue
 
-        # 收集 URL，避免重复，到达上限时停止
         if urls:
+            total_url_entries += len(urls)
+            lastmod_count += entry_lastmod
             for item in urls:
                 if item not in discovered_urls:
                     discovered_urls.append(item)
                 if len(discovered_urls) >= settings.max_sitemap_urls:
                     break
 
-        # 处理 Sitemap 索引：限制最大深度
-        if nested_sitemaps and sitemap_index_count < settings.max_sitemap_indexes:
-            sitemap_index_count += 1
-            for item in nested_sitemaps:
-                if item not in visited:
-                    pending.append(item)
+        if nested_sitemaps:
+            has_sitemap_index = True
+            if sitemap_index_count < settings.max_sitemap_indexes:
+                sitemap_index_count += 1
+                for item in nested_sitemaps:
+                    if item not in visited:
+                        pending.append(item)
+
+    sampled = discovered_urls[: settings.max_sitemap_urls]
+    non_https_urls = [u for u in sampled if urlparse(u).scheme.lower() == "http"][:20]
+    dirty_urls = [u for u in sampled if DIRTY_SITEMAP_URL_RE.search(u)][:20]
+    lastmod_ratio = round(min(1.0, lastmod_count / total_url_entries), 4) if total_url_entries else 0.0
 
     return SitemapResult(
         url=primary_url,
-        exists=primary_url is not None,
+        exists=primary_url is not None and not (invalid_xml and not sampled and not has_sitemap_index),
         status_code=status_code,
-        discovered_urls=discovered_urls[: settings.max_sitemap_urls],
-        total_urls_sampled=len(discovered_urls[: settings.max_sitemap_urls]),
+        discovered_urls=sampled,
+        total_urls_sampled=len(sampled),
+        invalid_xml=invalid_xml and not sampled and not has_sitemap_index,
+        has_sitemap_index=has_sitemap_index,
+        non_https_urls=non_https_urls,
+        dirty_urls=dirty_urls,
+        lastmod_count=lastmod_count,
+        lastmod_ratio=lastmod_ratio,
     )

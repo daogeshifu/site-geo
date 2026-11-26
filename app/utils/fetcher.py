@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -19,6 +20,8 @@ class FetchedResponse:
     headers: dict[str, str]
     text: str              # 响应正文文本
     response_time_ms: int  # 请求总耗时（毫秒）
+    redirect_chain: list[dict[str, Any]] = field(default_factory=list)
+    ttfb_ms: int | None = None
 
 
 @retry(
@@ -155,10 +158,18 @@ async def fetch_url(
         raise AppError(502, f"Failed to fetch URL: {url}", str(exc)) from exc
 
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    history = getattr(response, "history", None) or []
+    redirect_chain = [
+        {"status_code": item.status_code, "from": str(item.url), "to": str(item.headers.get("location", ""))}
+        for item in history
+    ]
+    ttfb_ms = int(response.elapsed.total_seconds() * 1000) if getattr(response, "elapsed", None) is not None else None
     return FetchedResponse(
         final_url=response.url,
         status_code=response.status_code,
         headers=dict(response.headers),
         text=response.text,
         response_time_ms=elapsed_ms,
+        redirect_chain=redirect_chain,
+        ttfb_ms=ttfb_ms,
     )

@@ -177,8 +177,12 @@ function renderPlatforms(data, lang) {
   const policies = platformPolicies(data.geo);
   const platforms = [
     ['ChatGPT', 'OAI-SearchBot'], ['Perplexity', 'PerplexityBot'],
+    ['Claude', 'Claude-SearchBot'],
     ['Google AI Overviews', 'Googlebot'], ['Google AI Mode', 'Googlebot'],
-    ['Gemini', null], ['Bing Copilot', 'bingbot']
+    ['Gemini', null], ['Bing Copilot', 'bingbot'],
+    ...(policies.some(p => p.crawler === 'Bytespider') ? [[tx(lang, '豆包 / 头条搜索', 'Doubao / Toutiao'), 'Bytespider']] : []),
+    ...(policies.some(p => p.crawler === 'Baiduspider') ? [[tx(lang, '百度 / 文心搜索', 'Baidu'), 'Baiduspider']] : []),
+    ...(policies.some(p => p.crawler === 'Kimi-SearchBot') ? [['Kimi', 'Kimi-SearchBot']] : [])
   ];
   return `<section class="report-section" id="diagnosis-platforms">${heading(tx(lang, '平台检索与抓取', 'Platform retrieval and crawling'), tx(lang, '展示采样 URL 的 robots 规则，不计入独立平台分，也不代表实际曝光。', 'Robots policies for sampled URLs, without a platform score or a claim of actual visibility.'))}
     <div class="dr-platform-grid">${platforms.map(([name, crawler]) => {

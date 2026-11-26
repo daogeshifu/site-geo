@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from app.models.discovery import DiscoveryResult
 from app.models.geo import GeoAuditResult, GeoCheckResult, GeoDimensionResult
 from app.models.sgeo import SGEO_SCORING_VERSION, SgeoAuditResult, SgeoPageResult
-from app.services.audit.geo import GeoAuditService, RULES as GEO_RULES
+from app.services.audit.geo import GeoAuditService
 from app.services.audit.scoring import ScoringService
 from app.services.infra.audit_evidence import collect_page_evidence
 from app.utils.html_parser import parse_html
@@ -25,11 +25,33 @@ DIMENSIONS = {
     "trust": (15, "可信赖：主体、依据与时效", "Trustworthy: Identity, evidence and freshness"),
     "semantics": (10, "可识别：元数据与实体语义", "Recognizable: Metadata and entity semantics"),
 }
-POINTS = [4, 5, 3, 1, 3, 3, 3, 3, 7, 4, 4, 6, 5, 5, 5, 4, 4, 6, 3, 2, 3, 2, 4, 1, 3, 2]
-RULES = [(rule.replace("GEO-", "SGEO-"), dimension, POINTS[index],
-          "标题、描述与语言元数据" if rule == "GEO-021" else zh,
-          "Title, description and language metadata" if rule == "GEO-021" else en)
-         for index, (rule, dimension, _, zh, en) in enumerate(GEO_RULES)] + [
+RULES = [
+    ("SGEO-001", "access", 4, "HTTP与HTTPS可用", "HTTP and HTTPS availability"),
+    ("SGEO-002", "access", 5, "目标路径检索爬虫规则", "Search crawler policy for this path"),
+    ("SGEO-003", "access", 3, "当前抓取无访问挑战", "No access challenge in this fetch"),
+    ("SGEO-004", "access", 1, "抓取稳定性", "Repeated-fetch stability"),
+    ("SGEO-005", "discovery", 3, "可抓取导航与内链", "Crawlable navigation and internal links"),
+    ("SGEO-006", "discovery", 3, "发现机制有效覆盖", "Discovery mechanism coverage"),
+    ("SGEO-007", "discovery", 3, "规范网址与跳转一致", "Canonical and redirect consistency"),
+    ("SGEO-008", "discovery", 3, "索引与摘要指令", "Indexing and snippet directives"),
+    ("SGEO-009", "extraction", 7, "核心正文可提取", "Extractable main content"),
+    ("SGEO-010", "extraction", 4, "关键信息载体完整", "Complete information containers"),
+    ("SGEO-011", "extraction", 4, "原始与渲染正文一致", "Raw and rendered content consistency"),
+    ("SGEO-012", "answers", 6, "页面主题与正文对应", "Topic and body alignment"),
+    ("SGEO-013", "answers", 5, "结论或关键信息易定位", "Prominent answer or key information"),
+    ("SGEO-014", "answers", 5, "段落自包含与组织", "Self-contained content organization"),
+    ("SGEO-015", "answers", 5, "页面任务所需信息", "Information needed for this page type"),
+    ("SGEO-016", "answers", 4, "具体表达与低冗余", "Specific and non-repetitive expression"),
+    ("SGEO-017", "trust", 4, "发布主体或责任团队", "Publisher or responsible team"),
+    ("SGEO-018", "trust", 6, "关键主张依据可追溯", "Traceable support for key claims"),
+    ("SGEO-019", "trust", 3, "日期与适用版本", "Dates and applicable versions"),
+    ("SGEO-020", "trust", 2, "跨页面关键事实一致", "Cross-page fact consistency"),
+    ("SGEO-021", "semantics", 3, "标题、描述与语言元数据", "Title, description and language metadata"),
+    ("SGEO-022", "semantics", 2, "实体命名及标识一致", "Entity naming and identifiers"),
+    ("SGEO-023", "semantics", 4, "适用Schema及正文一致性", "Relevant schema and visible alignment"),
+    ("SGEO-024", "discovery", 1, "llms.txt可用与导航完整", "Usable llms.txt and navigation structure"),
+    ("SGEO-025", "access", 3, "页面加载速度（HTML获取）", "Page loading speed (HTML fetch)"),
+    ("SGEO-026", "discovery", 2, "URL静态化与参数规范", "Static-style URLs and parameter hygiene"),
     ("SGEO-027", "access", 2, "移动端视口声明", "Mobile viewport declaration"),
     ("SGEO-028", "access", 1, "HTML 页面体量", "HTML payload size"),
     ("SGEO-029", "access", 1, "图片资源与加载策略", "Image resources and loading policy"),
@@ -128,10 +150,11 @@ class SgeoAuditService(GeoAuditService):
                     for key in duplicates}}
             checks = []
             for rule_id, dimension, points, zh, en in RULES:
-                original = source.get(rule_id.replace("SGEO-", "GEO-"))
+                rule_num = int(rule_id[-3:])
+                original = source.get(rule_id.replace("SGEO-", "GEO-")) if rule_num <= 26 else None
                 check = original.model_copy(deep=True) if original else GeoCheckResult(
                     id=rule_id, dimension=dimension, label="", max_points=points, status="unknown",
-                    evidence={"reason": "This measurement is absent from the saved page evidence."})
+                    evidence={"reason": "A single fetch cannot establish sustained availability." if rule_id == "SGEO-004" else "This measurement is absent from the saved page evidence."})
                 check.id, check.dimension, check.max_points = rule_id, dimension, points
                 check.label = self._label(zh, en, lang)
                 check.recommendation = self._label(*REMEDIES[int(rule_id[-3:]) - 1], lang)
@@ -139,6 +162,9 @@ class SgeoAuditService(GeoAuditService):
                 check.acceptance_criteria = self._label(f"重新检测「{zh}」，适用采样页面均通过并留存证据。", f"Recheck {en}; all applicable sampled pages pass with recorded evidence.", lang)
                 if rule_id == "SGEO-021":
                     # GEO's title/lang observation cannot verify a description.
+                    check.status, check.value = "unknown", None
+                if rule_id == "SGEO-020" and check.status == "na":
+                    # SGEO v1 keeps unverified cross-page fact inventory unknown.
                     check.status, check.value = "unknown", None
                 if signal and not any(c.blocker for key, c in source.items() if key in {"GEO-001", "GEO-003"}):
                     self._page_signals(check, signal, lang)

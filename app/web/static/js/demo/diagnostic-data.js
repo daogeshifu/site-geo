@@ -15,9 +15,9 @@ const GEO_DIMENSIONS = {
   access: ['可获取：访问与抓取可达性', 'Retrievable: Access and crawlability'],
   discovery: ['可获取：页面发现与可索引性', 'Retrievable: Discovery and indexability'],
   extraction: ['可理解：正文读取与信息提取', 'Understandable: Content extraction'],
+  semantics: ['可理解：元数据与实体语义', 'Understandable: Metadata and entity semantics'],
   answers: ['可引用：内容价值与答案适配', 'Citable: Content and answer readiness'],
-  trust: ['可推荐：站内可信度与时效性', 'Recommendable: On-site trust and freshness'],
-  semantics: ['可理解：元数据与实体语义', 'Understandable: Metadata and entity semantics']
+  trust: ['可推荐：站内可信度与时效性', 'Recommendable: On-site trust and freshness']
 };
 const SGEO_DIMENSIONS = {
   access: ['可获取：访问、抓取与性能', 'Retrievable: Access, crawling and performance'],
@@ -36,32 +36,34 @@ const SGEO_SUMMARIES = {
   semantics: ['标题、描述、语言声明，以及实体命名和结构化数据的一致性。', 'Titles, descriptions, language declarations, entity names and structured-data alignment.']
 };
 const GEO_DIAGNOSTICS = [
-  ['HTTP / HTTPS', 'HTTP / HTTPS'],
-  ['robots.txt / 检索爬虫', 'robots.txt / Search crawlers'],
-  ['访问拒绝 / 验证码 / 登录挑战', 'Access denial / CAPTCHA / Login'],
+  ['HTTP / HTTPS / 主域 / 重定向', 'HTTP / HTTPS / Host / Redirects'],
+  ['robots.txt / AI 检索爬虫 / Content-Signal', 'robots.txt / AI retrieval crawlers / Content-Signal'],
+  ['CDN / WAF / AI 爬虫探针 / 访问挑战', 'CDN / WAF / AI crawler probes / Challenges'],
   ['HTTP / 抓取稳定性', 'HTTP / Fetch stability'],
-  ['导航链接 / 内部链接', 'Navigation / Internal links'],
-  ['导航链 / Sitemap', 'Link chains / Sitemap'],
-  ['Canonical / 重定向', 'Canonical / Redirects'],
+  ['导航链接 / 语义锚文本', 'Navigation / Semantic anchors'],
+  ['XML Sitemap / lastmod / 发现覆盖', 'XML Sitemap / lastmod / Discovery'],
+  ['Canonical / HTTP Link / 重定向', 'Canonical / HTTP Link / Redirects'],
   ['Meta Robots / X-Robots-Tag', 'Meta Robots / X-Robots-Tag'],
-  ['main / article / role=main / body', 'main / article / role=main / body'],
-  ['表格 / 列表 / 代码 / 图片替代文本', 'Tables / Lists / Code / Image alt'],
-  ['原始 HTML / 渲染 HTML', 'Raw HTML / Rendered HTML'],
-  ['Title / H1 / 正文主题', 'Title / H1 / Body topic'],
-  ['首段答案 / 关键信息区', 'Opening answer / Key information'],
+  ['初始 HTML 正文 / 反 CSR 空壳', 'Initial HTML content / Anti-CSR shell'],
+  ['语义表格 / 列表 / 代码 / 图片 Alt', 'Semantic tables / Lists / Code / Image alt'],
+  ['原始 HTML / 渲染 DOM 一致性', 'Raw HTML / Rendered DOM consistency'],
+  ['Title / 单 H1 / 正文主题', 'Title / Single H1 / Body topic'],
+  ['首段结论 / 问答标题 / TL;DR 摘要', 'Opening answer / Q&A headings / TL;DR'],
   ['段落指代 / 标题层级', 'Paragraph context / Heading hierarchy'],
-  ['主题 / 说明 / 页面任务', 'Topic / Description / Task details'],
-  ['重复段落 / 空泛表达', 'Duplicate paragraphs / Vague wording'],
-  ['Author / Publisher / Organization / Person', 'Author / Publisher / Organization / Person'],
-  ['关键主张 / 来源链接', 'Key claims / Source links'],
-  ['datePublished / dateModified / Version', 'datePublished / dateModified / Version'],
-  ['跨页主张 / 事实一致性', 'Cross-page claims / Fact consistency'],
-  ['Title / HTML lang', 'Title / HTML lang'],
-  ['name / headline / @id', 'name / headline / @id'],
-  ['JSON-LD / Schema.org', 'JSON-LD / Schema.org'],
-  ['llms.txt / 标题 / 简介 / 导航链接', 'llms.txt / Title / Summary / Navigation'],
-  ['HTML 获取耗时 / 响应速度', 'HTML fetch duration / Response speed'],
-  ['静态路径 / 查询参数 / 会话标识 / 哈希路由', 'Clean paths / Query parameters / Session IDs / Hash routes']
+  ['页面任务 / 规格对比 / 核心信息', 'Page task / Comparison / Core details'],
+  ['量化数据 / 重复段落 / 空泛表达', 'Concrete metrics / Duplicate / Vague copy'],
+  ['Author / Publisher / Organization / 责任团队', 'Author / Publisher / Organization / Team'],
+  ['关键主张 / 出处链接 / 参考来源区', 'Key claims / Source links / References'],
+  ['datePublished / dateModified / 版本 / 报价', 'datePublished / dateModified / Version / Price'],
+  ['跨页实体 / 报价 / 事实一致性', 'Cross-page entity / Price / Fact consistency'],
+  ['Title / Description / HTML lang', 'Title / Description / HTML lang'],
+  ['name / @id / sameAs / about / mentions', 'name / @id / sameAs / about / mentions'],
+  ['JSON-LD / Schema.org / 正文一致', 'JSON-LD / Schema.org / Visible alignment'],
+  ['llms.txt / llms-full.txt / Markdown 直出', 'llms.txt / llms-full.txt / Markdown delivery'],
+  ['TTFB / HTML 获取耗时', 'TTFB / HTML fetch duration'],
+  ['静态路径 / 查询参数 / 会话标识 / 哈希路由', 'Clean paths / Query parameters / Session IDs / Hash routes'],
+  ['HTML 体量 / 正文信噪比', 'HTML payload / Content-to-noise ratio'],
+  ['Hreflang / 多语言区域标记', 'Hreflang / Multilingual annotations']
 ];
 export const geoDimensionName = (key, fallback, lang) => Array.isArray(GEO_DIMENSIONS[key]) ? tx(lang, ...GEO_DIMENSIONS[key]) : fallback || key;
 export const sgeoDimensionName = (key, fallback, lang) => SGEO_DIMENSIONS[key] ? tx(lang, ...SGEO_DIMENSIONS[key]) : fallback || key;
@@ -200,7 +202,18 @@ export function buildDiagnosticData(result = {}, lang = 'zh') {
 }
 
 export function platformPolicies(geo) {
-  return ['OAI-SearchBot', 'PerplexityBot', 'Googlebot', 'bingbot'].map(crawler => {
+  const baseCrawlers = ['OAI-SearchBot', 'PerplexityBot', 'Claude-SearchBot', 'Googlebot', 'bingbot'];
+  const extraOrder = ['ChatGPT-User', 'Perplexity-User', 'Claude-User', 'Baiduspider', 'Bytespider', 'Kimi-SearchBot'];
+  const seen = new Set();
+  for (const page of geo?.pages || []) {
+    const check = Object.values(page.dimensions || {}).flatMap(dimension => dimension.checks || []).find(item => ['GEO-002', 'SGEO-002'].includes(item.id));
+    for (const key of Object.keys(check?.evidence?.policies || {})) seen.add(key);
+  }
+  const crawlers = [
+    ...baseCrawlers,
+    ...extraOrder.filter(name => seen.has(name))
+  ];
+  return crawlers.map(crawler => {
     const pages = (geo?.pages || []).map(page => {
       const check = Object.values(page.dimensions || {}).flatMap(dimension => dimension.checks || []).find(item => ['GEO-002', 'SGEO-002'].includes(item.id));
       return { url: page.url, allowed: check?.evidence?.policies?.[crawler] ?? null };

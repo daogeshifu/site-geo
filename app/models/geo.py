@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from app.models.page_fetch import PageFetchMetadata
 
-GEO_SCORING_VERSION = "onsite-geo-v2"
+GEO_SCORING_VERSION = "onsite-geo-v3"
 
 
 class GeoCheckResult(BaseModel):

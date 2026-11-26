@@ -11,7 +11,12 @@ from pathlib import Path
 from app.core.config import settings
 
 MAX_SOURCE_BYTES = 2_000_000
-HEADER_NAMES = {"content-type", "content-length", "cache-control", "last-modified", "etag", "x-robots-tag", "content-language", "server"}
+HEADER_NAMES = {
+    "content-type", "content-length", "cache-control", "last-modified",
+    "etag", "x-robots-tag", "content-language", "server",
+    "cf-mitigated", "cf-ray", "retry-after", "content-signal", "link",
+    "x-served-by", "x-cdn", "x-waf-event-info",
+}
 
 
 def _source_path(key: str) -> Path:
@@ -39,11 +44,18 @@ def _save_source(url: str, html: str) -> tuple[str | None, bool]:
 async def capture_page_metadata(response) -> dict:
     captured_at = datetime.now(timezone.utc).isoformat()
     source_key, truncated = await asyncio.to_thread(_save_source, response.final_url, response.text)
+    redirect_chain = list(getattr(response, "redirect_chain", None) or [])
+    redirect_count = getattr(response, "redirect_count", None)
+    if redirect_count is None and hasattr(response, "redirect_chain"):
+        redirect_count = len(redirect_chain)
     return {
         "fetched_at": captured_at,
         "status_code": response.status_code,
         "response_time_ms": response.response_time_ms,
+        "ttfb_ms": getattr(response, "ttfb_ms", None),
         "response_headers": {key.lower(): value for key, value in response.headers.items() if key.lower() in HEADER_NAMES},
+        "redirect_chain": redirect_chain,
+        "redirect_count": redirect_count,
         "source_key": source_key,
         "source_truncated": truncated,
     }

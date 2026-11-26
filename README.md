@@ -6,25 +6,25 @@
 
 | task_type | 页面名称 | 结果与口径 |
 |---|---|---|
-| `site_geo_only_audit` | 网站 GEO 审计（页面默认首选） | `result.geo`，站内六维就绪度 `onsite-geo-v2` |
+| `site_geo_only_audit` | 网站 GEO 审计（页面默认首选） | `result.geo`，站内六维就绪度 `onsite-geo-v3` |
 | `site_seo_audit` | 网站 SEO 审计 | `result.seo`，保留 `seo-audit-v1`；API省略类型仍默认SEO |
 | `site_geo_audit` | 网站 SGEO 诊断（沿用原标识） | `result.sgeo`，六维、30项唯一检查、一个总分 `onsite-sgeo-v1` |
 | `site_content_audit` | 网站内容审计 | 单篇内容审计，独立评分 |
 
-## 站内GEO：六维100分
+## 站内GEO：六维100分（onsite-geo-v3）
 
 | 维度 | 权重 |
 |---|---:|
 | 可获取：访问与抓取可达性 | 20% |
 | 可获取：页面发现与可索引性 | 15% |
-| 可理解：正文读取与信息提取 | 20% |
-| 可引用：内容价值与答案适配 | 25% |
+| 可理解：正文读取与信息提取 | 18% |
+| 可理解：元数据与实体语义 | 12% |
+| 可引用：内容价值与答案适配 | 20% |
 | 可推荐：站内可信度与时效性 | 15% |
-| 可理解：元数据与实体语义 | 5% |
 
-- 26项检查唯一归属、先逐页后按类型汇总；显示关键阻断、失败页、待核验项、适用范围和证据覆盖率。llms.txt、HTML获取速度、URL静态化与参数规范已纳入计分。
-- 不设统一字数/FAQ要求，不按Schema类型数量累计；事实核验不足和未测渲染保持未知。
-- 外链、OG/Twitter、一般安全头、训练授权和平台推测不计入新版GEO；实际索引、AI引用和流量独立观测。
+- 保留「可获取、可理解、可引用、可推荐」四大阶段 × 六项诊断骨架，升级为 27 项唯一规则：新增 AI 爬虫 UA 的 WAF 放行探针、国际+中文站国内检索爬虫矩阵、`Content-Signal`/`Google-Extended` 解析提示、反 CSR 空壳识别、Sitemap 质量、`llms-full.txt`/Markdown 直出、标准语义表格、HTML 信噪比（`GEO-027`）、Schema.org + `sameAs` 实体关联提级、多语言 `hreflang`（`GEO-028`，单语站自动 `na`）及跨页结构化事实初筛。
+- 原 `GEO-004`（多时段稳定性）移入持续观测层；不设统一字数/FAQ要求，不按非标准 Schema 数量累计；未测渲染保持未知。
+- 外链、OG/Twitter、一般安全头、纯训练授权和平台推测不计入新版GEO；实际索引、AI引用和流量独立观测。
 - 独立SEO保留现有维度及技术/外链支持信号。SEO、GEO、SGEO使用各自评分版本，不直接横比。
 - [完整计分、证据和字段说明](docs/onsite-geo-audit.md)；在线 `/api-doc` 为接入说明。
 - 历史 `/api/v1/audit/full` 和五个模块端点仍为 `geo-audit-v3`，不代表新版评分。旧版字段见历史数据字典。
